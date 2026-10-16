@@ -12,6 +12,13 @@
 # items into oo7 (margine-keyring-import.service at login, or
 # `ujust margine-keyring import`). Back on Fedora 44 the file can be renamed
 # back to login.keyring.
+#
+# Only for oo7 0.7.0~beta, what Fedora 45 ships today: the next oo7 reads
+# the plaintext format itself (linux-credentials/oo7#579, 2026-09-26) and
+# migrates it, without a password when there is none, which is better for
+# fingerprint users than anything done here. From that version on the file
+# stays where oo7 looks for it.
+[ "$(rpm -q --qf '%{VERSION}' oo7-daemon 2>/dev/null)" = "0.7.0~beta" ] || exit 0
 f="${XDG_DATA_HOME:-$HOME/.local/share}/keyrings/login.keyring"
 [ -f "$f" ] || exit 0
 [ "$(head -c 9 "$f")" = "[keyring]" ] || exit 0

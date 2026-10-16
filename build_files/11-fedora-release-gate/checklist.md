@@ -20,7 +20,9 @@ matches the base; go through this list first, then bump the number.
   match"), without it oo7 starts an empty Login keyring.
   `keyring-legacy-aside` (ExecStartPre of oo7-daemon) renames the file,
   `keyring-import-legacy` moves its items over (at login, or
-  `ujust margine-keyring import`). Rehearsed in a `silverblue-main:45`
+  `ujust margine-keyring import`). Only for oo7 0.7.0~beta: upstream
+  migrates the plaintext format itself since #579 (2026-09-26), so the
+  aside step stands down on any other version. Rehearsed in a `silverblue-main:45`
   container with a real oo7-daemon: text, network and binary items, lookup
   by attribute and by schema, persistence across a daemon restart.
 - `margine-keyring` no longer blanks the keyring (oo7 refuses an empty
