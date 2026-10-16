@@ -564,7 +564,7 @@ flatpaks:
 
 toolbox:
   default:
-    image: fedora-toolbox:44
+    image: fedora-toolbox:45
     packages:
       core_cli:
         - git
