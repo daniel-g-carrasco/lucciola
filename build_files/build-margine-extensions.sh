@@ -89,12 +89,12 @@ OTILING_URL="https://github.com/oliwebd/o-tiling/releases/download/${OTILING_VER
 OTILING_SHA256="4bc13ee298ac8be6b3ff22e961b1f0948998bb10f1ddae5c3dead45aff4875a0"
 
 # Hide Cursor is hosted only on EGO. version_tag pinned for the GNOME
-# Shell major of the current base (50). When Bluefin bumps GNOME, the
+# Shell major of the current base (51). When the base bumps GNOME, the
 # metadata shell-version guard below fails the build with instructions
 # instead of shipping an incompatible extension.
 HIDECURSOR_UUID="hide-cursor@elcste.com"
-HIDECURSOR_VERSION_TAG="72294"   # GNOME 50 (v13); re-pinned 2026-07-04 — EGO purged 69559 (build 404)
-HIDECURSOR_SHA256="10f79e49c5d812d27033793ee7c89e58e9b0ea176a6ba3bb611f9f3e3f885392"
+HIDECURSOR_VERSION_TAG="75517"   # GNOME 51 (v15); resolved 2026-10-16 for the Fedora 45 base
+HIDECURSOR_SHA256="6c0e2013a52ce42bd0cd49a566c6feadc10a1b7bdf5c973bf717832007cbe808"
 
 # Smile's companion GNOME Shell extension — the piece that makes the Smile
 # emoji picker (the it.mijorus.smile Flatpak, already preinstalled and bound to
@@ -112,11 +112,11 @@ SMILE_EXT_SHA256="e23cf17f1216c099215c6b458e96913f277a371bc770759ca56b858d98651b
 # submodules, a base without Bluefin has neither. Built here from pinned
 # commits (neither project tags releases); the tarball hashes are the pins.
 GRADIA_EXT_UUID="gradia-integration@alexandervanhee.github.io"
-GRADIA_EXT_COMMIT="f70a2127d0a9acc3c9d4d8198361fc9f4e14818f"   # 2026-08-22, shell-version 49,50
-GRADIA_EXT_SHA256="aab96784a1afd5f28a4175e93bc509c7a185ce42a4c7afd7d4a8321803fb3132"
+GRADIA_EXT_COMMIT="0b7e47e1e5c1e68e234e4d2d24b307e1da1d18a9"   # 2026-10-16, shell-version 49,50,51
+GRADIA_EXT_SHA256="59e999ed0845ee384d29371095d2e935ad0411dd2bed526c924351fec53f0974"
 BAZAAR_EXT_UUID="bazaar-integration@kolunmi.github.io"
-BAZAAR_EXT_COMMIT="3bb9134985343ffd1993520eb37c90e113bfb09b"   # 2026-04-03, shell-version 49,50
-BAZAAR_EXT_SHA256="b779610b06e1ac58af6193f515f637d3846eae67d3fb36f4af71b2e05fb05869"
+BAZAAR_EXT_COMMIT="551ab812fda96e76fecc29a06f2adc993dd4e041"   # 2026-10-16, shell-version 49,50,51
+BAZAAR_EXT_SHA256="1c5260b146fdb9175ab1659dec29d8f16b2914df6718c9a85f6d501ab491b743"
 
 # NO transient dnf installs. Lesson learned the hard way 2026-06-04
 # (build #26918323253 + #26913265617):
@@ -354,6 +354,24 @@ install_smile_ext() {
     log "ERROR: ${target}/metadata.json missing after extraction"
     ls -la "${target}"
     exit 1
+  fi
+  # margine: GNOME 51 (2026-10-16). EGO has no Smile build for GNOME 51 yet
+  # (version_tag 70078 lists 45-50, the upstream repo too). The extension
+  # uses only APIs GNOME 51 keeps (a Clutter virtual keyboard, St.Clipboard,
+  # a D-Bus signal, Meta.Window raise/make_above), so Margine adds 51 to its
+  # shell-version, the change gradia-capture#33 and bazaar-companion made
+  # upstream for 51. Tied to this version_tag: the EGO pin check's bump to a
+  # real 51 build turns it off on its own.
+  if [[ "${GNOME_SHELL_MAJOR}" == "51" && "${SMILE_EXT_VERSION_TAG}" == "70078" ]]; then
+    python3 - "${target}/metadata.json" <<'PY'
+import json, sys
+path = sys.argv[1]
+md = json.load(open(path))
+if "51" not in [str(v) for v in md.get("shell-version", [])]:
+    md["shell-version"].append("51")
+json.dump(md, open(path, "w"), indent=2)
+PY
+    log "smile: shell-version extended to 51 (no EGO build for GNOME 51 yet)"
   fi
   assert_shell_compat "${target}"
   if [[ -d "${target}/schemas" ]] && compgen -G "${target}/schemas/*.xml" > /dev/null; then
