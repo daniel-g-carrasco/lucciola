@@ -22,10 +22,10 @@ stable release is cut.
     `ujust margine-keyring import` when the new keyring is still locked);
   - Lucciola starts oo7 with its niri session, and the service can be
     started on demand in any session, as gnome-keyring could.
-  Fedora 45's base dropped the vpnc and SSH VPN plugins and the network
-  connection editor: Margine installs them, so existing VPN connections
-  keep working. Nautilus loses Fedora's AFP and archive-browsing backends
-  (gvfs-afp, gvfs-archive are gone from Fedora 45).
+  Fedora 45's base dropped the SSH VPN plugin and the network connection
+  editor: Margine installs them. Fedora 45 retired the vpnc (Cisco IPsec)
+  VPN plugin and Nautilus's AFP and archive-browsing backends (gvfs-afp,
+  gvfs-archive): those are gone with the update.
   Extensions with GNOME 51 builds: o-tiling, Hide Cursor, Gradia Capture,
   Bazaar Companion; Smile's companion extension is declared for 51 by the
   build until its author publishes one.
