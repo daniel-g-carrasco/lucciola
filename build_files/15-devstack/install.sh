@@ -184,11 +184,13 @@ ships the HIP runtime (for Blender) but not the HIP compiler.
 %files
 
 %changelog
-* Fri Oct 10 2026 Margine - 1-1
+* Sat Oct 10 2026 Margine - 1-1
 - rocm-hip without hipcc: the requirement, not the compiler
 SPEC
   rpmbuild --quiet --define "_topdir $stub/top" -bb "$stub/margine-rocm-hip-runtime.spec"
-  rpm -i "$stub"/top/RPMS/noarch/margine-rocm-hip-runtime-*.noarch.rpm
+  # Built here and never signed: rpm 6.1 (Fedora 45) verifies signatures on
+  # every install (%_pkgverify_level all) and refuses it without the flag.
+  rpm -i --nosignature "$stub"/top/RPMS/noarch/margine-rocm-hip-runtime-*.noarch.rpm
   rm -rf "$stub"
   if (( ${#borrowed[@]} )); then
     dnf -y remove --setopt=clean_requirements_on_remove=False "${borrowed[@]}"
