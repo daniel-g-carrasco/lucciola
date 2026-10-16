@@ -434,6 +434,10 @@ host_packages:
       - nautilus
       - gnome-system-monitor
       - gnome-bluetooth
+      # Fedora 45's base dropped these; Margine kept them (15-devstack).
+      - NetworkManager-vpnc-gnome
+      - NetworkManager-ssh-gnome
+      - nm-connection-editor
   optional_after_validation:
     intel_gpu_extras:
       - libva-intel-media-driver

@@ -109,6 +109,11 @@ DECLARED_PKGS=(
   fuse-libs                                # libfuse.so.2, what AppImages open
   gnome-tweaks                             # GNOME's own extra settings
   xdg-terminal-exec ncurses-term libxcrypt-compat   # GNOME's terminal launcher; terminfo for other terminals; libcrypt.so.1 for old binaries
+  # Found by diffing silverblue-main:44 against :45 (2026-10-16): Fedora 45
+  # dropped these from the base, Margine on 44 shipped them. A user may
+  # have VPN connections of these two types, and the full connection editor
+  # reaches what GNOME Settings does not show.
+  NetworkManager-vpnc-gnome NetworkManager-ssh-gnome sshpass nm-connection-editor
 )
 # Bluefin ships Dash to Dock and Caffeine as plain directories built from
 # git; Fedora's packages install into the same directories. A package laid
