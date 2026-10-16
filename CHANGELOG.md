@@ -27,8 +27,9 @@ stable release is cut.
   VPN plugin and Nautilus's AFP and archive-browsing backends (gvfs-afp,
   gvfs-archive): those are gone with the update.
   Extensions with GNOME 51 builds: o-tiling, Hide Cursor, Gradia Capture,
-  Bazaar Companion; Smile's companion extension is declared for 51 by the
-  build until its author publishes one.
+  Bazaar Companion. Smile's companion extension, which pastes the emoji,
+  broke on GNOME 51 (a Clutter call it used is gone): the build carries the
+  fix proposed to its author until a GNOME 51 release reaches EGO.
 
 ### Changed (2026-10-17)
 - **And 49.5 MB less again.** `/usr/lib/os-release` carries the build date,

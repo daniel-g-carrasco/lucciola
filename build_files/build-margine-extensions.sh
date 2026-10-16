@@ -356,22 +356,35 @@ install_smile_ext() {
     exit 1
   fi
   # margine: GNOME 51 (2026-10-16). EGO has no Smile build for GNOME 51 yet
-  # (version_tag 70078 lists 45-50, the upstream repo too). The extension
-  # uses only APIs GNOME 51 keeps (a Clutter virtual keyboard, St.Clipboard,
-  # a D-Bus signal, Meta.Window raise/make_above), so Margine adds 51 to its
-  # shell-version, the change gradia-capture#33 and bazaar-companion made
-  # upstream for 51. Tied to this version_tag: the EGO pin check's bump to a
-  # real 51 build turns it off on its own.
+  # (version_tag 70078 lists 45-50). GNOME 51 removed
+  # Clutter.get_default_backend(), which Smile calls for the virtual keyboard
+  # that pastes the emoji: with 51 only added to shell-version the extension
+  # loads but every paste throws a TypeError. Margine takes the seat from
+  # global.stage.context's backend (what GNOME Shell 51's keyboard.js does)
+  # and adds 51, the change proposed upstream in
+  # mijorus/smile-gnome-extension#23. Tested on a headless GNOME Shell 51.0
+  # and 50.5: ACTIVE, the CopiedEmoji signal pastes without a JS error. Tied
+  # to this version_tag: the EGO pin check's bump to a real 51 build turns it
+  # off on its own.
   if [[ "${GNOME_SHELL_MAJOR}" == "51" && "${SMILE_EXT_VERSION_TAG}" == "70078" ]]; then
-    python3 - "${target}/metadata.json" <<'PY'
+    python3 - "${target}" <<'PY' || { log "ERROR: smile GNOME 51 patch did not apply"; exit 1; }
 import json, sys
-path = sys.argv[1]
-md = json.load(open(path))
+d = sys.argv[1]
+js = f"{d}/extension.js"
+src = open(js).read()
+old = "this.virtualKeyboard = Clutter.get_default_backend().get_default_seat().create_virtual_device(deviceType);"
+new = ("const backend = global.stage.context?.get_backend?.() ?? Clutter.get_default_backend();\n"
+       "        this.virtualKeyboard = backend.get_default_seat().create_virtual_device(deviceType);")
+if old not in src:
+    sys.exit("extension.js no longer has the get_default_backend() call")
+open(js, "w").write(src.replace(old, new, 1))
+md_path = f"{d}/metadata.json"
+md = json.load(open(md_path))
 if "51" not in [str(v) for v in md.get("shell-version", [])]:
     md["shell-version"].append("51")
-json.dump(md, open(path, "w"), indent=2)
+json.dump(md, open(md_path, "w"), indent=2)
 PY
-    log "smile: shell-version extended to 51 (no EGO build for GNOME 51 yet)"
+    log "smile: GNOME 51 backend call and shell-version (mijorus/smile-gnome-extension#23)"
   fi
   assert_shell_compat "${target}"
   if [[ -d "${target}/schemas" ]] && compgen -G "${target}/schemas/*.xml" > /dev/null; then

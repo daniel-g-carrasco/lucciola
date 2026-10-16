@@ -77,8 +77,10 @@ matches the base; go through this list first, then bump the number.
   (o-tiling, hide-cursor, gradia-integration) declare the new shell version;
   dconf keys in 30-gnome-defaults still exist. GNOME 51: o-tiling v2.12.01,
   hide-cursor v15, the Gradia and Bazaar companions at their 2026-10-16
-  commits list 51; Smile has no 51 build, the step adds 51 to its
-  shell-version (test in a VM: the extension is ACTIVE, Super+. inserts).
+  commits list 51. Smile has no 51 build and GNOME 51 removed the
+  Clutter call its paste uses: the step patches both (proposed upstream,
+  mijorus/smile-gnome-extension#23), tested on a headless GNOME Shell 51.0
+  and 50.5 with the CopiedEmoji signal.
 - Flatpak: the GL runtime branch the preinstalled apps use, and the
   `org.gnome.Platform` versions.
 - `validate-margine-system`, smoke-boot and the install gate pass on the
