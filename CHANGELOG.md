@@ -30,6 +30,9 @@ stable release is cut.
   Bazaar Companion. Smile's companion extension, which pastes the emoji,
   broke on GNOME 51 (a Clutter call it used is gone): the build carries the
   fix proposed to its author until a GNOME 51 release reaches EGO.
+  Fedora 45's Caffeine (60) does not load on GNOME 51: the build uses
+  Caffeine 61 from extensions.gnome.org until Fedora's package catches up,
+  and stops if any extension Margine enables would not load.
 
 ### Changed (2026-10-17)
 - **And 49.5 MB less again.** `/usr/lib/os-release` carries the build date,

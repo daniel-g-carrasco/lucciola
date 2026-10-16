@@ -26,14 +26,28 @@ KEYDIR="${XDG_DATA_HOME:-$HOME/.local/share}/keyrings"
 IMPORT=/usr/libexec/margine/keyring-import-legacy
 
 login_locked() {
-  # "b true" / "b false"; empty when the Secret Service does not answer.
-  busctl --user get-property org.freedesktop.secrets \
-    /org/freedesktop/secrets/aliases/default \
-    org.freedesktop.Secret.Collection Locked 2>/dev/null | awk '{print $2}'
+  # "true" / "false"; empty when the Secret Service does not answer. A few
+  # tries: oo7 0.7.0~beta takes its bus name before its collections exist
+  # (linux-credentials/oo7#581), so a daemon this call just started answers
+  # "Unknown object" for a moment.
+  local _ out
+  for _ in 1 2 3 4 5; do
+    out="$(busctl --user get-property org.freedesktop.secrets \
+      /org/freedesktop/secrets/aliases/default \
+      org.freedesktop.Secret.Collection Locked 2>/dev/null | awk '{print $2}')"
+    [[ -n "$out" ]] && { echo "$out"; return; }
+    sleep 1
+  done
 }
 
+# oo7-daemon's log since its last start (the credential line comes just
+# before "Starting oo7-daemon", so it is kept too).
 daemon_log() {
-  journalctl --user -b -u oo7-daemon.service -o cat --no-pager 2>/dev/null || true
+  journalctl --user -b -u oo7-daemon.service -o cat --no-pager 2>/dev/null \
+    | sed -E 's/\x1b\[[0-9;]*m//g' \
+    | awk '/Starting oo7-daemon/ { buf = prev ORS $0; prev = $0; next }
+           { if (buf != "") buf = buf ORS $0; prev = $0 }
+           END { print buf }'
 }
 
 status() {
@@ -50,7 +64,9 @@ status() {
   if [[ -f "$CRED" ]]; then
     local log
     log="$(daemon_log)"
-    if grep -q "credential contains wrong password" <<<"$log"; then
+    if grep -q "Received login secret from helper" <<<"$log"; then
+      echo "  unlock at login: TPM credential present; this login used the login password"
+    elif grep -q -E "credential contains wrong password|with provided secret: Incorrect secret|Incorrect secret or corrupted" <<<"$log"; then
       echo "  unlock at login: credential present, but it holds a WRONG password"
       echo "  (login password changed since?) fix: ujust margine-keyring tpm"
     elif grep -q "Unlocking session keyring with systemd credential" <<<"$log"; then
@@ -78,7 +94,8 @@ status() {
 
 tpm() {
   local how=host
-  if systemd-creds has-tpm2 >/dev/null 2>&1; then
+  # systemd 262 moved has-tpm2 to systemd-analyze; the old spelling still redirects.
+  if systemd-analyze has-tpm2 >/dev/null 2>&1 || systemd-creds has-tpm2 >/dev/null 2>&1; then
     how=tpm2
   else
     echo "No usable TPM: the credential will be bound to this machine's host key instead."

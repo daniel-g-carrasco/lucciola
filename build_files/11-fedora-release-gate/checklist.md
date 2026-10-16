@@ -80,7 +80,10 @@ matches the base; go through this list first, then bump the number.
   commits list 51. Smile has no 51 build and GNOME 51 removed the
   Clutter call its paste uses: the step patches both (proposed upstream,
   mijorus/smile-gnome-extension#23), tested on a headless GNOME Shell 51.0
-  and 50.5 with the CopiedEmoji signal.
+  and 50.5 with the CopiedEmoji signal. Fedora's Caffeine 60 does not load
+  on 51 (OUT_OF_DATE, seen in a VM session): the build swaps in EGO's v61
+  while Fedora's package lags (dist-git PR 6 updates it), and now fails if
+  any enabled extension does not declare the running GNOME.
 - Flatpak: the GL runtime branch the preinstalled apps use, and the
   `org.gnome.Platform` versions.
 - `validate-margine-system`, smoke-boot and the install gate pass on the
