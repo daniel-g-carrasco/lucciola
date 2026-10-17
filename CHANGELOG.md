@@ -7,6 +7,29 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (Fedora 45)
+- **Lucciola is built on Fedora 45** (`silverblue-main:45`). The `:stable`
+  image waits for Fedora 45's release on 27 October: until then Fedora
+  keeps its testing repository on, and test builds may carry packages that
+  have not finished their checks. Saved passwords move from gnome-keyring
+  to oo7:
+  - a password login opens the Login keyring as before, and oo7 moves a
+    Fedora 44 keyring over the first time it opens it;
+  - for fingerprint and autologin, `ujust margine-keyring tpm` stores the
+    keyring password as a credential encrypted for the user with the TPM,
+    and oo7 opens the keyring with it at login (oo7 has no empty keyring
+    password);
+  - a keyring left with an empty password by `ujust margine-keyring blank`
+    is in a format oo7 0.7.0 beta cannot read: the image sets it aside
+    before oo7 starts and imports its passwords at login (or with
+    `ujust margine-keyring import`);
+  - the niri session starts oo7, as its developers intend: oo7 has no D-Bus
+    activation of its own on purpose (linux-credentials/oo7#603); the image
+    also lets an application start it on demand.
+  Fedora 45's base dropped the SSH VPN plugin and the network connection
+  editor: the image installs them. Fedora 45 retired the vpnc VPN plugin
+  and Nautilus's AFP and archive backends.
+
 ### Changed (2026-10-17)
 - **Lucciola is built on its own.** One build from Universal Blue's
   `ghcr.io/ublue-os/silverblue-main:44` produces the whole image: the

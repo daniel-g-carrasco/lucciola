@@ -150,14 +150,14 @@ jobs:
 
       - name: Inspect the upstream base image and measure its age
         id: base
-        # Lucciola is FROM ghcr.io/ublue-os/silverblue-main:44, which
+        # Lucciola is FROM ghcr.io/ublue-os/silverblue-main:45, which
         # Universal Blue rebuilds daily. A tag that quietly stops being
         # refreshed would have every Lucciola build after it silently ship
         # an ageing base, so 14 days without a refresh is an alarm, and
         # the tag disappearing is its own alarm, never a silent pass
         # (that is how the -dx retirement would have shown up).
         env:
-          BASE_IMAGE: ghcr.io/ublue-os/silverblue-main:44
+          BASE_IMAGE: ghcr.io/ublue-os/silverblue-main:45
           BASE_MAX_AGE: ${{ inputs.base_max_age_days || '14' }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true

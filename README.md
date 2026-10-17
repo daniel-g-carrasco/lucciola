@@ -54,7 +54,7 @@ A valid signature prints the verified payload and exits 0. The public key is [`s
 
 ## This repository
 
-- `Containerfile` and `build_files/`: the build, as numbered steps on top of `ghcr.io/ublue-os/silverblue-main:44`.
+- `Containerfile` and `build_files/`: the build, as numbered steps on top of `ghcr.io/ublue-os/silverblue-main:45`.
 - `lucciola/`: the desktop, with niri's and Noctalia's defaults and the session.
 - `.github/workflows/`: every change builds a candidate image, boots it in a virtual machine with Secure Boot and a TPM, and only then promotes it to `:stable`; another test updates a machine from the previous image to the new one.
 
