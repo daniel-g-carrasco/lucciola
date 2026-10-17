@@ -8,8 +8,8 @@
 # Inspired by Origami Linux's modules/custom-kernel/custom-kernel.sh
 # (https://gitlab.com/origami-linux/images), simplified for Margine:
 #   - only the kernel-cachyos (mainline) variant — no LTS/RT/LTO choice
-#   - NVIDIA only in the opt-in :*-nvidia variant (ENABLE_NVIDIA=1 block
-#     below, ADR 0009); the base image ships no NVIDIA codepath
+#     (Margine's :lts flavour, issue #382, and its :nvidia variant, ADR
+#     0009, were not carried over to Lucciola)
 #   - signing is mandatory: this image is meant to boot under Secure Boot
 #
 # Inputs (BuildKit secrets):
@@ -39,10 +39,9 @@ for f in "$SIGNING_KEY" "$SIGNING_CERT"; do
 done
 
 # --- Third-party signing keys: pin the fingerprints ----------------------
-# This build bootstraps two third-party repos from a URL: RPMFusion (a
-# release RPM installed straight from download1.rpmfusion.org) and, for
-# the NVIDIA variant, NVIDIA's CUDA .repo file. In both cases the thing we
-# fetch carries the very key that will then judge everything that repo
+# This build bootstraps third-party repos from a URL, RPMFusion for one (a
+# release RPM installed straight from download1.rpmfusion.org). The thing
+# we fetch carries the very key that will then judge everything that repo
 # serves, which makes the signature check circular: whoever can swap the
 # package or the repo file can swap the key along with it, and dnf -y
 # imports it without a word. HTTPS proves we reached the host we asked
@@ -69,13 +68,6 @@ RPMFUSION_NONFREE_FPR="79BDB88F9BBF73910FD4095B6A2AF96194843C65"
 # (first key in the file; the second is its companion).
 # shellcheck disable=SC2034
 NEGATIVO17_FPR="0C5D0F470484AE2FC40A9B6597F3008993E8909B"
-
-# NVIDIA rotates the CUDA repo key per Fedora release (fedora44 ->
-# 73CD9B30), so this is a per-release map rather than one constant. A
-# Fedora bump with no entry here stops the NVIDIA build with an
-# explanation instead of trusting whatever the new key turns out to be.
-# shellcheck disable=SC2034  # read indirectly as ${!_fprvar}, per Fedora release
-NVIDIA_CUDA_FPR_44="129994480EC63D2789BC98E490DFED2F73CD9B30"
 
 # key_fingerprint / verify_key_fpr / verify_rpmfusion_keys now live in
 # 00-common.sh, shared with 15-devstack (2026-08-25).
@@ -113,7 +105,7 @@ cmp -s "$_tmp1" "$_tmp2" \
 rm -f "$_tmp1" "$_tmp2"
 
 COPR_REPO="bieszczaders/kernel-cachyos"
-# COPR signing keys, pinned by fingerprint like RPMFusion and NVIDIA. Read
+# COPR signing keys, pinned by fingerprint like RPMFusion and negativo17. Read
 # from https://download.copr.fedorainfracloud.org/results/<owner>/<project>/pubkey.gpg
 # on 2026-08-30.
 COPR_CACHYOS_FPR="537DEED33436B0367F5B26D5B3E3132CF10859CF"
@@ -150,30 +142,12 @@ enabled_metadata=1
 REPOEOF
   log "COPR ${project}: repo written against the download backend (no API), key pinned"
 }
+# kernel-cachyos is built for x86-64-v3 (CONFIG_X86_64_VERSION=3, read from
+# the package) and hangs at decompression on an x86-64-v2 CPU, before it can
+# print anything; the image has no fallback kernel (issue #382).
 KERNEL_PKG="kernel-cachyos"
 KERNEL_DEVEL_PKG="kernel-cachyos-devel-matched"
 KERNEL_PACKAGES=(kernel-cachyos kernel-cachyos-core kernel-cachyos-modules "$KERNEL_DEVEL_PKG")
-# Kernel flavour (build-arg KERNEL_FLAVOR, issue #382). The default
-# kernel-cachyos is built for x86-64-v3 (CONFIG_X86_64_VERSION=3, read
-# from the package) and hangs at decompression on an x86-64-v2 CPU, before
-# it can print anything; the image has no fallback kernel. kernel-cachyos-lts
-# is built for x86-64-v2 (=2), keeps sched_ext (the scheduler picker works)
-# and drops BORE. NVIDIA on top of the LTS kernel is untested: refused.
-KERNEL_FLAVOR="${KERNEL_FLAVOR:-default}"
-case "$KERNEL_FLAVOR" in
-  default) ;;
-  lts)
-    KERNEL_PKG="kernel-cachyos-lts"
-    KERNEL_DEVEL_PKG="kernel-cachyos-lts-devel-matched"
-    KERNEL_PACKAGES=(kernel-cachyos-lts kernel-cachyos-lts-core kernel-cachyos-lts-modules "$KERNEL_DEVEL_PKG")
-    if [[ "${ENABLE_NVIDIA:-0}" == "1" ]]; then
-      err "KERNEL_FLAVOR=lts with ENABLE_NVIDIA=1 is not supported (never built, never tested)"
-      exit 1
-    fi
-    log "Kernel flavour: lts (kernel-cachyos-lts, x86-64-v2, no BORE)"
-    ;;
-  *) err "unknown KERNEL_FLAVOR '$KERNEL_FLAVOR' (default|lts)"; exit 1 ;;
-esac
 # TRANSIENT packages are installed for build time only and removed at the end.
 # sbsigntools provides sbsign/sbverify; akmods is needed for v4l2loopback (best-effort).
 TRANSIENT=(akmods sbsigntools "$KERNEL_DEVEL_PKG")
@@ -467,113 +441,6 @@ if (( V4L2_OK )); then
   fi
 else
   log "v4l2loopback build skipped/failed — not blocking; image continues without virtual camera kmod"
-fi
-
-# ---------------------------------------------------------------------------
-# NVIDIA driver against the CachyOS kernel — UPSTREAM via DKMS  [ADR 0009 v1]
-# ---------------------------------------------------------------------------
-# Gated by ENABLE_NVIDIA (build-arg → env, default 0): only the :*-nvidia
-# variant builds this; the base build skips the whole block. v1 (2026-06-15)
-# pulls NVIDIA's UPSTREAM driver (kmod-nvidia-open-dkms from NVIDIA's own CUDA
-# repo) and DKMS-builds it against THIS image's kernel tree — replacing the v0
-# RPMFusion akmod, whose nvidia cadence drifts from the CachyOS kernel cadence
-# (the CachyOS COPR itself dropped prebuilt nvidia over that skew). This is
-# what RakuOS runs in production + what coreos/fedora-bootc-nvidia documents.
-# DKMS drops the .ko under /usr/lib/modules/$KERNEL_VERSION/extra/ — INSIDE the
-# tree sign_kernel_modules() walks below — so the SAME Margine MOK that signs
-# vmlinuz signs the nvidia modules: one key, one enrollment, Secure Boot stays
-# ON. (coreos leaves its modules self-signed and tells you to "maintain a
-# custom signing key, enroll it with MOK" — that is exactly Margine's loop.)
-# EXPERIMENTAL: no NVIDIA GPU in CI → validated only as "builds + signs";
-# real-GPU runtime must be confirmed on hardware before :stable-nvidia. Hard-
-# fail: a -nvidia image with no nvidia kmod must never ship.
-if [[ "${ENABLE_NVIDIA:-0}" == "1" ]]; then
-  NVIDIA_KMOD="${NVIDIA_KMOD:-nvidia-open}"   # nvidia-open (Turing+/Blackwell), Margine default
-  _arch="$(uname -m)"
-  log "NVIDIA variant: DKMS-building upstream ${NVIDIA_KMOD} against $KERNEL_VERSION (hard-fail)"
-
-  # kernel-cachyos-devel-matched (TRANSIENT, already installed) provides the
-  # build tree at /usr/lib/modules/$KERNEL_VERSION/build. Add only the DKMS
-  # toolchain (build-only → TRANSIENT). No binutils-gold: deprecated/absent on
-  # F44 and nvidia-open does not need it.
-  dnf -y install --setopt=install_weak_deps=False dkms make gcc elfutils-libelf-devel \
-    || { err "DKMS toolchain install failed"; exit 1; }
-
-  # NVIDIA's own CUDA repo, keyed to the base Fedora release. kABI correctness
-  # comes from the -k flag below (not the repo's Fedora version); if NVIDIA has
-  # not published the exact %fedora repo yet, hard-fail rather than cross-grade
-  # to an older Fedora's userland (glibc/dep skew).
-  _verid="$(rpm -E %fedora)"
-  _repo_url="https://developer.download.nvidia.com/compute/cuda/repos/fedora${_verid}/${_arch}/cuda-fedora${_verid}.repo"
-  curl -fsSL --retry 5 --retry-delay 10 -o /etc/yum.repos.d/nvidia.repo "$_repo_url" \
-    || { err "no NVIDIA CUDA repo for fedora${_verid}/${_arch} (or fetch failed)"; exit 1; }
-
-  # Import NVIDIA's key ourselves, fingerprint first, so dnf never has to
-  # auto-import whatever the repo file happens to point at today.
-  _fprvar="NVIDIA_CUDA_FPR_${_verid}"
-  if [[ -z "${!_fprvar:-}" ]]; then
-    err "no pinned NVIDIA CUDA key fingerprint for fedora${_verid}."
-    err "Fetch the gpgkey from ${_repo_url%/*}/, verify the fingerprint against"
-    err "NVIDIA's published value, then add NVIDIA_CUDA_FPR_${_verid} near the"
-    err "top of this script."
-    exit 1
-  fi
-  _keyurl="$(awk -F= '/^gpgkey[[:space:]]*=/{sub(/^[[:space:]]+/, "", $2); print $2; exit}' /etc/yum.repos.d/nvidia.repo)"
-  [[ -n "$_keyurl" ]] || { err "NVIDIA repo file carries no gpgkey line"; exit 1; }
-  curl -fsSL --retry 5 --retry-delay 10 -o /run/nvidia-cuda-key.asc "$_keyurl" \
-    || { err "could not fetch the NVIDIA CUDA signing key from $_keyurl"; exit 1; }
-  verify_key_fpr /run/nvidia-cuda-key.asc "${!_fprvar}" "nvidia-cuda" || exit 1
-  rpm --import /run/nvidia-cuda-key.asc
-  rm -f /run/nvidia-cuda-key.asc
-
-  # kmod source + matching userland from the SINGLE NVIDIA repo, one
-  # transaction → no kmod/userland version skew. The excludepkgs setopt
-  # ENFORCES that: the base image's fedora-multimedia (negativo17) also
-  # ships nvidia-driver, and whenever it publishes ahead of NVIDIA's CUDA
-  # repo (610.43.03 vs .02, run 29184241364, 2026-07-12) dnf --best mixes
-  # the two sources and the transaction is unsolvable. The RPM %post runs
-  # a dkms autoinstall against the HOST kernel that fails harmlessly (no
-  # host kernel-devel in the build); coreos relies on the same, and we
-  # rebuild explicitly with -k below. (If a future package makes that
-  # %post fatal to the dnf transaction, add --setopt=tsflags=noscripts
-  # here AND an explicit `dkms add -m nvidia -v "$DRIVER_VERSION"` before
-  # the build.)
-  dnf -y install --no-docs --best --setopt=install_weak_deps=False \
-    --setopt='fedora-multimedia.excludepkgs=*nvidia*' \
-    kmod-nvidia-open-dkms nvidia-driver nvidia-driver-libs nvidia-driver-cuda nvidia-persistenced nvidia-modprobe \
-    || { err "nvidia upstream kmod + userland install failed"; exit 1; }
-
-  DRIVER_VERSION="$(rpm -q --qf '%{VERSION}' kmod-nvidia-open-dkms 2>/dev/null)"
-  [[ -n "${DRIVER_VERSION:-}" ]] || { err "could not determine kmod-nvidia-open-dkms version"; exit 1; }
-  log "NVIDIA upstream driver version: $DRIVER_VERSION"
-
-  # -k "$KERNEL_VERSION" is load-bearing: build against
-  # /usr/lib/modules/$KERNEL_VERSION/build (the CachyOS -devel-matched tree),
-  # NOT $(uname -r) (the build-host kernel). dkms install drops the .ko under
-  # .../extra/ and runs depmod.
-  dkms build   -m nvidia -v "$DRIVER_VERSION" -k "$KERNEL_VERSION" --verbose \
-    || { err "dkms build of nvidia $DRIVER_VERSION against $KERNEL_VERSION FAILED"; exit 1; }
-  dkms install -m nvidia -v "$DRIVER_VERSION" -k "$KERNEL_VERSION" --force --verbose \
-    || { err "dkms install of nvidia $DRIVER_VERSION against $KERNEL_VERSION FAILED"; exit 1; }
-
-  _nv_ko="$(find /usr/lib/modules/"$KERNEL_VERSION"/extra -name 'nvidia.ko*' -print -quit 2>/dev/null || true)"
-  [[ -n "${_nv_ko:-}" ]] || { err "nvidia DKMS module not under /usr/lib/modules/$KERNEL_VERSION/extra after install"; exit 1; }
-
-  rm -f /etc/yum.repos.d/nvidia.repo       # scrub repo (image convention)
-  rm -rf /var/lib/dkms /usr/src/nvidia-*   # build-time DKMS state only; the signed .ko stays
-  TRANSIENT+=(dkms make gcc elfutils-libelf-devel)
-
-  # nvidia-drm modeset (+ fbdev for the Wayland/Plymouth handoff) + blacklist nouveau.
-  mkdir -p /usr/lib/bootc/kargs.d
-  cat > /usr/lib/bootc/kargs.d/30-margine-nvidia.toml <<'KARG'
-kargs = ["nvidia-drm.modeset=1", "nvidia-drm.fbdev=1", "rd.driver.blacklist=nouveau", "modprobe.blacklist=nouveau"]
-KARG
-  # Pull the (about-to-be-MOK-signed) nvidia modules into the initramfs dracut
-  # regenerates later in this script (after the signing loop).
-  mkdir -p /etc/dracut.conf.d
-  printf 'add_drivers+=" nvidia nvidia_modeset nvidia_uvm nvidia_drm "\n' \
-    > /etc/dracut.conf.d/90-margine-nvidia.conf
-  log "NVIDIA variant: upstream ${NVIDIA_KMOD} $DRIVER_VERSION in place ($_nv_ko) — MOK-signed by the module loop below"
 fi
 
 # ---------------------------------------------------------------------------

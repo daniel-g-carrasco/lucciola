@@ -39,8 +39,6 @@ matches the base; go through this list first, then bump the number.
 
 - CachyOS kernel COPRs for the new release (custom-kernel/install.sh), the
   `scx-scheds` addons COPR, and the MOK-signed kernel build.
-- NVIDIA akmods on the new release (build-nvidia.yml) and the stock-kernel
-  test build.
 - RPM Fusion, Docker CE, VS Code, Tailscale repositories: release-specific
   URLs resolve.
 - ROCm: `rocm-opencl` still builds darktable's kernels
