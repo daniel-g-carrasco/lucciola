@@ -40,6 +40,10 @@ concurrency:
 
 jobs:
   check:
+    # Lucciola has no :stable until the first promotion (held by
+    # LUCCIOLA_PROMOTE_STABLE until Fedora 45's release): checking a tag that
+    # is absent on purpose would fail every day. A manual run always checks.
+    if: github.event_name == 'workflow_dispatch' || vars.LUCCIOLA_PROMOTE_STABLE == 'true'
     name: How old is :stable?
     runs-on: ubuntu-26.04
     timeout-minutes: 10
