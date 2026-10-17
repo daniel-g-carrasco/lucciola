@@ -2,7 +2,7 @@
 # ("image-template", floating BIB tag, secret-less build) sat here
 # unchanged until the 2026-06-12 review — half the recipes could not
 # build THIS image at all.
-export image_name := env("IMAGE_NAME", "margine")
+export image_name := env("IMAGE_NAME", "lucciola")
 export default_tag := env("DEFAULT_TAG", "latest")
 # Same digest build-disk.yml and smoke-boot.yml pin.
 export bib_image := env("BIB_IMAGE", "quay.io/centos-bootc/bootc-image-builder@sha256:7ae88b8d6f2cabfa971d7836b96d6cac19cd1384e658031bd154f9687e929905")

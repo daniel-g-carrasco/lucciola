@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Notify user if ghcr.io/.../margine:stable hasn't been refreshed
+"""Notify user if ghcr.io/.../lucciola:stable hasn't been refreshed
 in >7 days. Either the build pipeline is broken, or upstream has
 genuinely paused — either way the user should know."""
 
@@ -21,7 +21,7 @@ r = run(["bootc", "status", "--json"])
 if r.returncode != 0:
     sys.exit(0)  # no bootc, no-op
 booted = json.loads(r.stdout)["status"]["booted"]
-image_ref = booted["image"]["image"]["image"]  # e.g. ghcr.io/daniel-g-carrasco/margine:stable
+image_ref = booted["image"]["image"]["image"]  # e.g. ghcr.io/daniel-g-carrasco/lucciola:stable
 
 # Inspect upstream :stable to find its creation timestamp
 r = run(["skopeo", "inspect", "--no-tags", f"docker://{image_ref}"])
@@ -42,7 +42,7 @@ if age_days < WARN_AGE_DAYS:
     sys.exit(0)
 
 urgency = "critical" if age_days >= CRIT_AGE_DAYS else "normal"
-title = "Margine: upstream stale"
+title = "Lucciola: upstream stale"
 body = f"Latest :stable is {age_days:.0f} days old. Build pipeline may be broken."
 # margine-notify, not notify-send: it fills the fdo app_icon field so
 # the logo also shows on the lock screen (docs/BRANDING.md).

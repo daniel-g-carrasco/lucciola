@@ -21,9 +21,9 @@ that proves it, and the known limitations. It is reviewed monthly.
 Report privately through GitHub's private vulnerability reporting:
 
 - **Build pipeline / published image** —
-  <https://github.com/daniel-g-carrasco/margine-image/security/advisories/new>
+  <https://github.com/daniel-g-carrasco/lucciola/security/advisories/new>
 - **Spec / configuration / validators** —
-  <https://github.com/daniel-g-carrasco/margine-image/security/advisories/new>
+  <https://github.com/daniel-g-carrasco/lucciola/security/advisories/new>
 
 If you cannot use GitHub Security Advisories, email **ai@danielgrasso.com**
 with `[margine-security]` in the subject (PGP available on request).
@@ -46,7 +46,7 @@ This is a best-effort process for a personal project:
 ## Scope
 
 **In scope:** the Margine build pipeline, the published OCI image
-(`ghcr.io/daniel-g-carrasco/margine:stable`), the kernel-signing / MOK flow,
+(`ghcr.io/daniel-g-carrasco/lucciola:stable`), the kernel-signing / MOK flow,
 the declarative spec and configuration helpers, and the live ISO.
 
 **Out of scope / not a vulnerability:**

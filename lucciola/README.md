@@ -1,7 +1,8 @@
 # Lucciola
 
-Lucciola is niri with the Noctalia shell, built as a thin layer on top of the
-Margine OS image. Experimental.
+Lucciola is niri with the Noctalia shell on top of Margine OS, built as one
+image from Universal Blue's silverblue-main by this repository (until 2026-10
+it was a second build FROM the published Margine image). Experimental.
 
 Everything below the desktop comes from Margine unchanged: the CachyOS kernel
 signed with the Margine key, Secure Boot, TPM2 disk unlock, image signatures
@@ -69,10 +70,12 @@ verified by the device, rollback, and every Margine fix. This layer adds:
   bootstrap. The defaults that also serve GTK applications under niri
   (fonts, accent colour, file chooser, Ptyxis, Nautilus) stay.
 
-Images: `ghcr.io/daniel-g-carrasco/margine:lucciola` (and `:lucciola.DATE`),
-rebuilt by `.github/workflows/build-lucciola.yml` after every green smoke-boot
-on main, signed like every Margine tag. Pull requests that touch Lucciola push
-`:lucciola-test`.
+Images: `ghcr.io/daniel-g-carrasco/lucciola`, built by `.github/workflows/build.yml`
+as `:candidate` and promoted to `:stable` by `.github/workflows/smoke-boot.yml`,
+signed with the same key as Margine. The layer is the last step of the main
+`Containerfile`: `lucciola/system_files/` copied in, then `lucciola/build.sh`.
+Until 2026-10 the images were `ghcr.io/daniel-g-carrasco/margine:lucciola`,
+which is still what the switch below points to.
 
 Switch a Margine install to it (and back with the previous boot entry, or by
 rebasing to `:stable`):

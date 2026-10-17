@@ -75,8 +75,8 @@ LOGO=margine-logo
 CPE_NAME="cpe:/o:daniel-g-carrasco:margine:${FEDORA_VER}"
 HOME_URL="https://margine.dev"
 DOCUMENTATION_URL="https://margine.dev/docs"
-SUPPORT_URL="https://github.com/daniel-g-carrasco/margine-image/issues"
-BUG_REPORT_URL="https://github.com/daniel-g-carrasco/margine-image/issues"
+SUPPORT_URL="https://github.com/daniel-g-carrasco/lucciola/issues"
+BUG_REPORT_URL="https://github.com/daniel-g-carrasco/lucciola/issues"
 DEFAULT_HOSTNAME="margine"
 EOF
 )

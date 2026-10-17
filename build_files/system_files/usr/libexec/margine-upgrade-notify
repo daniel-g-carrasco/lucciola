@@ -70,7 +70,7 @@ if not state_file.exists() and legacy.exists():
 previous = state_file.read_text().strip() if state_file.exists() else ""
 
 if previous and previous != digest:
-    title = "Margine updated"
+    title = "Lucciola updated"
     body = f"Now running: {version}\nDigest: {digest[:23]}…"
     # margine-notify, not notify-send: it fills the fdo app_icon field
     # so the logo also shows on the lock screen (docs/BRANDING.md).

@@ -10,7 +10,7 @@
 # signature, no failed services, branding assets in place, etc.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/daniel-g-carrasco/margine-image/main/build_files/40-spec-scripts/scripts/validate-margine-system | bash
+#   curl -fsSL https://raw.githubusercontent.com/daniel-g-carrasco/lucciola/main/build_files/40-spec-scripts/scripts/validate-margine-system | bash
 # or after `git clone`:
 #   scripts/validate-margine-system
 #
@@ -82,11 +82,11 @@ fi
 # pre-2026-06-01 images had ID=margine.
 EXPECTED_OS_ID="fedora"
 EXPECTED_OS_VARIANT_ID="margine"
-EXPECTED_KERNEL_PATTERN="cachy"   # cachyos1 (default) or cachylts1 (:lts variant, issue #382)
+EXPECTED_KERNEL_PATTERN="cachy"   # kernel-cachyos (cachyos1)
 EXPECTED_PLYMOUTH_THEME="margine"
 EXPECTED_WALLPAPER="file:///usr/share/backgrounds/margine/margine.png"
 EXPECTED_GDM_LOGO=""   # empty: no logo in greeter, by design (see lessons-learned Bug 7)
-EXPECTED_GHCR_IMAGE="ghcr.io/daniel-g-carrasco/margine"
+EXPECTED_GHCR_IMAGE="ghcr.io/daniel-g-carrasco/lucciola"
 
 # Expected Flatpaks are read from the preinstall file the image itself
 # ships (generated at build time by margine-image 20-flatpaks from the

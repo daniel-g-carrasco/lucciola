@@ -33,7 +33,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 APP_ID = "dev.margine.System"
-IMAGE = "ghcr.io/daniel-g-carrasco/margine:stable"
+IMAGE = "ghcr.io/daniel-g-carrasco/lucciola:stable"
 SYSTEM_UPDATE = "/usr/libexec/margine/system-update"
 BREW = "/home/linuxbrew/.linuxbrew/bin/brew"
 
@@ -205,7 +205,7 @@ class SystemWindow(Adw.ApplicationWindow):
 
         check_row = Adw.ActionRow(
             title="System Check",
-            subtitle="Verify the system matches how Margine ships it",
+            subtitle="Verify the system matches how Lucciola ships it",
         )
         check_row.add_prefix(Gtk.Image.new_from_icon_name("emblem-system-symbolic"))
         self._check_button = Gtk.Button(label="Run", valign=Gtk.Align.CENTER)
@@ -247,7 +247,7 @@ class SystemWindow(Adw.ApplicationWindow):
         self._version_row.set_subtitle(booted)
         self._kernel_row.set_subtitle(os.uname().release)
 
-        self._base_row.set_subtitle("Fedora → Universal Blue main → Margine")
+        self._base_row.set_subtitle("Fedora → Universal Blue main → Lucciola")
 
         layered = self._state.get("layered") or []
         if layered:
@@ -259,7 +259,7 @@ class SystemWindow(Adw.ApplicationWindow):
             )
             self._layered_row.set_activatable(True)
         else:
-            self._layered_row.set_subtitle("None: this is a stock Margine system")
+            self._layered_row.set_subtitle("None: this is a stock Lucciola system")
             self._layered_row.set_activatable(False)
 
         self._update_banner()
@@ -560,7 +560,7 @@ class SystemWindow(Adw.ApplicationWindow):
         group = Adw.PreferencesGroup(
             title="System Check",
             description=(
-                "Everything matches how Margine ships."
+                "Everything matches how Lucciola ships."
                 if not failed
                 else f"{len(failed)} of {len(results)} checks need attention."
             ),
@@ -672,7 +672,7 @@ class SystemWindow(Adw.ApplicationWindow):
             application_icon=APP_ID,
             developer_name="Daniel Grasso",
             website="https://margine.dev/docs/updates-and-rollback",
-            issue_url="https://github.com/daniel-g-carrasco/margine-image/issues",
+            issue_url="https://github.com/daniel-g-carrasco/lucciola/issues",
             license_type=Gtk.License.GPL_3_0,
         )
         status = run(["/usr/bin/margine-status"], timeout=90)

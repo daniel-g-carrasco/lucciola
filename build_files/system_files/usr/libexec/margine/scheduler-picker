@@ -412,7 +412,7 @@ const SchedulerWindow = GObject.registerClass(
         version: pretty.replace(/^Margine\s*/, "") || "alpha",
         developer_name: "Margine",
         website: "https://margine.dev",
-        issue_url: "https://github.com/daniel-g-carrasco/margine-image/issues",
+        issue_url: "https://github.com/daniel-g-carrasco/lucciola/issues",
         license_type: Gtk.License.APACHE_2_0,
         comments:
           "Switch the kernel's sched_ext (BPF) CPU scheduler at runtime.\n\n" +

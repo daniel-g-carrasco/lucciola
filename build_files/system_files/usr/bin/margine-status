@@ -1,15 +1,16 @@
 #!/usr/bin/bash
-# margine-status — is this machine following the Margine flow?
+# margine-status: is this machine following the Lucciola flow?
 #
 # Shows your booted deployment vs the latest published image of the tag it
 # follows (:stable for most installs), plus the
-# Fedora → Universal Blue → Margine lineage and the running kernel. Read-only; makes
-# no changes. Mirrors the website's /status page from the machine's POV.
+# Fedora → Universal Blue → Lucciola lineage and the running kernel. Read-only;
+# makes no changes. (The command keeps its Margine name for now; the
+# margine.dev/status page it used to point to describes Margine's image, not
+# this one, so the pointer is gone.)
 set -uo pipefail
 
-IMAGE="ghcr.io/daniel-g-carrasco/margine:stable"
+IMAGE="ghcr.io/daniel-g-carrasco/lucciola:stable"
 REPO="${IMAGE%:*}"
-SITE="https://margine.dev/status"
 
 if [ -t 1 ]; then
   c_reset=$'\e[0m'; c_dim=$'\e[2m'; c_grn=$'\e[32m'; c_ylw=$'\e[33m'; c_ember=$'\e[38;5;208m'
@@ -36,10 +37,11 @@ fi
 # for a version the machine was NOT running (2026-07-10, daniel's laptop:
 # booted 20260706, staged 20260707, status showed 20260707 as booted).
 ros="$(rpm-ostree status --json 2>/dev/null || echo '{}')"
-# Compare against the tag this machine actually follows (:stable, :lts,
-# :nvidia, :lucciola...). Hardcoding :stable told every :lts install that an
-# update was available, forever. Only tags of the Margine repository count;
-# a digest pin or another image keeps the :stable comparison.
+# Compare against the tag this machine actually follows (:stable,
+# :candidate, a dated tag...). Hardcoding :stable told every install on
+# another tag that an update was available, forever. Only tags of this
+# image's repository count; a digest pin or another image keeps the :stable
+# comparison.
 origin="$(printf '%s' "$ros" | jq -r '[.deployments[]? | select(.booted==true)][0]."container-image-reference" // ""' 2>/dev/null)"
 followed="${origin#*:}"; followed="${followed#docker://}"
 case "$followed" in
@@ -62,12 +64,9 @@ kernel="$(uname -r)"
 latest_ver="$(label "$IMAGE" org.opencontainers.image.version)"; latest_ver="${latest_ver:-unknown}"
 latest_digest="$(digest "$IMAGE")"
 # The base the latest image was built FROM, as the image's own label names
-# it: Bluefin until 2026-10-11, Universal Blue's silverblue-main since.
-# Lucciola is built FROM a Margine image: follow that one hop down.
+# it: Universal Blue's silverblue-main. (Lucciola was built FROM a Margine
+# image until 2026-10, and this used to follow that one hop down.)
 base_ref="$(label "$IMAGE" org.opencontainers.image.base.name)"
-case "$base_ref" in
-  "$REPO":*|"$REPO"@*) base_ref="$(label "$base_ref" org.opencontainers.image.base.name)" ;;
-esac
 case "$base_ref" in
   *silverblue-main*) base_name="Universal Blue main" ;;
   *bluefin*)         base_name="Bluefin" ;;
@@ -105,11 +104,11 @@ blocked_apps=""
 [ -s "$blocked_file" ] && blocked_apps="$(awk '{printf "%s%s", sep, $1; sep=", "}' "$blocked_file" 2>/dev/null)"
 
 printf '\n'
-printf '  %-15s %s%s%s   %s← your deployment%s\n' "Margine OS"     "$c_ember" "$booted_ver" "$c_reset" "$c_dim" "$c_reset"
+printf '  %-15s %s%s%s   %s← your deployment%s\n' "Lucciola"       "$c_ember" "$booted_ver" "$c_reset" "$c_dim" "$c_reset"
 [ -n "$staged_ver" ] && \
 printf '  %-15s %s   %s(applies at next boot)%s\n' "Staged"        "$staged_ver" "$c_dim" "$c_reset"
 printf '  %-15s %s   %s\n'                          "Latest :${TAG}" "$latest_ver" "$verdict"
-printf '  %-15s Fedora %s → %s %s → Margine\n' "Chain"          "$fedora_ver" "$base_name" "$base_ver"
+printf '  %-15s Fedora %s → %s %s → Lucciola\n' "Chain"         "$fedora_ver" "$base_name" "$base_ver"
 kdef=EEVDF; grep -q '^CONFIG_SCHED_BORE=y' "/usr/lib/modules/$(uname -r)/config" 2>/dev/null && kdef=BORE
 printf '  %-15s %s  %s(CachyOS / %s)%s\n'         "Kernel"         "$kernel" "$c_dim" "$kdef" "$c_reset"
 if [ "$uupd_result" = "timeout" ]; then
@@ -127,7 +126,7 @@ case "$state" in
   nolocal)  printf "  Couldn't read the booted image digest locally — compare skipped (deployment is fine).\n" ;;
   *)        printf "  Couldn't compare deployment vs latest.\n" ;;
 esac
-printf '  %sFull flow: %s%s\n\n' "$c_dim" "$SITE" "$c_reset"
+printf '\n'
 
 # `ujust margine-update` needs the verdict, not just the text: with
 # MARGINE_STATUS_EXIT_STATE=1 the exit code carries it. Without the

@@ -1015,7 +1015,7 @@ margine-report:
     set -uo pipefail
     OUT="$HOME/margine-report.txt"
     {
-      echo "=== Margine report ($(date -u +%FT%TZ)) ==="
+      echo "=== Lucciola report ($(date -u +%FT%TZ)) ==="
       echo
       echo "--- image ---"
       grep -E '^(PRETTY_NAME|VARIANT_ID|VERSION)=' /etc/os-release
@@ -1042,7 +1042,7 @@ margine-report:
     echo "  [...]"
     echo
     echo "Opening the bug-report page. Attach or paste $OUT into the Logs field."
-    xdg-open "https://github.com/daniel-g-carrasco/margine-image/issues/new/choose" >/dev/null 2>&1 ||       echo "Open manually: https://github.com/daniel-g-carrasco/margine-image/issues/new/choose"
+    xdg-open "https://github.com/daniel-g-carrasco/lucciola/issues/new/choose" >/dev/null 2>&1 ||       echo "Open manually: https://github.com/daniel-g-carrasco/lucciola/issues/new/choose"
 
 # Create + boot a throwaway Margine test VM from an ISO (libvirt).
 [group('Margine')]

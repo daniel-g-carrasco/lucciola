@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Margine: stage the latest :stable, non-interactively.
+# Lucciola: stage the latest :stable, non-interactively.
 #
 # ONE implementation of the update decision, shared by `ujust
 # margine-update` (which wraps it with the status header) and the
@@ -37,7 +37,7 @@ elif command -v bootc >/dev/null 2>&1; then
   echo "No local layers — using bootc upgrade."
   bootc upgrade
 else
-  echo "Staging the latest Margine :stable (rpm-ostree upgrade)."
+  echo "Staging the latest Lucciola :stable (rpm-ostree upgrade)."
   rpm-ostree upgrade
 fi
 

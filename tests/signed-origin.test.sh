@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Tests for /usr/libexec/margine/signed-origin against a fake rpm-ostree.
-# What it must do: move ONLY a Margine install on an unverified transport to
-# ostree-image-signed:, keep the tag, and change nothing when the rebase
-# (which verifies the signature first) fails.
+# What it must do: move ONLY an install of this repository's image on an
+# unverified transport to ostree-image-signed:, keep the tag, and change
+# nothing when the rebase (which verifies the signature first) fails.
 set -euo pipefail
 HELPER="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/build_files/system_files/usr/libexec/margine/signed-origin"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
@@ -17,7 +17,7 @@ case "$1" in
 esac
 STUB
 printf '#!/bin/sh\nexit 0\n' > "$T/bin/logger"; chmod +x "$T/bin/"*
-printf '{"default":[{"type":"reject"}],"transports":{"docker":{"ghcr.io/daniel-g-carrasco/margine":[{"type":"sigstoreSigned","keyPath":"/usr/lib/pki/containers/margine.pub","signedIdentity":{"type":"matchRepository"}}]}}}\n' > "$T/policy.json"
+printf '{"default":[{"type":"reject"}],"transports":{"docker":{"ghcr.io/daniel-g-carrasco/lucciola":[{"type":"sigstoreSigned","keyPath":"/usr/lib/pki/containers/margine.pub","signedIdentity":{"type":"matchRepository"}}],"ghcr.io/daniel-g-carrasco/margine":[{"type":"sigstoreSigned","keyPath":"/usr/lib/pki/containers/margine.pub","signedIdentity":{"type":"matchRepository"}}]}}}\n' > "$T/policy.json"
 printf '{"default":[{"type":"insecureAcceptAnything"}],"transports":{"docker":{}}}\n' > "$T/policy-none.json"
 
 run_case() {  # name ref expected-rebase-target(or -) expected-rc [policy] [fail]
@@ -29,12 +29,13 @@ run_case() {  # name ref expected-rebase-target(or -) expected-rc [policy] [fail
   if [ "$got" = "$want" ] && [ "$rc" = "$want_rc" ]; then echo "ok   $name"
   else echo "FAIL $name: rebase=$got (want $want) rc=$rc (want $want_rc)"; sed 's/^/     /' "$T/out"; fails=$((fails+1)); fi
 }
-R=ghcr.io/daniel-g-carrasco/margine
+R=ghcr.io/daniel-g-carrasco/lucciola
 run_case "ISO install (unverified-registry, :stable) -> signed"   "ostree-unverified-registry:$R:stable"       "ostree-image-signed:docker://$R:stable" 0
-run_case "unverified-image form, :lts tag kept"                   "ostree-unverified-image:docker://$R:lts"    "ostree-image-signed:docker://$R:lts"    0
+run_case "unverified-image form, :candidate tag kept"             "ostree-unverified-image:docker://$R:candidate" "ostree-image-signed:docker://$R:candidate" 0
 run_case "already signed: nothing"                                "ostree-image-signed:docker://$R:stable"     -  0
 run_case "rebased to another image: nothing"                      "ostree-unverified-registry:ghcr.io/ublue-os/bluefin-dx:stable" - 0
-run_case "no Margine scope in the policy: nothing"                "ostree-unverified-registry:$R:stable"       -  0 "$T/policy-none.json"
+run_case "Margine's repository (no migration yet): nothing"       "ostree-unverified-registry:ghcr.io/daniel-g-carrasco/margine:lucciola" - 0
+run_case "no scope for the repository in the policy: nothing"     "ostree-unverified-registry:$R:stable"       -  0 "$T/policy-none.json"
 run_case "rebase fails (bad signature/network): reported, rc 1"   "ostree-unverified-registry:$R:stable"       "ostree-image-signed:docker://$R:stable" 1 "$T/policy.json" yes
 run_case "no image reference (not a container deployment)"        ""                                           -  0
 D=sha256:$(printf '%064d' 0)

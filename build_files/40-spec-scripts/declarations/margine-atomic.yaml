@@ -22,9 +22,9 @@ base:
     - silverblue        # phase-0 lab base, before ADR 0005
     - bluefin-dx        # phase-1 rebase target, then the published image's base until 2026-10-11
   image_workflow:
-    current: margine-bootc-image
-    image_ref: ghcr.io/daniel-g-carrasco/margine:stable
-    build_repo: https://github.com/daniel-g-carrasco/margine-image
+    current: lucciola-bootc-image   # margine-bootc-image until 2026-10 (Lucciola was built FROM it)
+    image_ref: ghcr.io/daniel-g-carrasco/lucciola:stable
+    build_repo: https://github.com/daniel-g-carrasco/lucciola
     legacy_paths:
       - stock-silverblue-lab        # scripts/apply-host-layer
       - bluefin-dx-rebase-adapter   # scripts/apply-margine-on-bluefin
@@ -79,7 +79,7 @@ updates:
   system:
     engine: bootc
     transport: ostree-image-signed
-    image_ref: ghcr.io/daniel-g-carrasco/margine:stable
+    image_ref: ghcr.io/daniel-g-carrasco/lucciola:stable
     require_reboot_judgment: true
   bootc:
     phase: shipping

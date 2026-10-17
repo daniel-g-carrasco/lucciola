@@ -237,22 +237,28 @@ fi
 [[ -L "$ROOTFS/etc/systemd/system/multi-user.target.wants/mok-enroll.service" || -L "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants/mok-enroll.service" ]] \
   || { echo "::error::mok-enroll.service is not enabled (A.4.mok)"; fail=1; }
 
-# A.4.trust: devices must verify Margine's signature on update (2026-10-06).
-# Before this, policy.json had no scope for the Margine repository and pulls
+# A.4.trust: devices must verify the image signature on update (2026-10-06).
+# Before this, policy.json had no scope for the image's repository and pulls
 # fell through to the catch-all insecureAcceptAnything: "signed" transports
-# verified nothing.
+# verified nothing. Two scopes, one key: ghcr.io/daniel-g-carrasco/lucciola,
+# what this image updates from, and the Margine repository it shares the
+# signing key with (an install moved here from margine:lucciola keeps a
+# verified way back).
 check_nonempty "usr/lib/pki/containers/margine.pub" "A.4.trust"
-grep -qs 'use-sigstore-attachments: true' "$ROOTFS/etc/containers/registries.d/margine.yaml" \
-  || { echo "::error::registries.d/margine.yaml missing or without use-sigstore-attachments (A.4.trust)"; fail=1; }
+for r in margine lucciola; do
+  grep -qs 'use-sigstore-attachments: true' "$ROOTFS/etc/containers/registries.d/$r.yaml" \
+    || { echo "::error::registries.d/$r.yaml missing or without use-sigstore-attachments (A.4.trust)"; fail=1; }
+done
 if ! python3 - "$ROOTFS/etc/containers/policy.json" <<'PY'
 import json, sys
 p = json.load(open(sys.argv[1]))
-r = p["transports"]["docker"]["ghcr.io/daniel-g-carrasco/margine"][0]
-assert r["type"] == "sigstoreSigned" and r["keyPath"] == "/usr/lib/pki/containers/margine.pub"
+for repo in ("ghcr.io/daniel-g-carrasco/lucciola", "ghcr.io/daniel-g-carrasco/margine"):
+    r = p["transports"]["docker"][repo][0]
+    assert r["type"] == "sigstoreSigned" and r["keyPath"] == "/usr/lib/pki/containers/margine.pub"
 assert p["transports"]["docker"].get("ghcr.io/ublue-os"), "base scope lost"
 PY
 then
-  echo "::error::policy.json has no sigstoreSigned scope for ghcr.io/daniel-g-carrasco/margine, or lost the base ones (A.4.trust)"; fail=1
+  echo "::error::policy.json lacks a sigstoreSigned scope for ghcr.io/daniel-g-carrasco/lucciola or .../margine, or lost the base ones (A.4.trust)"; fail=1
 fi
 test -L "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants/margine-signed-origin.service" \
   || { echo "::error::margine-signed-origin.service is not enabled (A.4.trust)"; fail=1; }

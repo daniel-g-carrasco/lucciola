@@ -1,10 +1,10 @@
 #!/usr/bin/bash
-# Move a Margine install from the unverified to the signed image transport
+# Move an install from the unverified to the signed image transport
 # (2026-10-06).
 #
 # ISO installs used `bootc switch --transport registry` without
 # --enforce-container-sigpolicy, so they follow
-# ostree-unverified-registry:ghcr.io/daniel-g-carrasco/margine:<tag> and
+# ostree-unverified-registry:ghcr.io/daniel-g-carrasco/lucciola:<tag> and
 # never check the image signature on update. This stages the same image on
 # ostree-image-signed:docker://..., which makes rpm-ostree/bootc verify the
 # signature against /etc/containers/policy.json (scope added at build by
@@ -17,10 +17,11 @@
 # the next restart, like an update.
 #
 # No-ops: already on a signed transport, following another image (the user
-# rebased elsewhere), or no Margine scope in the policy.
+# rebased elsewhere, Margine's repository included), or no scope for the
+# repository in the policy.
 set -uo pipefail
 
-REPO="ghcr.io/daniel-g-carrasco/margine"
+REPO="ghcr.io/daniel-g-carrasco/lucciola"
 POLICY="${MARGINE_POLICY:-/etc/containers/policy.json}"
 
 say() { echo "$*"; logger -t margine-signed-origin -- "$*" 2>/dev/null || true; }
@@ -41,7 +42,7 @@ case "$image" in
   # tag to follow, and a pin is the owner's choice.
   "$REPO"@*|"$REPO":*@*) say "pinned to a digest ($image): leaving it alone"; exit 0 ;;
   "$REPO":*) tag="${image##*:}" ;;
-  *) say "following $image, not Margine: leaving the transport alone"; exit 0 ;;
+  *) say "following $image, not $REPO: leaving the transport alone"; exit 0 ;;
 esac
 [[ "$tag" =~ ^[A-Za-z0-9._-]+$ ]] || { say "unexpected tag in $ref, leaving it alone"; exit 0; }
 
