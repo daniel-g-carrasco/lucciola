@@ -23,9 +23,7 @@ name: Auto-retry failed builds
 on:
   workflow_run:
     workflows:
-      - "Build Margine image"
-      - "Build disk images"
-      - "Build Margine NVIDIA variant (experimental)"
+      - "Build Lucciola image"
     types: [completed]
 
 permissions: {}

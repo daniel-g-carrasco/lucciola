@@ -1,11 +1,20 @@
 #!/usr/bin/env python3
-"""Upgrade smoke: boot an installed Margine (built from an OLD image), layer a
+"""Upgrade smoke: boot an installed system (built from an OLD image), layer a
 package, rebase it to a NEW image, reboot, and check the result over the
 serial console. Standard library only; runs on a GitHub runner or any host
 with qemu-system-x86_64, swtpm and OVMF.
 
   upgrade-smoke.py --disk disk.qcow2 --sb-vars sb-vars.fd --to <image ref>
+                   [--transport ostree-unverified-registry|ostree-image-signed]
                    [--layer htop] [--expect-id-like fedora] [--log serial.log]
+
+--transport is how the rebase names the new image, i.e. which check the OLD
+system's policy applies to it. ostree-image-signed verifies against the old
+system's /etc/containers/policy.json, which proves something only when that
+policy has a scope for the new repository; for a repository it does not
+know, the docker catch-all accepts anything, so the honest transport is
+ostree-unverified-registry, and the check moves to the NEW deployment's
+policy (a signature-required scope for the repository it now follows).
 
 The disk comes from bootc-image-builder with disk_config/disk-upgrade.toml:
 user "probe" in wheel, password from UPGRADE_PASSWORD, console=ttyS0 on the
@@ -115,6 +124,9 @@ def main():
     ap.add_argument("--disk", required=True)
     ap.add_argument("--sb-vars", required=True)
     ap.add_argument("--to", required=True, help="image ref to rebase to (digest form preferred)")
+    ap.add_argument("--transport", default="ostree-image-signed",
+                    choices=["ostree-image-signed", "ostree-unverified-registry"],
+                    help="transport of the rebase (see the module docstring)")
     ap.add_argument("--layer", default="cowsay", help="package to layer before the rebase (one the image lacks); empty = none")
     ap.add_argument("--expect-id-like", default="fedora")
     ap.add_argument("--user", default="probe")
@@ -191,9 +203,13 @@ def main():
         else:
             rc, out = capture("rpm-ostree status | grep -A1 -i LayeredPackages | head -3", 60)
             say("layered: " + (out or "").strip())
-    say(f"rebasing to {a.to}")
+    if a.transport == "ostree-image-signed":
+        target = f"ostree-image-signed:docker://{a.to}"
+    else:
+        target = f"ostree-unverified-registry:{a.to}"
+    say(f"rebasing to {target}")
     t_rebase = time.monotonic()
-    rc, out = capture(sudo + f"rpm-ostree rebase ostree-image-signed:docker://{a.to} 2>&1 | tail -8", 2400)
+    rc, out = capture(sudo + f"rpm-ostree rebase {target} 2>&1 | tail -8", 2400)
     say(f"rebase took {int(time.monotonic() - t_rebase)}s, rc={rc}")
     if rc != 0:
         say(out or "")
@@ -214,6 +230,18 @@ def main():
     digest = a.to.split("@")[-1] if "@" in a.to else ""
     if digest and (not out or digest[:20] not in out):
         fail("the booted deployment is not the target image")
+    # Whatever transport brought it here, the next update must be verified:
+    # the new deployment's policy (its /etc merged with the old one's) needs
+    # a signature-required scope for the repository it follows now.
+    repo = a.to.split("@")[0]
+    if ":" in repo.rsplit("/", 1)[-1]:
+        repo = repo.rsplit(":", 1)[0]
+    rc, out = capture("python3 -c 'import json,sys; p=json.load(open(\"/etc/containers/policy.json\"));"
+                      " r=p[\"transports\"][\"docker\"].get(sys.argv[1]) or [{}];"
+                      " print(\"SCOPE=\" + r[0].get(\"type\", \"none\"))' " + repo, 60)
+    say(f"policy scope for {repo}: " + (out or "").strip())
+    if not out or "SCOPE=sigstoreSigned" not in out:
+        fail(f"the new deployment's policy has no sigstoreSigned scope for {repo}: its updates would not be verified")
     rc, out = capture("source /etc/os-release; echo ID_LIKE=$ID_LIKE; echo PRETTY=$PRETTY_NAME", 60)
     say((out or "").strip())
     if a.expect_id_like and (not out or f"ID_LIKE={a.expect_id_like}" not in out):

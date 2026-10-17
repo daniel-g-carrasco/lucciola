@@ -143,9 +143,9 @@ jobs:
           fi
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           curl --silent --show-error --fail \
-            -H "Title: Margine: upstream review due" \
+            -H "Title: Lucciola: upstream review due" \
             -H "Priority: low" \
             -H "Tags: bookmark_tabs,construction" \
             -H "Click: ${RUN_URL}" \
-            -d "Open the new issue on margine-image for the full report." \
+            -d "Open the new issue on lucciola for the full report." \
             "$NTFY_URL" || echo "ntfy notify failed (non-fatal)"

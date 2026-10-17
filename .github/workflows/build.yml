@@ -1,5 +1,8 @@
 ---
-# Margine bootc image build, on a GitHub-hosted ubuntu-24.04 runner.
+# Lucciola bootc image build, on a GitHub-hosted ubuntu-26.04 runner.
+#
+# Inherited from Margine OS (margine-image) with its history; Lucciola
+# builds the same pipeline into ghcr.io/daniel-g-carrasco/lucciola.
 #
 # History (2026-06-01): we used to run this on a self-hosted PVE VM
 # (margine-builder, VM 170). After two freezes — the second one
@@ -38,7 +41,7 @@
 # candidate digest get promoted to `:stable` (skopeo copy
 # --preserve-digests).
 
-name: Build Margine image
+name: Build Lucciola image
 
 on:
   push:
@@ -46,34 +49,29 @@ on:
     # Don't rebuild the image for changes that can't affect it (see list).
     paths-ignore:
       # Only build.yml builds the :stable/:candidate image. Editing any
-      # OTHER workflow (ISO/IA, smoke, NVIDIA variant, pin-bumpers, lint,
-      # security, cleanup, status) must NOT trigger a full image rebuild.
+      # OTHER workflow (smoke, upgrade smoke, pin-bumpers, lint, security,
+      # cleanup, alarms) must NOT trigger a full image rebuild.
       # paths-ignore can't negate ("all workflows except build.yml"), so
       # every non-image workflow is listed explicitly — add new ones here.
-      - '.github/workflows/build-disk.yml'
-      - '.github/workflows/build-nvidia.yml'
-      - '.github/workflows/build-test-stock-kernel.yml'
-      - 'Containerfile.test-stock-kernel'
+      # lucciola/ is NOT in this list any more: since 2026-10 it is part of
+      # this build (the last step of the Containerfile).
+      - '.github/workflows/base-watch.yml'
+      - '.github/workflows/build-retry.yml'
       - '.github/workflows/check-upstream-pins.yml'
-      - '.github/workflows/countme-tracker.yml'
-      - '.github/scripts/publish-countme-json.sh'
-      - '.github/scripts/publish-status-json.sh'
-      - '.github/scripts/bump-site-iso-date.sh'
+      - '.github/workflows/check-upstreams.yml'
       - '.github/workflows/ghcr-cleanup.yml'
-      - '.github/workflows/ia-prune-history.yml'
       - '.github/workflows/lint.yml'
-      - '.github/workflows/otiling-pin-sha.yml'
       - '.github/workflows/scorecard.yml'
+      - '.github/workflows/scrcpy-pin-sha.yml'
       - '.github/workflows/smoke-boot.yml'
-      - '.github/workflows/status-json.yml'
+      - '.github/workflows/stale-image-alarm.yml'
+      - '.github/workflows/upgrade-smoke.yml'
+      - '.github/scripts/upgrade-smoke.py'
       - '.github/workflows/validate-flatpak-refs.yml'
-      - '.github/workflows/wsf-pin-sha.yml'
       - '.github/workflows/security-review.yml'
       - '.github/scripts/security-review-report.py'
       - '.github/pull_request_template.md'
       - 'SECURITY.md'
-      - 'lucciola/**'
-      - '.github/workflows/build-lucciola.yml'
       - 'README.md'
       - 'CHANGELOG.md'
       - 'docs/**'
@@ -88,34 +86,29 @@ on:
     branches: [main]
     paths-ignore:
       # Only build.yml builds the :stable/:candidate image. Editing any
-      # OTHER workflow (ISO/IA, smoke, NVIDIA variant, pin-bumpers, lint,
-      # security, cleanup, status) must NOT trigger a full image rebuild.
+      # OTHER workflow (smoke, upgrade smoke, pin-bumpers, lint, security,
+      # cleanup, alarms) must NOT trigger a full image rebuild.
       # paths-ignore can't negate ("all workflows except build.yml"), so
       # every non-image workflow is listed explicitly — add new ones here.
-      - '.github/workflows/build-disk.yml'
-      - '.github/workflows/build-nvidia.yml'
-      - '.github/workflows/build-test-stock-kernel.yml'
-      - 'Containerfile.test-stock-kernel'
+      # lucciola/ is NOT in this list any more: since 2026-10 it is part of
+      # this build (the last step of the Containerfile).
+      - '.github/workflows/base-watch.yml'
+      - '.github/workflows/build-retry.yml'
       - '.github/workflows/check-upstream-pins.yml'
-      - '.github/workflows/countme-tracker.yml'
-      - '.github/scripts/publish-countme-json.sh'
-      - '.github/scripts/publish-status-json.sh'
-      - '.github/scripts/bump-site-iso-date.sh'
+      - '.github/workflows/check-upstreams.yml'
       - '.github/workflows/ghcr-cleanup.yml'
-      - '.github/workflows/ia-prune-history.yml'
       - '.github/workflows/lint.yml'
-      - '.github/workflows/otiling-pin-sha.yml'
       - '.github/workflows/scorecard.yml'
+      - '.github/workflows/scrcpy-pin-sha.yml'
       - '.github/workflows/smoke-boot.yml'
-      - '.github/workflows/status-json.yml'
+      - '.github/workflows/stale-image-alarm.yml'
+      - '.github/workflows/upgrade-smoke.yml'
+      - '.github/scripts/upgrade-smoke.py'
       - '.github/workflows/validate-flatpak-refs.yml'
-      - '.github/workflows/wsf-pin-sha.yml'
       - '.github/workflows/security-review.yml'
       - '.github/scripts/security-review-report.py'
       - '.github/pull_request_template.md'
       - 'SECURITY.md'
-      - 'lucciola/**'
-      - '.github/workflows/build-lucciola.yml'
       - 'README.md'
       - 'CHANGELOG.md'
       - 'docs/**'
@@ -145,9 +138,9 @@ on:
 
 env:
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
-  IMAGE_NAME: margine
-  IMAGE_DESC: "Margine: Fedora Silverblue (Universal Blue main) + CachyOS signed kernel + Margine deltas"
-  IMAGE_KEYWORDS: "bootc,ublue,silverblue,cachyos,margine"
+  IMAGE_NAME: lucciola
+  IMAGE_DESC: "Lucciola: niri with the Noctalia shell on Fedora Silverblue (Universal Blue main), CachyOS signed kernel, Margine OS underneath"
+  IMAGE_KEYWORDS: "bootc,ublue,silverblue,cachyos,niri,noctalia,lucciola"
   CANDIDATE_TAG: "candidate"
 
 # Least privilege (Scorecard Token-Permissions): nothing at the workflow
@@ -161,11 +154,11 @@ concurrency:
 jobs:
   pins:
     name: Pinned checksums in sync
-    # Renovate bumps o-tiling, scrcpy and wayland-scroll-factor by version
-    # only: hosted Renovate cannot hash a release asset, so its commit keeps
-    # the OLD *_SHA256 and the build was bound to fail `sha256sum -c` a
-    # minute before the matching *-pin-sha.yml workflow committed the right
-    # hash. Seven red builds (and red ntfy alerts) in two months for an
+    # Renovate bumps scrcpy by version only: hosted Renovate cannot hash a
+    # release asset, so its commit keeps the OLD SCRCPY_SHA256 and the build
+    # was bound to fail `sha256sum -c` a minute before scrcpy-pin-sha.yml
+    # committed the right hash (Margine ran the same for o-tiling and
+    # wayland-scroll-factor, whose Renovate managers did not come along). Seven red builds (and red ntfy alerts) in two months for an
     # expected, self-healing state (2026-10-06). On a Renovate PR this job
     # compares each pin with the PR base: VERSION changed but SHA256 not =
     # the sync has not landed yet, so the build and its notification wait
@@ -198,9 +191,7 @@ jobs:
               synced=false
             fi
           done <<'PINS'
-          build_files/build-margine-extensions.sh OTILING
           build_files/70-phone-cam/install.sh SCRCPY
-          build_files/45-wsf/install.sh WSF
           PINS
           echo "synced=$synced" >> "$GITHUB_OUTPUT"
           echo "pins synced: $synced"

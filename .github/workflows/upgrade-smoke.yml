@@ -1,15 +1,26 @@
-# Upgrade smoke: does an INSTALLED Margine move to a new image cleanly?
+# Upgrade smoke: does an INSTALLED system move to a new image cleanly?
 #
 # The smoke-boot gate boots a fresh disk of the image under test. This
 # one boots a disk built from an OLD image (what users run today), layers
-# a package, rebases to the NEW image the way `ujust margine-update` does
-# (ostree-image-signed, signature verified against the installed policy),
-# reboots and checks the result over the serial console: the booted
-# deployment, Secure Boot, failed units, the layered package, the base's
-# masked timers, Flathub only, uupd, the /etc merge, the gaming-native
-# dry run, the shipped validator. Written for the base switch of
-# 2026-10-11 (Bluefin DX to Universal Blue's silverblue-main), kept as a
-# tool for every change that touches what an upgrade has to carry.
+# a package, rebases to the NEW image, reboots and checks the result over
+# the serial console: the booted deployment, Secure Boot, failed units, the
+# layered package, the base's masked timers, Flathub only, uupd, the /etc
+# merge, the policy scope the next update is verified against, the
+# gaming-native dry run, the shipped validator. Written in Margine for the
+# base switch of 2026-10-11 (Bluefin DX to Universal Blue's silverblue-main).
+#
+# In Lucciola its main job is the move real users will make: from
+# ghcr.io/daniel-g-carrasco/margine:lucciola, where Lucciola was published
+# until it got its own repository, to this repository's image. The default
+# transport is ostree-unverified-registry because that is the only honest
+# one for that move: the policy on a margine:lucciola install has a scope
+# for the Margine repository only, so ostree-image-signed:docker:// of the
+# lucciola repository would fall through to the docker catch-all
+# (insecureAcceptAnything) and verify nothing while looking verified. The
+# check moves to the new deployment, which must carry a signature-required
+# scope for ghcr.io/daniel-g-carrasco/lucciola. Once the Margine side ships
+# that scope (the migration step), switch the default to
+# ostree-image-signed; for a lucciola-to-lucciola upgrade pick it by hand.
 #
 # Manual only (workflow_dispatch); nothing is promoted or published.
 name: Upgrade smoke (old install to new image)
@@ -18,17 +29,23 @@ on:
   workflow_dispatch:
     inputs:
       from_ref:
-        # A dated tag, not a bare digest: an untagged manifest is garbage
+        # A tag, not a bare digest: an untagged manifest is garbage
         # collected (the last Bluefin-based :stable vanished the day :stable
         # moved on and its dated tag was overwritten by the new build of the
-        # same day). stable.20261010 is the last image built on Bluefin DX.
+        # same day). :lucciola is what Lucciola users run today; pass a dated
+        # :lucciola.YYYYMMDD to pin the starting point.
         description: "OLD image: what the installed system runs (tag or tag@digest; a dated tag survives GC, a bare digest may not)"
         required: false
-        default: "ghcr.io/daniel-g-carrasco/margine:stable.20261010"
+        default: "ghcr.io/daniel-g-carrasco/margine:lucciola"
       to_ref:
         description: "NEW image to rebase to (tag or tag@digest)"
         required: false
-        default: "ghcr.io/daniel-g-carrasco/margine:candidate"
+        default: "ghcr.io/daniel-g-carrasco/lucciola:candidate"
+      transport:
+        description: "How the rebase names the new image: unverified for a repository the old policy does not know (margine:lucciola to lucciola), signed when it does"
+        type: choice
+        options: [ostree-unverified-registry, ostree-image-signed]
+        default: ostree-unverified-registry
       layer:
         description: "Package to layer before the rebase (exercises the re-solve; pick one the image lacks); empty = none"
         required: false
@@ -155,13 +172,14 @@ jobs:
       - name: Boot, layer, rebase, reboot, check
         env:
           TO: ${{ steps.ref.outputs.to }}
+          TRANSPORT: ${{ inputs.transport || 'ostree-unverified-registry' }}
           LAYER: ${{ inputs.layer }}
           EXPECT_ID_LIKE: ${{ inputs.expect_id_like }}
         run: |
           set -euo pipefail
           QCOW=$(ls output/qcow2/*.qcow2 | head -1)
           python3 .github/scripts/upgrade-smoke.py --disk "$QCOW" --sb-vars sb-vars.fd \
-            --to "$TO" --layer "$LAYER" --expect-id-like "$EXPECT_ID_LIKE" --log serial.log \
+            --to "$TO" --transport "$TRANSPORT" --layer "$LAYER" --expect-id-like "$EXPECT_ID_LIKE" --log serial.log \
             | tee driver.log
           grep -q '^MARGINE-UPGRADE: PASS' driver.log
 
@@ -172,7 +190,7 @@ jobs:
             echo "### Upgrade smoke"
             echo
             echo "- installed: \`${{ steps.ref.outputs.from }}\`"
-            echo "- target: \`${{ steps.ref.outputs.to }}\`"
+            echo "- target: \`${{ steps.ref.outputs.to }}\` (${{ inputs.transport || 'ostree-unverified-registry' }})"
             echo
             echo '```'
             grep -E 'MARGINE-UPGRADE|FAIL:|old deployment|booted deployment|validator' -A3 driver.log 2>/dev/null | head -80 || true

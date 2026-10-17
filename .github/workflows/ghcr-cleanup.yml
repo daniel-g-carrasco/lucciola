@@ -1,11 +1,12 @@
-name: GHCR cleanup (margine)
+name: GHCR cleanup (lucciola)
 
-# The margine OS image package accumulates orphaned UNTAGGED digests: every
+# The lucciola image package accumulates orphaned UNTAGGED digests: every
 # day build.yml + smoke-boot move :candidate / :stable / :stable.DATE / :DATE
-# onto a fresh ~14 GB digest, orphaning the previous manifest. Nothing pruned
-# them (only margine-live is pruned, inside build-disk.yml), so they piled up
-# — build.yml's "expected to be GC'd by the stale-tag cleanup" comment refers
-# to this workflow, which until now did not exist.
+# onto a fresh ~14 GB digest, orphaning the previous manifest. Nothing else
+# prunes them, so they would pile up (seen in Margine before this workflow
+# existed). build.yml's "expected to be GC'd by the stale-tag cleanup"
+# comment refers to this workflow. Only this package: Margine's packages are
+# pruned by margine-image.
 #
 # Conservative v1: delete only the untagged orphans. Every current tag is
 # protected (named tags, the dated release pins, and the transient
@@ -31,7 +32,7 @@ permissions:
   packages: write # required to delete GHCR package versions
 
 concurrency:
-  group: ghcr-cleanup-margine
+  group: ghcr-cleanup-lucciola
   cancel-in-progress: false
 
 jobs:
@@ -39,12 +40,12 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
-      - name: Prune orphaned margine GHCR versions
+      - name: Prune orphaned lucciola GHCR versions
         uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           owner: daniel-g-carrasco
-          packages: margine
+          packages: lucciola
           # Never delete any current tag: named tags, the dated release pins
           # (stable.YYYYMMDD + the plain YYYYMMDD alias, all start with 2),
           # and the transient candidate.* / pr-*. To also age those out
