@@ -222,12 +222,14 @@ jobs:
           sudo chown "$(id -u):$(id -g)" -R output/
 
       # Layer C (2026-06-12): offline-inject a GUI smoke probe into the
-      # qcow2 — GDM autologin user + a oneshot that, once the session
-      # has settled, verifies gnome-shell is alive, the distro
-      # extensions actually loaded, and nothing dumped core, then
-      # prints MARGINE-GUI-SMOKE: PASS/FAIL to the serial console and
-      # powers off. Motivation: a crashing gnome-shell extension passed
-      # Layer B (multi-user is reached regardless) and shipped.
+      # qcow2: GDM autologin user + a oneshot that, once the session
+      # has settled, verifies the autologin session is Lucciola's, niri
+      # and Noctalia are alive and answer on their sockets, Noctalia
+      # owns the notifications, the portal answers and nothing dumped
+      # core, then prints MARGINE-GUI-SMOKE: PASS/FAIL to the serial
+      # console and powers off. Motivation: a crashing gnome-shell
+      # extension passed Layer B (multi-user is reached regardless) and
+      # shipped; the probe checked GNOME until the repo became Lucciola's.
       # WARN-ONLY for now — flip to gating after two green runs.
       # Injection failures must never block the Layer B gate: every
       # step is guarded and ends with a ::warning:: at worst.
@@ -317,7 +319,7 @@ jobs:
             echo "- ${SUMMARY:-SUMMARY: n/a}"
             echo "- ${VERDICT:-VERDICT: n/a}"
             if grep -qE 'MARGINE-USER-SMOKE: [A-Z_]+ WARN' serial.log; then
-              echo "::warning::User-smoke soft gate: one or more identity checks WARNed (kernel/o-tiling/keybindings/search-light/gaming-ujust/gschema/gdm). Soft gate — promotion NOT blocked. See the step summary + serial-log artifact."
+              echo "::warning::User-smoke soft gate: one or more identity checks WARNed (kernel/session/os-name/default-session/niri-config/noctalia-look/gnome-stock/gaming-ujust/gschema). Soft gate: promotion NOT blocked. See the step summary + serial-log artifact."
             fi
           } >> "$GITHUB_STEP_SUMMARY" || true
 
