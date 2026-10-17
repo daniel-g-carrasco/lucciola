@@ -899,7 +899,7 @@ margine-update FORCE="":
     # layered systems must go through rpm-ostree.)
     sudo /usr/libexec/margine/system-update
 
-# Enable/disable/inspect GDM autologin (default: status, read-only).
+# Enable/disable/inspect autologin on the login screen (greetd; default: status, read-only).
 [group('Margine')]
 margine-autologin ACTION="status" USER="":
     @/usr/bin/margine-autologin "{{ ACTION }}" "{{ USER }}"

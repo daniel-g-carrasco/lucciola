@@ -2,7 +2,8 @@
 # Lucciola image build: runs once inside the main Containerfile, after every
 # Margine step (build_files/) and before 99-cleanup.sh. Adds niri and Noctalia
 # from the official Fedora repositories, makes "Lucciola" the session and the
-# system name, and checks the result.
+# system name, puts greetd with Noctalia Greeter in place of GDM as the login
+# screen (step 5), and checks the result.
 #
 # Written when Lucciola was a second build FROM the published Margine image,
 # and kept as it was when the two builds became one (2026-10), so the image
@@ -20,6 +21,7 @@ set -euo pipefail
 log() { echo "[lucciola-build] $*"; }
 
 : "${NOCTALIA_VR:?NOCTALIA_VR must be set (the pinned noctalia version-release)}"
+: "${NOCTALIA_GREETER_VERSION:?NOCTALIA_GREETER_VERSION must be set (the Noctalia Greeter tag the greeter-rpm stage built)}"
 # The Fedora tag comes from the base, so the pin holds across a Fedora
 # release: the same version-release, built for the release underneath.
 NOCTALIA_EVR="${NOCTALIA_VR}.fc$(rpm -E %fedora)"
@@ -54,9 +56,10 @@ for p in waybar mako fuzzel alacritty swaylock; do
   fi
 done
 
-# 2. Session. GDM lists wayland-sessions/*.desktop; Lucciola replaces the
-#    plain "Niri" entry with its own (same niri-session underneath), so the
-#    login screen offers "Lucciola" next to GNOME.
+# 2. Session. The login screen lists wayland-sessions/*.desktop by their
+#    Name=; Lucciola replaces the plain "Niri" entry with its own (same
+#    niri-session underneath), so the login screen offers "Lucciola" next to
+#    GNOME.
 src=/usr/share/wayland-sessions/niri.desktop
 [[ -f "$src" ]] || { echo "ERROR: $src missing: niri package layout changed" >&2; exit 1; }
 grep -q '^Exec=niri-session' "$src" || { echo "ERROR: niri.desktop no longer runs niri-session" >&2; exit 1; }
@@ -153,9 +156,11 @@ done
 log "GNOME extensions left: $(ls /usr/share/gnome-shell/extensions/ 2>/dev/null | tr '\n' ' ')"
 
 # 2c. Lucciola is the session a new user gets. accounts-daemon fills a
-#     user's record from these templates the first time it sees the user
-#     and GDM preselects the session written there; whoever picks GNOME on
-#     the login screen keeps GNOME from then on. Users that already have a
+#     user's record from these templates the first time it sees the user.
+#     Noctalia Greeter keeps its own memory of the last session (seeded with
+#     Lucciola, step 5); this record is what autologin starts
+#     (/usr/libexec/lucciola/autologin-session) and what GDM preselects when
+#     it is the login screen (greetd's fallback). Users that already have a
 #     record (an install moved from Margine) are not touched.
 for t in standard administrator; do
   f="/usr/share/accountsservice/user-templates/$t"
@@ -234,6 +239,165 @@ for f in /usr/libexec/lucciola/{bar-widths,color-calibration}; do
   python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read(), sys.argv[1])' "$f"
 done
 rpm -q niri noctalia xwayland-satellite
+
+# 5. Login screen: greetd running Noctalia Greeter, in place of GDM.
+#    GDM drew a GNOME login screen in front of a niri desktop; Noctalia
+#    Greeter has the Noctalia look and offers the same sessions. GDM stays
+#    installed, disabled: it is the fallback greetd.service starts when the
+#    greeter cannot come up (greetd.service.d/50-lucciola.conf), the GNOME
+#    session and the base-trim guard expect it, and a user can switch back
+#    to it. Files: lucciola/system_files (greetd config template, greeter
+#    settings, tmpfiles, SELinux module, PAM environment, the migration unit).
+#
+# 5a. Packages. greetd and its SELinux module from Fedora; Noctalia Greeter
+#     built from its pinned tag by the Containerfile's greeter-rpm stage (why
+#     not a third-party repository: see there). dbus-daemon brings
+#     dbus-run-session, which the greeter's wrapper needs for a session bus
+#     (the base has only dbus-broker). Weak dependencies off, as above.
+shopt -s nullglob
+greeter_rpms=(/ctx/greeter-rpm/noctalia-greeter-"${NOCTALIA_GREETER_VERSION}"-*.rpm)
+shopt -u nullglob
+(( ${#greeter_rpms[@]} == 1 )) || { echo "ERROR: expected one noctalia-greeter-${NOCTALIA_GREETER_VERSION} RPM in /ctx/greeter-rpm, found ${#greeter_rpms[@]}" >&2; exit 1; }
+log "installing greetd, greetd-selinux, dbus-daemon, ${greeter_rpms[0]##*/}"
+dnf5 -y --setopt=install_weak_deps=False install greetd greetd-selinux dbus-daemon "${greeter_rpms[0]}"
+rpm -q greetd greetd-selinux dbus-daemon noctalia-greeter gdm
+# dbus-daemon also brings dbus-daemon-launch-helper, setuid root (4750,
+# group dbus): it starts system services for a dbus-daemon SYSTEM bus. The
+# system bus here is dbus-broker, which starts services through systemd, so
+# the helper is never used and would only be a way to root for the dbus
+# account (the one dbus-broker runs as). dbus-run-session, all the greeter
+# needs, runs a session bus as the user and has no use for it either.
+helper=/usr/libexec/dbus-1/dbus-daemon-launch-helper
+if [[ -u "$helper" ]]; then
+  chmod u-s "$helper"
+  log "dropped setuid from $helper (unused: the system bus is dbus-broker)"
+fi
+[[ ! -u "$helper" ]] || { echo "ERROR: $helper is still setuid" >&2; exit 1; }
+for f in /usr/bin/greetd /usr/bin/noctalia-greeter-session /usr/bin/noctalia-greeter-apply-appearance \
+         /usr/bin/dbus-run-session /usr/bin/pkexec /usr/lib/pam.d/greetd /usr/lib/pam.d/greetd-greeter \
+         /usr/share/polkit-1/actions/org.noctalia.greeter.apply-appearance.policy; do
+  [[ -e "$f" ]] || { echo "ERROR: $f missing after the greetd/greeter install" >&2; exit 1; }
+done
+# The greeter account. Fedora's greetd creates "greetd" (sysusers.d); the
+# config below and lucciola-greeter.conf in tmpfiles.d name it.
+getent passwd greetd >/dev/null || { echo "ERROR: no greetd account after installing greetd" >&2; exit 1; }
+grep -q '^u[[:space:]]\+greetd[[:space:]]' /usr/lib/sysusers.d/greetd.conf \
+  || { echo "ERROR: greetd's sysusers.d entry changed: installed systems would not get the account at boot" >&2; exit 1; }
+
+# 5b. SELinux. greetd-selinux labels greetd (xdm_exec_t: it runs as xdm_t,
+#     like GDM) and its state; Lucciola's module labels the greeter's state
+#     directory the same way (the .cil file says why). semodule as the
+#     greetd-selinux scriptlet runs it: -n, no policy load in a build.
+semodule -n -s targeted -X 200 -i /usr/share/selinux/packages/targeted/lucciola-greeter.cil
+semodule -l | grep -qx 'lucciola-greeter' || { echo "ERROR: the lucciola-greeter SELinux module did not load" >&2; exit 1; }
+for want in "/usr/bin/greetd xdm_exec_t" "/var/lib/greetd xdm_var_lib_t" "/etc/greetd/config.toml xdm_etc_t" \
+            "/var/lib/noctalia-greeter xdm_var_lib_t" "/var/lib/noctalia-greeter/sync.toml xdm_var_lib_t"; do
+  path="${want% *}" type="${want#* }"
+  got="$(matchpathcon -n "$path" 2>/dev/null || true)"
+  [[ "$got" == *":${type}:"* ]] || { echo "ERROR: SELinux would label $path '${got:-nothing}', expected $type" >&2; exit 1; }
+done
+
+# 5c. PAM. Fedora's /usr/lib/pam.d/greetd is GDM's password login
+#     (/usr/lib/pam.d/gdm-password) in all that matters: system-auth for
+#     auth (pam_unix, and pam_fprintd when authselect's with-fingerprint is
+#     on), account and session (pam_systemd), pam_oo7 handing the login
+#     password to the Secret Service, pam_selinux, pam_loginuid,
+#     pam_keyinit, pam_namespace, postlogin. It is used as it is, with two
+#     lines added, and Fedora's later changes to it come through (the
+#     security baseline shows them as a diff):
+#     - pam_oo7 in the password stack, as GDM has it: a password changed at
+#       login (an expired one) re-encrypts the Login keyring too;
+#     - pam_env before system-auth's pam_systemd, so the autologin session
+#       registers as a Wayland one (session-type.conf says why).
+#     GDM's pam_selinux_permit line is left out on purpose: it lets accounts
+#     that SELinux marks passwordless (xguest) in without a password, and
+#     Lucciola has none.
+#     No copy in /etc/pam.d: one there would shadow Fedora's file forever,
+#     as the old /etc copies of GDM's files did after Fedora 45 moved them.
+python3 - /usr/lib/pam.d/greetd <<'PY'
+import re, sys
+path = sys.argv[1]
+lines = open(path).read().splitlines()
+def find(rx):
+    hits = [i for i, l in enumerate(lines) if re.match(rx, l)]
+    if len(hits) != 1:
+        sys.exit(f"ERROR: {path}: expected one line matching {rx!r}, found {len(hits)}: Fedora changed the file, review it against gdm-password")
+    return hits[0]
+# Everything the stack must already have, in the stages it must have it.
+for rx in (r"^auth\s+substack\s+system-auth\s*$", r"^-auth\s+optional\s+pam_oo7\.so\s*$",
+           r"^auth\s+include\s+postlogin\s*$", r"^account\s+required\s+pam_nologin\.so\s*$",
+           r"^account\s+include\s+system-auth\s*$", r"^session\s+required\s+pam_selinux\.so\s+close\s*$",
+           r"^session\s+required\s+pam_loginuid\.so\s*$", r"^session\s+required\s+pam_selinux\.so\s+open\s*$",
+           r"^session\s+optional\s+pam_keyinit\.so\s+force\s+revoke\s*$", r"^session\s+required\s+pam_namespace\.so\s*$",
+           r"^-session\s+optional\s+pam_oo7\.so\s+auto_start\s*$", r"^session\s+include\s+postlogin\s*$"):
+    find(rx)
+pw = find(r"^password\s+include\s+system-auth\s*$")
+lines[pw + 1:pw + 1] = ["# Lucciola (lucciola/build.sh 5c): as gdm-password, a password changed here re-encrypts the keyring.",
+                        "-password  optional    pam_oo7.so use_authtok"]
+se = find(r"^session\s+include\s+system-auth\s*$")
+lines[se:se] = ["# Lucciola (lucciola/build.sh 5c): wayland unless the greeter said otherwise, before pam_systemd.",
+                "session    optional    pam_env.so readenv=0 user_readenv=0 conffile=/usr/share/lucciola/greetd/session-type.conf"]
+open(path, "w").write("\n".join(lines) + "\n")
+PY
+grep -q '^-\?session.*pam_systemd\.so' /etc/pam.d/system-auth \
+  || { echo "ERROR: system-auth has no pam_systemd: greetd sessions would get no logind session" >&2; exit 1; }
+[[ -f /usr/share/lucciola/greetd/session-type.conf ]] || { echo "ERROR: session-type.conf missing" >&2; exit 1; }
+[[ ! -e /etc/pam.d/greetd && ! -e /etc/pam.d/greetd-greeter ]] \
+  || { echo "ERROR: an /etc/pam.d copy of greetd's PAM files would shadow Fedora's" >&2; exit 1; }
+log "greetd PAM stack: $(grep -cvE '^[[:space:]]*(#|$)' /usr/lib/pam.d/greetd) lines, pam_oo7 in auth/password/session"
+
+# 5d. greetd's configuration (the template says what each line is for). The
+#     package's own file is %config(noreplace); written over here, in the
+#     image's /etc, where the update's /etc merge brings it to installed
+#     systems that never had one.
+install -m 0644 /usr/share/lucciola/greetd/config.toml /etc/greetd/config.toml
+rm -f /etc/greetd/config.toml.rpmnew /etc/greetd/config.toml.rpmsave
+python3 - /etc/greetd/config.toml /usr/share/wayland-sessions/lucciola.desktop /usr/share/lucciola/greeter/sync.toml <<'PY'
+import sys, tomllib
+conf = tomllib.load(open(sys.argv[1], "rb"))
+d = conf.get("default_session", {})
+if not d.get("command", "").endswith("/usr/bin/noctalia-greeter-session") or d.get("user") != "greetd":
+    sys.exit(f"ERROR: {sys.argv[1]} does not run Noctalia Greeter as greetd: {d}")
+if "initial_session" in conf:
+    sys.exit(f"ERROR: {sys.argv[1]} ships an autologin")
+name = next((l.split("=", 1)[1].strip() for l in open(sys.argv[2]) if l.startswith("Name=")), "")
+last = tomllib.load(open(sys.argv[3], "rb")).get("session", {}).get("last")
+if last != name:
+    sys.exit(f"ERROR: the greeter's seeded session '{last}' is not the session file's Name= '{name}'")
+PY
+sessions="$(noctalia-greeter sessions)"
+grep -qx 'Lucciola' <<<"$sessions" && grep -qx 'GNOME' <<<"$sessions" \
+  || { echo "ERROR: Noctalia Greeter does not list Lucciola and GNOME: $(tr '\n' ' ' <<<"$sessions")" >&2; exit 1; }
+log "greeter sessions: $(tr '\n' ' ' <<<"$sessions")"
+
+# 5e. greetd is the display manager, GDM is not. display-manager.service is
+#     a symlink in /etc: the image's version reaches an installed system
+#     through the update's /etc merge unless the machine changed it, and
+#     lucciola-login-migrate.service handles that case (see the script).
+#     The preset says the same for anything that re-applies presets.
+systemctl disable gdm.service
+systemctl enable greetd.service
+dm="$(readlink /etc/systemd/system/display-manager.service || true)"
+[[ "$dm" == */greetd.service ]] || { echo "ERROR: display-manager.service points to '${dm:-nothing}', not greetd" >&2; exit 1; }
+[[ -L /usr/lib/systemd/system/graphical.target.wants/lucciola-login-migrate.service ]] \
+  || { echo "ERROR: lucciola-login-migrate.service is not enabled" >&2; exit 1; }
+[[ -x /usr/libexec/lucciola/login-migrate && -x /usr/libexec/lucciola/autologin-session ]] \
+  || { echo "ERROR: the login helpers in /usr/libexec/lucciola are missing or not executable" >&2; exit 1; }
+grep -qx 'OnFailure=gdm.service' /usr/lib/systemd/system/greetd.service.d/50-lucciola.conf \
+  || { echo "ERROR: greetd.service lost its GDM fallback" >&2; exit 1; }
+# Fedora orders greetd after plymouth-quit-wait.service: the boot splash
+# quits, then the greeter starts (every greetd-based Fedora login screen does
+# the same). Checked so a change there is noticed.
+grep -q '^After=.*plymouth-quit-wait\.service' /usr/lib/systemd/system/greetd.service \
+  || { echo "ERROR: greetd.service no longer waits for Plymouth to quit" >&2; exit 1; }
+
+# 5f. /var/lib/greetd and /var/lib/noctalia-greeter come from tmpfiles.d at
+#     boot, on fresh installs and updated systems alike (lucciola-greeter.conf
+#     says why), so the image carries no copy of them.
+rm -rf /var/lib/greetd /var/lib/noctalia-greeter
+systemd-tmpfiles --dry-run --create /usr/lib/tmpfiles.d/greetd.conf /usr/lib/tmpfiles.d/lucciola-greeter.conf >/dev/null \
+  || { echo "ERROR: the greetd tmpfiles entries do not parse" >&2; exit 1; }
+log "login screen: greetd + noctalia-greeter $(rpm -q --qf '%{VERSION}-%{RELEASE}' noctalia-greeter), GDM kept as the fallback"
 
 dnf5 clean all
 rm -rf /var/cache/libdnf5/* /var/lib/dnf/* /var/log/dnf5.log* 2>/dev/null || true

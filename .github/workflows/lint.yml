@@ -101,6 +101,18 @@ jobs:
         # and removes is tested, not assumed. See tests/grub-lock.test.sh.
         run: bash tests/grub-lock.test.sh
 
+      - name: Autologin helper (greetd and GDM)
+        # Edits the login screen's configuration as root: which accounts it
+        # refuses, and that greetd's file keeps every other line and still
+        # parses, is tested on temp files. See tests/margine-autologin.test.sh.
+        run: bash tests/margine-autologin.test.sh
+
+      - name: Login screen migration helper (GDM to greetd)
+        # Runs once on every installed system before the display manager
+        # starts: what it switches, what it leaves alone and when it retries
+        # is tested. See tests/login-migrate.test.sh.
+        run: bash tests/login-migrate.test.sh
+
       - name: Signed transport migration helper
         # Moves unverified installs to ostree-image-signed:. What it leaves
         # alone (other images, no policy, failed verification) is tested.

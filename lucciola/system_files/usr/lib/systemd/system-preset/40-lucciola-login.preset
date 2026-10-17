@@ -1,0 +1,6 @@
+# Lucciola's login screen is greetd (with Noctalia Greeter). GDM stays
+# installed, disabled, as the fallback greetd.service starts when it fails
+# (greetd.service.d/50-lucciola.conf). Read before Fedora's
+# 85-display-manager.preset, which enables gdm.service.
+enable greetd.service
+disable gdm.service

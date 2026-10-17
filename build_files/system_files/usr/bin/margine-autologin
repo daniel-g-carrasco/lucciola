@@ -1,23 +1,57 @@
 #!/usr/bin/bash
-# margine-autologin — enable/disable/inspect GDM (GNOME) autologin from the CLI.
+# margine-autologin: enable/disable/inspect autologin on the login screen.
 #
-# Edits /etc/gdm/custom.conf in place (a writable per-machine /etc layer on
-# Margine), touching ONLY the [daemon] AutomaticLoginEnable / AutomaticLogin
-# keys and preserving every other section, key, and comment. No GUI required.
+# Lucciola's login screen is greetd (with Noctalia Greeter): autologin is
+# greetd's [initial_session] in /etc/greetd/config.toml, a session greetd
+# starts once per boot without asking for a password. This script writes and
+# removes that section only, keeping every other line and comment. It also
+# mirrors the choice into GDM's /etc/gdm/custom.conf ([daemon]
+# AutomaticLoginEnable / AutomaticLogin): GDM stays installed as the login
+# screen greetd falls back to when it cannot start, and as the one a user can
+# switch back to, and it should behave the same. Until 2026-10 this script
+# edited GDM's file alone; a system whose display manager is GDM again
+# (`systemctl enable --force gdm.service`) is still handled that way.
 #
-#   margine-autologin            # = status — print ENABLED (user) or disabled
+#   margine-autologin            # = status: print ENABLED (user) or disabled
 #   margine-autologin status     # same, no mutation
 #   margine-autologin on [USER]  # enable autologin for USER (idempotent)
 #   margine-autologin off        # disable autologin (idempotent)
 #
-# Run via `ujust margine-autologin …`. 'status' is read-only and needs no
+# Run via `ujust margine-autologin ...`. 'status' is read-only and needs no
 # privilege; 'on'/'off' mutate /etc and re-exec themselves under sudo.
+#
+# The paths can be pointed elsewhere for tests (tests/margine-autologin.test.sh):
+# MARGINE_AUTOLOGIN_GREETD_CONF, MARGINE_AUTOLOGIN_GDM_CONF, and
+# MARGINE_AUTOLOGIN_DM (the display manager unit, normally read from
+# /etc/systemd/system/display-manager.service).
 set -euo pipefail
 
-CONF=/etc/gdm/custom.conf
+GREETD_CONF="${MARGINE_AUTOLOGIN_GREETD_CONF:-/etc/greetd/config.toml}"
+GDM_CONF="${MARGINE_AUTOLOGIN_GDM_CONF:-/etc/gdm/custom.conf}"
 SELF="margine-autologin"
+# What greetd runs as the autologin session. The launcher starts the session
+# recorded for the user in AccountsService (Lucciola unless changed), as
+# GDM's autologin did, with the session environment a greeter would pass.
+# .github/scripts/inject-gui-probe.sh writes the same line for the CI smoke
+# user: keep the two in step.
+AUTOLOGIN_CMD="/usr/libexec/lucciola/autologin-session"
 
 die() { printf '%s: %s\n' "$SELF" "$*" >&2; exit 1; }
+
+# Which login screen this machine runs: greetd (Lucciola's), gdm, or other.
+display_manager() {
+  local unit="${MARGINE_AUTOLOGIN_DM:-}"
+  if [ -z "$unit" ]; then
+    unit="$(readlink /etc/systemd/system/display-manager.service 2>/dev/null || true)"
+    unit="${unit##*/}"
+  fi
+  case "$unit" in
+    greetd.service) echo greetd ;;
+    gdm.service)    echo gdm ;;
+    "")             echo none ;;
+    *)              echo "$unit" ;;
+  esac
+}
 
 # Escalate the mutating actions. Called only for 'on'/'off', BEFORE any write,
 # so a non-root invocation re-runs the whole command as root via sudo rather
@@ -37,10 +71,10 @@ require_root() {
 
 # The single gate every autologin target must clear, regardless of how it was
 # chosen (explicit arg, $SUDO_USER, or the passwd fallback). A valid target
-# must EXIST, have a uid in [1000,65534) — which also excludes root (uid 0),
-# every system/service account (uid < 1000), and nobody/overflow (>= 65534) —
+# must EXIST, have a uid in [1000,65534) (which also excludes root, uid 0,
+# every system/service account (uid < 1000), and nobody/overflow (>= 65534))
 # and have a genuine interactive login shell (not *nologin / *false / empty).
-# GDM autologin only makes sense for a real human desktop account; a system
+# Autologin only makes sense for a real human desktop account; a system
 # account would fail the PAM session loop or silently configure a meaningless,
 # unsafe autologin target. This subsumes the existence and "not root" checks.
 validate_real_user() {
@@ -60,7 +94,7 @@ validate_real_user() {
 #   explicit arg  >  $SUDO_USER (unless 'root')  >  first real local account.
 # This function only PICKS a candidate name; on its own it guarantees nothing
 # about that name. The caller MUST run validate_real_user on the result before
-# writing it — that gate (exists, uid in [1000,65534), genuine login shell,
+# writing it: that gate (exists, uid in [1000,65534), genuine login shell,
 # not root) is applied uniformly to all three resolution paths below.
 resolve_user() {
   local u="$1"
@@ -81,38 +115,100 @@ resolve_user() {
   printf '%s' "$u"
 }
 
-# Restore the SELinux label on CONF. Run UNCONDITIONALLY after every write:
+# Restore the SELinux label on a file. Run UNCONDITIONALLY after every write:
 # editing in place keeps whatever context the inode already had, which is
 # wrong if the file arrived mislabelled (e.g. restored from a backup disk and
-# carrying user_home_t). GDM runs as xdm_t and must read xdm_etc_t, so a
-# stale label can make GDM silently ignore the change — or break login. The
-# policy default for /etc/gdm/custom.conf is xdm_etc_t; restorecon resets to
-# it. It is a no-op on an already-correct file, so there is no downside to
-# always running it. -F forces customizable types too.
-relabel_conf() {
+# carrying user_home_t). greetd and GDM both run as xdm_t and read xdm_etc_t
+# (the policy default for /etc/greetd and /etc/gdm/custom.conf), so a stale
+# label can make the login screen silently ignore the change, or break
+# login. restorecon resets it; it is a no-op on an already-correct file.
+# -F forces customizable types too.
+relabel() {
   command -v restorecon >/dev/null 2>&1 || return 0
-  restorecon -F -- "$CONF" 2>/dev/null || true
+  restorecon -F -- "$1" 2>/dev/null || true
 }
 
 # Timestamped backup before any write (only if the file already exists). The
 # backup is relabelled too: cp -a copies the SOURCE context, so a mislabelled
-# CONF would otherwise spawn mislabelled backups forever — harmless to GDM
-# (it never reads them) but tidy to keep them at the policy default.
-backup_conf() {
-  [ -f "$CONF" ] || return 0
+# file would otherwise spawn mislabelled backups forever: harmless to the
+# login screen (it never reads them) but tidy to keep at the policy default.
+backup() {
+  [ -f "$1" ] || return 0
   local bak
-  bak="${CONF}.margine.bak.$(date +%Y%m%d-%H%M%S-%N)"
-  cp -a -- "$CONF" "$bak"
-  command -v restorecon >/dev/null 2>&1 && restorecon -F -- "$bak" 2>/dev/null || true
-  printf '%s: backed up %s -> %s\n' "$SELF" "$CONF" "$bak"
+  bak="${1}.margine.bak.$(date +%Y%m%d-%H%M%S-%N)"
+  cp -a -- "$1" "$bak"
+  relabel "$bak"
+  printf '%s: backed up %s -> %s\n' "$SELF" "$1" "$bak"
 }
 
-# Line-aware INI editor. Sets keys ONLY inside [daemon], creating the section
-# (and the file) if absent, updating existing keys in place, and leaving every
-# other section/key/comment byte-for-byte. Re-runs never duplicate a key.
+# greetd's config: drop [initial_session] (every line from its header to the
+# next section) and, for `on`, append a fresh one with USER. Every other line
+# stays byte for byte. The result must parse as TOML (greetd's own parser
+# reads the same subset) and say what was asked, or nothing is written.
+# Args: on USER | off
+set_initial_session() {
+  CONF="$GREETD_CONF" CMD="$AUTOLOGIN_CMD" python3 - "$@" <<'PY'
+import json, os, re, sys, tomllib
+
+conf, cmd = os.environ["CONF"], os.environ["CMD"]
+action = sys.argv[1]
+user = sys.argv[2] if len(sys.argv) > 2 else ""
+try:
+    with open(conf, encoding="utf-8") as fh:
+        lines = fh.read().splitlines()
+except FileNotFoundError:
+    sys.exit(f"{conf} does not exist: greetd is not set up on this system")
+
+header = re.compile(r"^\s*\[\s*([A-Za-z0-9_.-]+)\s*\]\s*(#.*)?$")
+out, skipping = [], False
+for line in lines:
+    m = header.match(line)
+    if m:
+        skipping = m.group(1) == "initial_session"
+    if not skipping:
+        out.append(line)
+while out and not out[-1].strip():
+    out.pop()
+if action == "on":
+    out += [
+        "",
+        "[initial_session]",
+        "# Autologin, set by `ujust margine-autologin on`: greetd starts this",
+        "# user's session at boot, once per boot, without asking for a password.",
+        f"command = {json.dumps(cmd)}",
+        f"user = {json.dumps(user)}",
+    ]
+text = "\n".join(out) + "\n"
+parsed = tomllib.loads(text)
+if "default_session" not in parsed:
+    sys.exit(f"{conf} has no [default_session]: refusing to write a config greetd cannot start")
+got = parsed.get("initial_session", {}).get("user")
+if (action == "on" and got != user) or (action == "off" and got is not None):
+    sys.exit(f"internal error: the rewritten {conf} would not say what was asked")
+with open(conf, "w", encoding="utf-8") as fh:
+    fh.write(text)
+PY
+}
+
+# Who greetd autologs in: the [initial_session] user, empty when none.
+greetd_user() {
+  CONF="$GREETD_CONF" python3 - <<'PY'
+import os, tomllib
+try:
+    with open(os.environ["CONF"], "rb") as fh:
+        print(tomllib.load(fh).get("initial_session", {}).get("user", ""))
+except (OSError, tomllib.TOMLDecodeError):
+    print("")
+PY
+}
+
+# Line-aware INI editor for GDM's custom.conf. Sets keys ONLY inside
+# [daemon], creating the section (and the file) if absent, updating existing
+# keys in place, and leaving every other section/key/comment byte-for-byte.
+# Re-runs never duplicate a key.
 # Args: KEY1 VAL1 [KEY2 VAL2 …]   (each key set under [daemon]).
 set_daemon_keys() {
-  CONF="$CONF" python3 - "$@" <<'PY'
+  CONF="$GDM_CONF" python3 - "$@" <<'PY'
 import os, sys
 
 conf = os.environ["CONF"]
@@ -202,10 +298,10 @@ with open(conf, "w", encoding="utf-8") as fh:
 PY
 }
 
-# Read current state from the [daemon] section for `status`.
+# GDM's state from the [daemon] section.
 # Prints:  "<enabled-bool> <login-user>"  (either field may be empty).
-read_state() {
-  CONF="$CONF" python3 - <<'PY'
+gdm_state() {
+  CONF="$GDM_CONF" python3 - <<'PY'
 import os
 conf = os.environ["CONF"]
 try:
@@ -235,22 +331,45 @@ print("%s %s" % (enabled, user))
 PY
 }
 
+# The GDM side of on/off: the whole job on a GDM system, a mirror otherwise.
+# On a greetd system a missing /etc/gdm is left alone (nothing to mirror).
+gdm_write() {
+  local dm="$1"; shift
+  if [ "$dm" != gdm ] && [ ! -d "$(dirname "$GDM_CONF")" ]; then
+    return 0
+  fi
+  backup "$GDM_CONF"
+  set_daemon_keys "$@"
+  relabel "$GDM_CONF"
+}
+
 ACTION="${1:-status}"
 USER_ARG="${2:-}"
+DM="$(display_manager)"
 
 case "$ACTION" in
   status|"")
-    state="$(read_state)"
-    enabled="${state%% *}"
-    login_user="${state#* }"
-    # Case-insensitive truthy match for the GDM boolean.
-    shopt -s nocasematch
-    if [[ "$enabled" == "true" ]] && [ -n "$login_user" ]; then
-      shopt -u nocasematch
-      printf 'autologin: ENABLED for user "%s"\n' "$login_user"
+    if [ "$DM" = gdm ]; then
+      state="$(gdm_state)"
+      enabled="${state%% *}"
+      login_user="${state#* }"
+      # Case-insensitive truthy match for the GDM boolean.
+      shopt -s nocasematch
+      if [[ "$enabled" == "true" ]] && [ -n "$login_user" ]; then
+        shopt -u nocasematch
+        printf 'autologin: ENABLED for user "%s" (login screen: GDM)\n' "$login_user"
+      else
+        shopt -u nocasematch
+        printf 'autologin: disabled (login screen: GDM)\n'
+      fi
     else
-      shopt -u nocasematch
-      printf 'autologin: disabled\n'
+      login_user="$(greetd_user)"
+      if [ -n "$login_user" ]; then
+        printf 'autologin: ENABLED for user "%s"\n' "$login_user"
+      else
+        printf 'autologin: disabled\n'
+      fi
+      [ "$DM" = greetd ] || printf '%s: note: the display manager is %s, not greetd: this setting applies when greetd is the login screen.\n' "$SELF" "$DM"
     fi
     ;;
 
@@ -259,45 +378,57 @@ case "$ACTION" in
     target="$(resolve_user "$USER_ARG")"
     # ONE gate for every resolution path (explicit arg, $SUDO_USER, fallback):
     # rejects root, system/service accounts (uid<1000), nobody/overflow
-    # (uid>=65534), nologin/false shells, and non-existent users — closing the
+    # (uid>=65534), nologin/false shells, and non-existent users, closing the
     # system-account / nobody autologin hole. Nothing is written until this
-    # passes, so a bogus target never reaches AutomaticLogin.
+    # passes, so a bogus target never reaches the configuration.
     validate_real_user "$target"
-    backup_conf
-    set_daemon_keys \
-      AutomaticLoginEnable True \
-      AutomaticLogin "$target"
-    # Relabel on EVERY write: in-place edits keep the inode's existing context,
-    # so a file that arrived mislabelled would never get corrected otherwise,
-    # and GDM (xdm_t) could then fail to read this very change. restorecon is
-    # idempotent — a no-op when already correct.
-    relabel_conf
+    if [ "$DM" != gdm ]; then
+      backup "$GREETD_CONF"
+      set_initial_session on "$target" || die "could not update $GREETD_CONF (left as it was)"
+      # Relabel on EVERY write: in-place edits keep the inode's existing
+      # context, so a file that arrived mislabelled would never get corrected
+      # otherwise, and greetd (xdm_t) could then fail to read this very change.
+      relabel "$GREETD_CONF"
+    fi
+    gdm_write "$DM" AutomaticLoginEnable True AutomaticLogin "$target"
     printf '%s: autologin ENABLED for "%s".\n' "$SELF" "$target"
-    printf '%s: SECURITY — this machine will boot straight to "%s"'\''s desktop with NO password.\n' "$SELF" "$target"
-    printf '%s: takes effect at the next reboot (or GDM restart).\n' "$SELF"
+    printf '%s: SECURITY: this machine will boot straight to "%s"'\''s desktop with NO password.\n' "$SELF" "$target"
+    if [ "$DM" != gdm ]; then
+      printf '%s: the saved passwords stay locked until unlocked once: for them to open at boot too, run (as "%s"): ujust margine-keyring tpm\n' "$SELF" "$target"
+    fi
+    printf '%s: takes effect at the next reboot.\n' "$SELF"
     ;;
 
   off)
     require_root
-    if [ ! -f "$CONF" ]; then
-      printf '%s: %s does not exist — autologin already disabled.\n' "$SELF" "$CONF"
-      exit 0
+    if [ "$DM" != gdm ]; then
+      if [ -f "$GREETD_CONF" ]; then
+        backup "$GREETD_CONF"
+        set_initial_session off || die "could not update $GREETD_CONF (left as it was)"
+        relabel "$GREETD_CONF"
+      else
+        printf '%s: %s does not exist: nothing to disable there.\n' "$SELF" "$GREETD_CONF"
+      fi
     fi
-    backup_conf
-    # Keep it minimal + reversible: flip the enable flag to False and leave
-    # the remembered AutomaticLogin user in place (re-enabling is a no-arg `on`
-    # away if you keep that user). Other sections/keys are untouched.
-    set_daemon_keys AutomaticLoginEnable False
-    # Relabel here too — same rationale as `on`: an in-place edit preserves a
-    # possibly-wrong context, and a mislabelled custom.conf can break login.
-    relabel_conf
+    if [ -f "$GDM_CONF" ]; then
+      # Keep it minimal + reversible: flip the enable flag to False and leave
+      # the remembered AutomaticLogin user in place. Other sections/keys are
+      # untouched.
+      gdm_write "$DM" AutomaticLoginEnable False
+    elif [ "$DM" = gdm ]; then
+      printf '%s: %s does not exist: autologin already disabled.\n' "$SELF" "$GDM_CONF"
+    fi
     printf '%s: autologin disabled.\n' "$SELF"
-    printf '%s: takes effect at the next reboot (or GDM restart).\n' "$SELF"
+    printf '%s: takes effect at the next reboot.\n' "$SELF"
     ;;
 
   -h|--help|help)
     cat <<EOF
-${SELF} — enable/disable/inspect GDM autologin (edits ${CONF}).
+${SELF}: enable/disable/inspect autologin on the login screen.
+
+Edits greetd's ${GREETD_CONF} ([initial_session]) and mirrors the choice
+into GDM's ${GDM_CONF} (the fallback login screen); on a system whose
+login screen is GDM again, edits GDM's file alone.
 
 Usage:
   ujust ${SELF}              show current state (default, read-only)
@@ -305,9 +436,11 @@ Usage:
   ujust ${SELF} on [user]    enable autologin (defaults to your account)
   ujust ${SELF} off          disable autologin
 
-'on'/'off' mutate ${CONF} and re-exec under sudo if not already root.
+'on'/'off' re-exec under sudo if not already root.
 'on' only accepts a real human account (uid in [1000,65534) with a genuine
 login shell); root, system/service accounts, and nobody are refused.
+The autologin session is the one recorded for the user (Lucciola unless
+changed). Takes effect at the next reboot.
 EOF
     ;;
 
