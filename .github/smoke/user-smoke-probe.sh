@@ -89,29 +89,37 @@ KREL="$(uname -r 2>/dev/null || echo '?')"
 if [[ "$KREL" == *cachyos* ]]; then check KERNEL 0 "uname=$KREL"
 else check KERNEL 1 "expected *cachyos*, got uname=$KREL"; fi
 
-# 2. The user-facing "did I get the desktop": gdm active and the autologin
-#    user's graphical session is Lucciola's, on Wayland, with niri running.
-#    logind's Desktop stays empty for a GDM-started Lucciola session, so
-#    the session name is GDM's XDG_SESSION_DESKTOP (the session file's
-#    name), which niri-session imports into the user manager.
-GDM_OK=1
-systemctl is-active --quiet gdm.service 2>/dev/null && GDM_OK=0
+# 2. The user-facing "did I get the desktop": greetd is the login screen
+#    (GDM, its fallback, not running) and the smoke user's graphical
+#    session, which greetd-login.py started with a password login, is
+#    Lucciola's, on Wayland, opened by the greetd PAM service, with niri
+#    running. The session name is the XDG_SESSION_DESKTOP the login screen
+#    gave the session (Noctalia Greeter: niri, the first DesktopNames entry;
+#    GDM: lucciola, the file's name), which niri-session imports into the
+#    user manager.
+DM_OK=1
+DM="$(readlink /etc/systemd/system/display-manager.service 2>/dev/null)"
+if [[ "${DM##*/}" == greetd.service ]] && systemctl is-active --quiet greetd.service 2>/dev/null \
+    && ! systemctl is-active --quiet gdm.service 2>/dev/null; then
+  DM_OK=0
+fi
 SID="$(loginctl show-user "$SMOKE_USER" -p Display --value 2>/dev/null)"
 S_DESK="$(as_user systemctl --user show-environment 2>/dev/null | sed -n 's/^XDG_SESSION_DESKTOP=//p' | head -n 1)"
-S_TYPE=""
+S_TYPE="" S_SERVICE=""
 if [[ -n "$SID" ]]; then
   S_TYPE="$(loginctl show-session "$SID" -p Type --value 2>/dev/null)"
+  S_SERVICE="$(loginctl show-session "$SID" -p Service --value 2>/dev/null)"
   [[ -n "$S_DESK" ]] || S_DESK="$(loginctl show-session "$SID" -p Desktop --value 2>/dev/null)"
 fi
 NIRI_UP=no
 pgrep -u "$SMOKE_USER" -x niri >/dev/null 2>&1 && NIRI_UP=yes
-SESSION_DETAIL="session=${SID:-none} desktop=${S_DESK:-?} type=${S_TYPE:-?} niri=$NIRI_UP"
-if [[ "$GDM_OK" -eq 0 && "${S_DESK,,}" =~ ^(lucciola|niri)$ && "$S_TYPE" == wayland && "$NIRI_UP" == yes ]]; then
-  check SESSION 0 "gdm active, $SESSION_DETAIL"
-elif [[ "$GDM_OK" -eq 0 ]]; then
-  check SESSION 1 "gdm active but not a Lucciola session: $SESSION_DETAIL"
+SESSION_DETAIL="session=${SID:-none} service=${S_SERVICE:-?} desktop=${S_DESK:-?} type=${S_TYPE:-?} niri=$NIRI_UP"
+if [[ "$DM_OK" -eq 0 && "${S_DESK,,}" =~ ^(lucciola|niri)$ && "$S_TYPE" == wayland && "$S_SERVICE" == greetd && "$NIRI_UP" == yes ]]; then
+  check SESSION 0 "greetd active, $SESSION_DETAIL"
+elif [[ "$DM_OK" -eq 0 ]]; then
+  check SESSION 1 "greetd active but not a Lucciola session from it: $SESSION_DETAIL"
 else
-  check SESSION 1 "gdm.service not active ($SESSION_DETAIL)"
+  check SESSION 1 "greetd is not the running login screen (display-manager=${DM##*/} greetd=$(systemctl is-active greetd.service 2>/dev/null) gdm=$(systemctl is-active gdm.service 2>/dev/null); $SESSION_DETAIL)"
 fi
 
 # 3. The public name: os-release and the product name Margine's own
@@ -125,11 +133,12 @@ else
 fi
 
 # 4. New users get Lucciola. accounts-daemon fills a user with no record
-#    from the user template of its account type, and GDM preselects the
-#    Session written there. The smoke user (standard) already proves the
-#    path at runtime in check 2; the administrator template is the one
-#    the first user of a fresh install (wheel) gets. accounts-daemon reads
-#    the first template it finds in /run, /etc, then the data dirs.
+#    from the user template of its account type; autologin starts the
+#    Session written there (/usr/libexec/lucciola/autologin-session, as
+#    GDM did), and Noctalia Greeter preselects Lucciola until someone picks
+#    another session (its seeded sync.toml). The administrator template is
+#    the one the first user of a fresh install (wheel) gets. accounts-daemon
+#    reads the first template it finds in /run, /etc, then the data dirs.
 template() {
   local d
   for d in /run /etc /usr/local/share /usr/share; do
@@ -143,8 +152,10 @@ for t in standard administrator; do
 done
 SESSION_FILE=/usr/share/wayland-sessions/lucciola.desktop
 grep -qx 'Exec=niri-session' "$SESSION_FILE" 2>/dev/null || DS_BAD+=" $SESSION_FILE"
+GREETER_LAST="$(sed -n 's/^last *= *"\(.*\)"$/\1/p' /var/lib/noctalia-greeter/sync.toml 2>/dev/null | head -n 1)"
+[[ "$GREETER_LAST" == Lucciola ]] || DS_BAD+=" greeter-last-session:${GREETER_LAST:-none}"
 if [[ -z "$DS_BAD" ]]; then
-  check DEFAULT_SESSION 0 "user templates Session=lucciola, $SESSION_FILE runs niri-session"
+  check DEFAULT_SESSION 0 "user templates Session=lucciola, greeter preselects Lucciola, $SESSION_FILE runs niri-session"
 else
   check DEFAULT_SESSION 1 "not Lucciola:$DS_BAD"
 fi

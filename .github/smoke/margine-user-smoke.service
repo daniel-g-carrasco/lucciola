@@ -11,14 +11,15 @@ After=graphical.target
 # health probe. Wants (not Requires) so a missing gui unit never blocks
 # this one, and vice-versa. Both verdicts share the boot window.
 Wants=margine-gui-smoke.service
+After=margine-greetd-login.service
 
 [Service]
 Type=oneshot
-# Shorter settle than margine-gui-smoke.service's 150s: the user-smoke
-# checks are read-only and must land their verdict on the serial console
-# BEFORE gui-probe.sh issues `systemctl poweroff`. 90s lets the
-# autologin user bus + distro dconf settle without racing the poweroff.
-ExecStartPre=/bin/sleep 90
+# The session under test is the one greetd-login.py starts with a password
+# login: wait for that driver, then settle briefly. margine-gui-smoke.service
+# (which powers the VM off) is ordered after this unit, so the verdicts
+# reach the serial console before the poweroff.
+ExecStartPre=/bin/sleep 15
 ExecStart=/etc/margine-smoke/user-smoke-probe.sh
 # Soft gate: the probe always exits 0, but belt-and-braces so a probe
 # crash can never propagate a unit failure into the boot watcher.

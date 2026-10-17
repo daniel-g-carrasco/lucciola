@@ -5,9 +5,15 @@
 # serial console; the CI watcher greps for MARGINE-GUI-SMOKE: PASS/FAIL.
 #
 # The product under test is the Lucciola session: niri with the Noctalia
-# shell, started by GDM's autologin. GNOME stays in the image only as a
-# stock fallback session, so nothing here looks at GNOME Shell any more
-# (until 2026-10 this probe checked gnome-shell and Margine's extensions).
+# shell, started by greetd from a password login. margine-greetd-login.service
+# (greetd-login.py) runs first: greetd's autologin, a logout, the greeter, then
+# a password login over greetd's IPC socket, which goes through the whole
+# greetd PAM stack. This probe checks the session that login started, and
+# that pam_oo7 opened the Login keyring with the password. GNOME stays in the
+# image only as a stock fallback session, so nothing here looks at GNOME
+# Shell any more (until 2026-10 this probe checked gnome-shell and Margine's
+# extensions; until the greetd switch of 2026-10 the session came from GDM's
+# autologin).
 #
 # Lived as a triple-escaped heredoc inside smoke-boot.yml until
 # 2026-06-12: invisible to shellcheck and unrunnable locally. As a
@@ -97,6 +103,9 @@ gaming_check & GAMING_PID=$!
 # ---- The autologin user and its session ------------------------------------
 # inject-gui-probe.sh creates "smoke" (uid 1010, home /var/home/smoke);
 # SMOKE_USER points the probe at another user on a lab VM.
+# greetd-login.py leaves its verdict in this file: login=pass|fail, the
+# reason, and the time of the password login (since=, epoch seconds).
+LOGIN_RESULT=/run/margine-smoke/greetd-login.result
 SMOKE_USER="${SMOKE_USER:-smoke}"
 SMOKE_UID="$(id -u "$SMOKE_USER" 2>/dev/null || echo 1010)"
 SMOKE_HOME="$(getent passwd "$SMOKE_USER" 2>/dev/null | cut -d: -f6)"
@@ -117,7 +126,7 @@ as_user() {
   runuser -u "$SMOKE_USER" -- env "${envs[@]}" "$@"
 }
 
-# niri runs as the user unit niri.service (GDM -> niri-session ->
+# niri runs as the user unit niri.service (greetd -> niri-session ->
 # systemctl --user start niri.service), so its MainPID is the compositor:
 # `pgrep niri` alone also matches the long-lived `niri msg event-stream`
 # client of /usr/libexec/lucciola/bar-widths. At startup niri publishes
@@ -149,20 +158,34 @@ niri_log() {
     | sed 's/\x1b\[[0-9;]*m//g' | tail -n 3 | tr '\n' ' ' | cut -c1-300
 }
 
-# The user's graphical session: logind has its id and type. Its Desktop
-# stays EMPTY for a GDM-started Lucciola session (seen on a real install,
-# 2026-10-17), so the session name comes from the environment GDM gave
-# the session, which niri-session imports into the user manager:
-# XDG_SESSION_DESKTOP is the session file's name (lucciola) and
-# XDG_CURRENT_DESKTOP its DesktopNames (niri).
+# The user's graphical session: logind has its id, type and the PAM service
+# that opened it. The session name comes from the environment the login
+# screen gave the session, which niri-session imports into the user manager:
+# Noctalia Greeter sets XDG_SESSION_DESKTOP to the session file's first
+# DesktopNames entry (niri), GDM set it to the file's name (lucciola), and
+# XDG_CURRENT_DESKTOP is DesktopNames (niri). logind's Desktop is the
+# fallback (it stayed EMPTY for a GDM-started session, 2026-10-17).
 session_info() {
   SID="$(loginctl show-user "$SMOKE_USER" -p Display --value 2>/dev/null)"
-  S_TYPE=""
+  S_TYPE="" S_SERVICE=""
   S_DESK="$(as_user systemctl --user show-environment 2>/dev/null | sed -n 's/^XDG_SESSION_DESKTOP=//p' | head -n 1)"
   [[ -n "$SID" ]] || return 0
   S_TYPE="$(loginctl show-session "$SID" -p Type --value 2>/dev/null)"
+  S_SERVICE="$(loginctl show-session "$SID" -p Service --value 2>/dev/null)"
   [[ -n "$S_DESK" ]] || S_DESK="$(loginctl show-session "$SID" -p Desktop --value 2>/dev/null)"
 }
+
+# ---- 0. The password login through greetd ----------------------------------
+# greetd-login.py ran before this probe (unit ordering). A failed login
+# explains everything below, so it is the verdict.
+if [[ -r "$LOGIN_RESULT" ]]; then
+  LOGIN_OK="$(sed -n 's/^login=//p' "$LOGIN_RESULT")"
+  LOGIN_SINCE="$(sed -n 's/^since=//p' "$LOGIN_RESULT")"
+  [[ "$LOGIN_OK" == pass ]] || fail "greetd password login: $(sed -n 's/^reason=//p' "$LOGIN_RESULT" | cut -c1-400)"
+else
+  LOGIN_SINCE=""
+  [[ "${PROBE_STDOUT:-0}" == 1 ]] || fail "no verdict from the greetd login driver ($LOGIN_RESULT missing: margine-greetd-login.service did not run?)"
+fi
 
 # ---- 1. niri started for the autologin user ---------------------------------
 # First boot is slow (flatpak preinstall etc. competes for I/O).
@@ -171,22 +194,23 @@ for _ in $(seq 1 60); do
   sleep 5
 done
 if ! pgrep -u "$SMOKE_USER" -x niri >/dev/null; then
-  # GDM takes the autologin session from the user's AccountsService record,
-  # which Lucciola's user templates fill with Session=lucciola; with no
-  # session recorded GDM falls back to "gnome". Say which one it was.
+  # Say whether the login landed in GNOME instead.
   session_info
   if pgrep -u "$SMOKE_USER" -x gnome-shell >/dev/null; then
-    fail "niri never started: autologin went to GNOME (session ${SID:-?} desktop=${S_DESK:-?}), not to the Lucciola session"
+    fail "niri never started: the login went to GNOME (session ${SID:-?} desktop=${S_DESK:-?}), not to the Lucciola session"
   fi
   fail "niri never started for $SMOKE_USER (session ${SID:-none} desktop=${S_DESK:-?} type=${S_TYPE:-?}); niri log: $(niri_log)"
 fi
 
 # ---- 2. The session is Lucciola's, on Wayland -------------------------------
-# lucciola is the session GDM started (niri would be a plain niri session,
-# which lucciola/build.sh replaces); gnome is the fallback taking over.
+# niri (Noctalia Greeter's name for the Lucciola session, from its
+# DesktopNames) or lucciola (the session file's name, GDM's); gnome is the
+# fallback taking over. The PAM service that opened it is greetd's: a GDM
+# session here would mean greetd failed and its fallback took over.
 session_info
 [[ -n "$SID" ]] || fail "logind has no graphical session for $SMOKE_USER"
 [[ "$S_TYPE" == wayland ]] || fail "session $SID is type=${S_TYPE:-?}, not wayland"
+[[ "$S_SERVICE" == greetd ]] || fail "session $SID was opened by PAM service '${S_SERVICE:-?}', not greetd"
 case "${S_DESK,,}" in
   lucciola|niri) ;;
   *) fail "session $SID desktop=${S_DESK:-?}: not the Lucciola session" ;;
@@ -240,6 +264,35 @@ NCOMM="$(cat "/proc/$NPID/comm" 2>/dev/null)"
 as_user busctl --user --timeout=10 call org.freedesktop.Notifications /org/freedesktop/Notifications \
   org.freedesktop.Notifications GetServerInformation >/dev/null 2>&1 \
   || fail "Noctalia owns org.freedesktop.Notifications but GetServerInformation got no answer"
+
+# ---- 3b. The Login keyring: pam_oo7 opened it with the password -------------
+# The password login handed the password to oo7: pam_oo7 in greetd's PAM
+# stack keeps it, oo7-daemon (started with niri.service) receives it from
+# pam_oo7's helper and opens the Login keyring. "Unlocked" alone proves too
+# little (oo7 can answer for a keyring that needed no password), so the
+# daemon's own line for the secret it received must be in its log since the
+# password login; the autologin before it had no password to give. The same
+# property `ujust margine-keyring status` reads.
+keyring_locked() {
+  as_user busctl --user --timeout=10 get-property org.freedesktop.secrets \
+    /org/freedesktop/secrets/aliases/default org.freedesktop.Secret.Collection Locked 2>/dev/null | awk '{print $2}'
+}
+KR=""
+for _ in $(seq 1 12); do
+  KR="$(keyring_locked)"
+  [[ -n "$KR" ]] && break
+  sleep 5
+done
+OO7_LOG="$(journalctl -b -q --no-pager -o cat _UID="$SMOKE_UID" _SYSTEMD_USER_UNIT=oo7-daemon.service \
+  ${LOGIN_SINCE:+--since "@$LOGIN_SINCE"} 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g')"
+oo7_tail() { tail -n 3 <<<"$OO7_LOG" | tr '\n' ' ' | cut -c1-300; }
+case "$KR" in
+  false) ;;
+  true) fail "the Login keyring is LOCKED after a password login: pam_oo7 did not hand the password over; oo7 log: $(oo7_tail)" ;;
+  *)    fail "the Secret Service (oo7) does not answer for the Login keyring; oo7 log: $(oo7_tail)" ;;
+esac
+grep -q 'Received login secret from helper' <<<"$OO7_LOG" \
+  || fail "the Login keyring answers unlocked, but oo7 logged no secret from pam_oo7 since the password login; oo7 log: $(oo7_tail)"
 
 # ---- 4. Outputs and the bar --------------------------------------------------
 # niri renders only on a hardware GPU: it skips software EGL renderers
@@ -300,6 +353,6 @@ if [[ -x /usr/bin/margine-validate-branding ]]; then
     || fail "margine-validate-branding: $(tail -3 /tmp/branding.out | tr '\n' ' ')"
 fi
 
-out "MARGINE-GUI-SMOKE: PASS session=${S_DESK,,}/${S_TYPE} niri=${NIRI_VER:-?} outputs=$OUTPUTS bar=$BAR notifications=$NCOMM portal=FileChooser.v${PORTAL_V}"
+out "MARGINE-GUI-SMOKE: PASS login=${S_SERVICE}/password keyring=unlocked session=${S_DESK,,}/${S_TYPE} niri=${NIRI_VER:-?} outputs=$OUTPUTS bar=$BAR notifications=$NCOMM portal=FileChooser.v${PORTAL_V}"
 wait_gaming
 poweroff_vm
