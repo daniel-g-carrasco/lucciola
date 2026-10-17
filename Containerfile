@@ -1,20 +1,24 @@
 # =============================================================================
-# Margine: a bootc image on Fedora Silverblue (Universal Blue main), CachyOS kernel
+# Lucciola: a bootc image on Fedora Silverblue (Universal Blue main), CachyOS
+# kernel, niri with the Noctalia shell
 # =============================================================================
 #
-# This Containerfile composes the Margine image as:
+# This Containerfile composes the Lucciola image as:
 #
 #   FROM ghcr.io/ublue-os/silverblue-main:44  (Universal Blue main: Fedora Silverblue 44)
 #   + custom kernel from CachyOS COPR (signed with our MOK)
-#   + Margine deltas (o-tiling default tiler, Smile emoji picker, branding
-#     extensions off, curated GNOME settings)
+#   + the Margine OS layer (build_files/: update flow, Secure Boot and TPM
+#     tooling, branding, curated GNOME settings, Flatpaks)
+#   + the Lucciola layer (lucciola/: niri, Noctalia, the Lucciola session;
+#     GNOME stays as a stock fallback session)
+#
+# Until 2026-10 Lucciola was a second build FROM the published Margine image
+# (lucciola/Containerfile); now one build produces it, so this repository
+# alone decides what ships.
 #
 # Built by GitHub Actions on every push, pushed to:
-#   ghcr.io/daniel-g-carrasco/margine:stable
-#
-# End-user install: rebase a Fedora Atomic or Universal Blue system to
-# this image:
-#   rpm-ostree rebase ostree-image-signed:docker://ghcr.io/daniel-g-carrasco/margine:stable
+#   ghcr.io/daniel-g-carrasco/lucciola:candidate, promoted to :stable by
+#   smoke-boot.yml
 # =============================================================================
 
 # ----- Base image, as a build argument ---------------------------------------
@@ -41,6 +45,14 @@ COPY build_files /
 # time via the installer/ working dir. The gaming variant was retired
 # 2026-06-06 so there is no installer/flatpaks-gaming any more.
 COPY installer/flatpaks-base    /installer-flatpaks-base
+
+# lucciola/build.sh gets a context stage of its own, not a place in ctx:
+# the kernel RUN below mounts the whole ctx, and an edit to the Lucciola
+# step must not throw away that layer's cache. (A bind mount straight from
+# the build context would do the same, but a rootless podman build on an
+# SELinux host cannot read it: "Permission denied", tried 2026-10-17.)
+FROM scratch AS lucciola-ctx
+COPY lucciola/build.sh /build.sh
 
 # ----- Base: Universal Blue silverblue-main:44 unless overridden -----
 FROM ${BASE_IMAGE}
@@ -93,6 +105,23 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/log \
     --mount=type=tmpfs,dst=/tmp \
     /ctx/build-margine-extensions.sh
+
+# ----- Lucciola: niri + Noctalia, GNOME kept stock as the fallback session -----
+# What used to be the second build FROM the published Margine image
+# (lucciola/Containerfile until 2026-10), now a step of this one: the
+# Lucciola files, then lucciola/build.sh, which installs niri and Noctalia,
+# removes the GNOME extensions and Shell defaults the steps above added, and
+# sets the public name. It still assumes it runs on the finished Margine
+# tree, so it stays after every Margine step.
+# Bump only together with a test boot: see the comment in lucciola/build.sh.
+# Version and release only: build.sh adds the base's Fedora tag (.fc44, .fc45).
+ARG NOCTALIA_VR=5.2.1-1
+COPY lucciola/system_files/ /
+RUN --mount=type=bind,from=lucciola-ctx,source=/build.sh,target=/ctx/lucciola/build.sh \
+    --mount=type=cache,dst=/var/cache \
+    --mount=type=cache,dst=/var/log \
+    --mount=type=tmpfs,dst=/tmp \
+    env NOCTALIA_VR="${NOCTALIA_VR}" bash /ctx/lucciola/build.sh
 
 # ----- Build-residue sweep + lint: verify final image is a valid bootc container -----
 # 99-cleanup.sh removes the /var state the build's dnf/rpm transactions

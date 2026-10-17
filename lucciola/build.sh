@@ -1,7 +1,20 @@
 #!/usr/bin/env bash
-# Lucciola image build: runs once inside the Containerfile, on top of the
-# Margine image. Adds niri and Noctalia from the official Fedora repositories,
-# makes "Lucciola" the session and the system name, and checks the result.
+# Lucciola image build: runs once inside the main Containerfile, after every
+# Margine step (build_files/) and before 99-cleanup.sh. Adds niri and Noctalia
+# from the official Fedora repositories, makes "Lucciola" the session and the
+# system name, and checks the result.
+#
+# Written when Lucciola was a second build FROM the published Margine image,
+# and kept as it was when the two builds became one (2026-10), so the image
+# stays the same. Several steps undo or redo what the Margine steps just did,
+# and are for the slimming that follows to fold into those steps instead:
+#   2b  removes the GNOME extensions build-margine-extensions.sh bakes and
+#       the base's extension RPMs, the Shell sections of the
+#       30-gnome-defaults overrides, its dconf defaults, and the
+#       first-boot autostart entries from system_files;
+#   2d  takes Smile out of the preinstall list 20-flatpaks writes;
+#   3   rewrites the os-release 10-os-identity writes;
+#   the closing dnf clean repeats what 99-cleanup.sh does anyway.
 set -euo pipefail
 
 log() { echo "[lucciola-build] $*"; }

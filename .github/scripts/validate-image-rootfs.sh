@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Layer A file-level validation of a built (pre-rechunk) Margine image.
+# Layer A file-level validation of a built (pre-rechunk) Lucciola image.
 #
 #   usage: sudo .github/scripts/validate-image-rootfs.sh <image-ref>
 #
 # Extracted from build.yml's inline run: block (2026-06-12 review,
 # phase 3) so it is shellcheck-gated, reviewable as a file, and
 # runnable locally against any locally built image:
-#   sudo .github/scripts/validate-image-rootfs.sh localhost/margine:latest
+#   sudo .github/scripts/validate-image-rootfs.sh localhost/lucciola:latest
 #
 # Guardrail against the 5 first-boot regressions surfaced on the
 # 2026-06-06 fresh install (Bluefin logo in About, missing welcome
@@ -55,10 +55,13 @@ if grep -Eiq '<image[[:space:]>]|data:image/' "$ROOTFS/usr/share/icons/Adwaita/s
   echo "::error::A.2 start-here-symbolic.svg embeds a raster image; GTK4 symbolic icons require path/circle/rect primitives"; fail=1
 fi
 
-# A.3 — Every baked, enabled-by-default extension installed system-wide.
-# (blur-my-shell, search-light and logomenu were REMOVED from the image
-# entirely on 2026-06-16 — see build-margine-extensions.sh — so they're
-# intentionally absent and not checked here.)
+# A.3: Lucciola, niri + Noctalia, and GNOME as a STOCK fallback session.
+# The Margine steps bake GNOME extensions, their dconf defaults and a GNOME
+# first-login bootstrap; lucciola/build.sh then removes them (the Margine
+# checks that used to sit here asserted the opposite). Assert the outcome
+# Lucciola ships: none of Margine's extensions, none of its Shell dconf
+# defaults or first-login autostarts, the Lucciola session on the login
+# screen and preselected for new users.
 for uuid in \
   appindicatorsupport@rgcjonas.gmail.com \
   bazaar-integration@kolunmi.github.io \
@@ -69,12 +72,34 @@ for uuid in \
   hide-cursor@elcste.com \
   caffeine@patapon.info \
   smile-extension@mijorus.it; do
-  check_dir "usr/share/gnome-shell/extensions/$uuid" "A.3"
+  [[ ! -e "$ROOTFS/usr/share/gnome-shell/extensions/$uuid" ]] \
+    || { echo "::error::A.3 GNOME extension $uuid survived: GNOME must stay stock in Lucciola"; fail=1; }
 done
+for f in "$ROOTFS"/etc/dconf/db/distro.d/*margine* "$ROOTFS"/etc/dconf/db/distro.d/*shell*; do
+  if [[ -e "$f" ]]; then echo "::error::A.3 Margine's GNOME dconf defaults survived: ${f#"$ROOTFS"/}"; fail=1; fi
+done
+for f in margine-first-boot.desktop margine-first-boot-status.desktop; do
+  [[ ! -e "$ROOTFS/etc/xdg/autostart/$f" ]] \
+    || { echo "::error::A.3 GNOME first-login autostart etc/xdg/autostart/$f survived"; fail=1; }
+done
+check_file "usr/share/wayland-sessions/lucciola.desktop" "A.3"
+[[ ! -e "$ROOTFS/usr/share/wayland-sessions/niri.desktop" ]] \
+  || { echo "::error::A.3 the plain Niri session entry is back next to Lucciola's"; fail=1; }
+grep -qx 'Exec=niri-session' "$ROOTFS/usr/share/wayland-sessions/lucciola.desktop" 2>/dev/null \
+  || { echo "::error::A.3 lucciola.desktop does not run niri-session"; fail=1; }
+for t in standard administrator; do
+  grep -qx 'Session=lucciola' "$ROOTFS/usr/share/accountsservice/user-templates/$t" 2>/dev/null \
+    || { echo "::error::A.3 AccountsService template $t does not preselect the Lucciola session"; fail=1; }
+done
+check_file "etc/niri/config.kdl" "A.3"
+for f in session-start lock bar-widths color-calibration; do
+  check_exec "usr/libexec/lucciola/$f" "A.3"
+done
+if grep -qs 'it\.mijorus\.smile' "$ROOTFS/usr/share/flatpak/preinstall.d/margine-defaults.preinstall"; then
+  echo "::error::A.3 Smile is preinstalled again (Noctalia's launcher picks emoji)"; fail=1
+fi
 
-# A.4 — First-boot notify autostart + libexec
-check_file "etc/xdg/autostart/margine-first-boot.desktop" "A.4"
-check_file "etc/xdg/autostart/margine-first-boot-status.desktop" "A.4"
+# A.4: first-boot status helper (its GNOME autostart is gone, see A.3)
 check_exec "usr/libexec/margine-first-boot-status" "A.4"
 
 # A.4.gfx — GRUB HiDPI legibility via a BAKED LARGE FONT (2026-06-16, was a
@@ -258,37 +283,14 @@ grep -qxF 'Icon=margine-documentation' "$ROOTFS/usr/share/applications/margine-d
 # GNOME 47/48; the keys we tried to set are ignored. Icon-size drift
 # between app-grid/folder is a CSS theme issue, not a gschema one).
 
-# A.3.bis — extension settings defaults are shipped through the
-# distro dconf database. They intentionally do not live in zz1:
-# GNOME Shell extensions may load their local schema source ahead
-# of the global one, while dconf defaults apply at the backend path.
-DCONF_DIR="$ROOTFS/etc/dconf/db/distro.d"
-for keyfile in \
-  01-margine-dash-to-dock \
-  03-margine-o-tiling \
-  04-margine-tilingshell \
-  06-margine-caffeine \
-  07-margine-custom-keybindings; do
-  check_file "etc/dconf/db/distro.d/$keyfile" "A.3.bis"
-done
-if grep -qE '^\[org\.gnome\.shell\.extensions\.' "$ROOTFS/usr/share/glib-2.0/schemas/zz1-margine.gschema.override"; then
-  echo "::error::A.3.bis extension defaults are still present in zz1 override"; fail=1
-fi
+# A.3.bis: the dconf profile still reads the distro database. Lucciola
+# drops Margine's Shell defaults from it (A.3), the database itself stays
+# for what remains (authselect's defaults).
 grep -qxF 'system-db:distro' "$ROOTFS/etc/dconf/profile/user" || { echo "::error::A.3.bis /etc/dconf/profile/user lacks system-db:distro"; fail=1; }
-grep -qxF '[org/gnome/shell/extensions/dash-to-dock]' "$DCONF_DIR/01-margine-dash-to-dock" || { echo "::error::A.3.bis dash-to-dock dconf section missing"; fail=1; }
-grep -qxF '[org/gnome/shell/extensions/o-tiling]' "$DCONF_DIR/03-margine-o-tiling" || { echo "::error::A.3.bis o-tiling dconf section missing"; fail=1; }
 
 # A.3.ter — downstream patches + branding must land on the FINAL image
 # (added 2026-06-12). These assert OUTCOMES, independent of how the build
 # scripts behave.
-# o-tiling session-only toggle (2026-06-16): the toggle-tiling keybinding must
-# NOT persist tile-by-default into the user dconf layer (it would mask the
-# distro default permanently). build-margine-extensions.sh points it at the
-# no-persist overloads; assert the marker landed on the FINAL image so the core
-# tiling toggle can never silently regress to the dconf foot-gun.
-OT_EXT="$ROOTFS/usr/share/gnome-shell/extensions/o-tiling@oliwebd.github.com/extension.js"
-grep -q 'margine: session-only toggle' "$OT_EXT" \
-  || { echo "::error::A.3.ter o-tiling session-only toggle patch NOT present in the image"; fail=1; }
 test -s "$ROOTFS/usr/share/icons/hicolor/scalable/apps/margine-logo.svg" \
   || { echo "::error::A.3.ter margine-logo.svg missing from hicolor"; fail=1; }
 test -s "$ROOTFS/usr/share/icons/hicolor/scalable/apps/fedora-logo-icon.svg" \
@@ -312,32 +314,6 @@ for ic in view-quilt-symbolic view-compact-symbolic border-all-symbolic; do
   test -s "$ICON_ACT/${ic}.svg" \
     || { echo "::error::A.3.quater icon shim ${ic}.svg missing/empty — baked extensions will show placeholder icons"; fail=1; }
 done
-
-# dash-to-dock cosmetic block present (regression sentinel). Pin a STABLE key
-# (transparency-mode), not a volatile cosmetic value, so adjusting a default
-# (e.g. running-indicator-style) never false-fails the build.
-grep -qE "^transparency-mode='DYNAMIC'" "$DCONF_DIR/01-margine-dash-to-dock" || { echo "::error::A.3.bis dash-to-dock cosmetic block sentinel missing"; fail=1; }
-
-# A.3.quinquies — keybinding conflict resolution (2026-06-14). o-tiling's
-# UPSTREAM keybinding defaults shadow GNOME-native + Margine custom shortcuts.
-# The binding state of an INSTALLED system is exactly what these dconf
-# defaults set, so a regression here ships broken keybindings to every user:
-# Super+Return (terminal), Super+T (whole-session tiling toggle),
-# Super+F/Super+S (fullscreen/quick-settings), Super+Alt+arrows (workspace-
-# switch/overview-shift), and Super+period (Smile, eaten by IBus emoji).
-OT_KB="$DCONF_DIR/03-margine-o-tiling"
-grep -qE "^tile-enter=\['<Super><Ctrl>Return'" "$OT_KB" \
-  || { echo "::error::A.3.quinquies o-tiling tile-enter not moved off <Super>Return — terminal launcher shadowed"; fail=1; }
-grep -qE "^toggle-tiling=\['<Super><Shift>t'\]" "$OT_KB" \
-  || { echo "::error::A.3.quinquies o-tiling toggle-tiling still on <Super>t — accidental whole-session tiling toggle"; fail=1; }
-grep -qE "^toggle-floating=\['<Super><Shift>f'\]" "$OT_KB" \
-  || { echo "::error::A.3.quinquies o-tiling toggle-floating still on <Super>f — shadows wm.toggle-fullscreen"; fail=1; }
-grep -qE "^toggle-stacking-global=\['<Super><Shift>s'\]" "$OT_KB" \
-  || { echo "::error::A.3.quinquies o-tiling toggle-stacking-global still on <Super>s — shadows shell.toggle-quick-settings"; fail=1; }
-grep -qE "^focus-left=\['<Super>h'\]" "$OT_KB" \
-  || { echo "::error::A.3.quinquies o-tiling focus-* still carries the <Super><Alt>arrows duplicates that shadow workspace-switch/overview-shift"; fail=1; }
-grep -qE '^hotkey=@as \[\]' "$DCONF_DIR/07-margine-custom-keybindings" \
-  || { echo "::error::A.3.quinquies IBus emoji hotkey not disabled — <Super>period types emoji input instead of opening Smile"; fail=1; }
 
 if (( fail != 0 )); then
   echo "::error::First-boot asset validation FAILED — blocking rechunk/push/sign."

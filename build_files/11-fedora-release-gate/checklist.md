@@ -26,7 +26,7 @@ matches the base; go through this list first, then bump the number.
   `.github/workflows/wsf-pin-sha.yml` builds the same name. The fc44 RPM
   installs and runs on Fedora 45 (no Python ABI pin, libinput's getters
   unchanged), so a fc45 WSF release can follow at its own pace.
-- `lucciola/Containerfile`: `NOCTALIA_VR` carries no Fedora tag (build.sh
+- `Containerfile`: `NOCTALIA_VR` carries no Fedora tag (lucciola/build.sh
   adds the base's); check that the new release ships the same
   version-release and test-boot Lucciola.
 - `build_files/40-spec-scripts/scripts/validate-baseline-packages`:
