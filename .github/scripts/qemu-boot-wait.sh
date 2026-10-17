@@ -161,8 +161,9 @@ for (( i = 1; i <= TIMEOUT; i++ )); do
     BOOT_OK=$i
     if (( GUI_WATCH )); then
       # Layer C window for BOTH verdicts. Worst case from graphical:
-      # the unit's ExecStartPre sleep (~150s) + the gnome-shell wait
-      # (up to 300s) + the bounded extension poll (~60s) + branding,
+      # the unit's ExecStartPre sleep (~150s) + the niri wait (up to
+      # 300s) + the session settle poll (up to 90s) + the bar poll and
+      # the portal call (up to 135s, both quick when healthy) + branding,
       # while the gaming dry-run (≤240s + rpm-ostreed wait) runs in the
       # background. First boot is I/O-heavy, so allow 15 minutes; the
       # outer --timeout (1800) and the 40-min job timeout still bound it.
@@ -212,7 +213,7 @@ if [[ -n "$BOOT_OK" ]]; then
     emit "gui=${GUI_RESULT:-none}"
     case "$GUI_RESULT" in
       pass) echo "✓ Layer C GUI probe: PASS" ;;
-      fail) echo "::warning::Layer C GUI probe FAILED — graphical session unhealthy (extensions/coredump). See serial log artifact. This will become gating." ;;
+      fail) echo "::warning::Layer C GUI probe FAILED: Lucciola session unhealthy (niri/Noctalia/notifications/portal/coredump). See serial log artifact. This will become gating." ;;
       *)    echo "::warning::Layer C GUI probe gave no verdict (injection skipped or probe stuck) — see inject step + serial log." ;;
     esac
 

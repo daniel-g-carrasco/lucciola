@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-# Margine USER-SMOKE probe — runs INSIDE the smoke-boot VM as a root
+# Lucciola USER-SMOKE probe: runs INSIDE the smoke-boot VM as a root
 # oneshot (margine-user-smoke.service), injected offline into the qcow2
 # by .github/scripts/inject-gui-probe.sh. Where the Layer C gui-probe.sh
-# asks "is the graphical session HEALTHY?" (alive shell, no coredumps),
-# this probe asks the user-facing question "is this image still
-# MARGINE?" — the identity assertions a person would notice if they
-# regressed: the CachyOS/BORE kernel booted, o-tiling on, the Hyprland-
-# style binds present, search-light gone, the gaming recipe shipped, and
-# the zz1-margine gschema applied.
+# asks "is the graphical session HEALTHY?" (niri and Noctalia alive and
+# answering, nothing crashed), this probe asks the user-facing question
+# "is this image still LUCCIOLA?": the identity assertions a person would
+# notice if they regressed: the CachyOS/BORE kernel booted, the session
+# is Lucciola's and new users get it, the public name, the niri defaults
+# load for a user, the Margine look of Noctalia, GNOME left stock as the
+# fallback, the gaming recipe shipped, and the Margine accent colour GTK
+# applications keep.
 #
-# SOFT ("morbido") GATE — every check is WARN-only. This probe NEVER
+# SOFT ("morbido") GATE: every check is WARN-only. This probe NEVER
 # fails the job and NEVER blocks the candidate->stable promotion: it
 # only annotates the run (serial -> step summary). It ALWAYS exits 0.
 # The CI watcher greps the serial console for:
@@ -18,27 +20,30 @@
 #   MARGINE-USER-SMOKE: DONE                       (probe finished)
 #
 # Runs AFTER gui-probe.sh's poweroff would fire, so it must NOT power the
-# VM off itself — gui-probe.sh owns the poweroff (it calls wait_gaming
+# VM off itself: gui-probe.sh owns the poweroff (it calls wait_gaming
 # then `systemctl poweroff`). This probe just emits and returns; if it
 # is the only probe injected it still leaves shutdown to the gui-probe
 # unit ordering. Bounded everywhere (no unbounded waits) so it can never
 # hold the boot window open.
 #
 # Lives as a real file (like gui-probe.sh) so shellcheck gates it and it
-# can be run on the lab VM directly:  sudo .github/smoke/user-smoke-probe.sh
+# can be run on the lab VM directly:
+#   sudo PROBE_STDOUT=1 .github/smoke/user-smoke-probe.sh
 set -u
 
 # Markers to BOTH /dev/console (the watcher reads -serial) and /dev/kmsg
 # (mirrored to console=ttyS0 forced by inject-gui-probe.sh) so the
 # verdict survives a BLS entry that lacks the serial console karg.
+# PROBE_STDOUT=1 prints instead (same knob as the other probes).
 out() {
+  if [[ "${PROBE_STDOUT:-0}" == 1 ]]; then echo "$@"; return 0; fi
   echo "$@" > /dev/console 2>/dev/null || true
   echo "<usersmoke> $*" > /dev/kmsg 2>/dev/null || true
 }
 
 PASS=0
 WARN=0
-# check <NAME> <0-if-ok> <detail...> — soft: a failure is a WARN, never fatal.
+# check <NAME> <0-if-ok> <detail...>: soft, a failure is a WARN, never fatal.
 check() {
   local name="$1" rc="$2"; shift 2
   if [[ "$rc" -eq 0 ]]; then
@@ -51,30 +56,29 @@ check() {
 # The injected smoke autologin user is uid 1010 (see inject-gui-probe.sh).
 SMOKE_UID=1010
 SMOKE_USER=smoke
+SMOKE_HOME=/var/home/smoke
 RUN_DIR="/run/user/${SMOKE_UID}"
 
-# Read a dconf/gsettings value AS THE SMOKE USER so the distro-db
-# defaults (system-db:distro -> /etc/dconf/db/distro.d) and the gschema
-# overrides resolve through the user's dconf profile exactly as they
-# would for a real first login. Falls back to an empty string.
-usettings() {  # usettings <schema> <key>
+# Run a command AS THE SMOKE USER with its runtime dir and session bus, so
+# gsettings resolves the distro dconf db and the gschema overrides through
+# the user's profile exactly as a real first login would, and the niri
+# and Noctalia clients find the session (extra VAR=value words go first).
+as_user() {
   runuser -u "$SMOKE_USER" -- env \
+    HOME="$SMOKE_HOME" \
     XDG_RUNTIME_DIR="$RUN_DIR" \
     DBUS_SESSION_BUS_ADDRESS="unix:path=${RUN_DIR}/bus" \
-    gsettings get "$1" "$2" 2>/dev/null || true
+    "$@"
 }
-udconf() {  # udconf <full/dconf/path>
-  runuser -u "$SMOKE_USER" -- env \
-    XDG_RUNTIME_DIR="$RUN_DIR" \
-    DBUS_SESSION_BUS_ADDRESS="unix:path=${RUN_DIR}/bus" \
-    dconf read "$1" 2>/dev/null || true
+usettings() {  # usettings <schema> <key>; empty string on failure
+  as_user gsettings get "$1" "$2" 2>/dev/null || true
 }
 
 # Give the autologin session a bounded moment to settle so the per-user
-# dbus/dconf is up (this unit is After=graphical.target but the user bus
-# may lag the target). Bounded — never an unbounded wait.
+# bus and niri are up (this unit is After=graphical.target but the user
+# session may lag the target). Bounded: never an unbounded wait.
 for _ in $(seq 1 24); do
-  [[ -S "${RUN_DIR}/bus" ]] && break
+  [[ -S "${RUN_DIR}/bus" ]] && pgrep -u "$SMOKE_USER" -x niri >/dev/null && break
   sleep 5
 done
 
@@ -85,65 +89,108 @@ KREL="$(uname -r 2>/dev/null || echo '?')"
 if [[ "$KREL" == *cachyos* ]]; then check KERNEL 0 "uname=$KREL"
 else check KERNEL 1 "expected *cachyos*, got uname=$KREL"; fi
 
-# 2. GNOME/gdm session reachable — gdm active and a gnome-shell running
-#    for the autologin user (the user-facing "did I get a desktop").
+# 2. The user-facing "did I get the desktop": gdm active and the autologin
+#    user's graphical session is Lucciola's, on Wayland, with niri running.
+#    logind's Desktop stays empty for a GDM-started Lucciola session, so
+#    the session name is GDM's XDG_SESSION_DESKTOP (the session file's
+#    name), which niri-session imports into the user manager.
 GDM_OK=1
 systemctl is-active --quiet gdm.service 2>/dev/null && GDM_OK=0
-SHELL_OK=1
-pgrep -u "$SMOKE_USER" -x gnome-shell >/dev/null 2>&1 && SHELL_OK=0
-if [[ "$GDM_OK" -eq 0 && "$SHELL_OK" -eq 0 ]]; then
-  check GDM_SESSION 0 "gdm active + gnome-shell up for $SMOKE_USER"
+SID="$(loginctl show-user "$SMOKE_USER" -p Display --value 2>/dev/null)"
+S_DESK="$(as_user systemctl --user show-environment 2>/dev/null | sed -n 's/^XDG_SESSION_DESKTOP=//p' | head -n 1)"
+S_TYPE=""
+if [[ -n "$SID" ]]; then
+  S_TYPE="$(loginctl show-session "$SID" -p Type --value 2>/dev/null)"
+  [[ -n "$S_DESK" ]] || S_DESK="$(loginctl show-session "$SID" -p Desktop --value 2>/dev/null)"
+fi
+NIRI_UP=no
+pgrep -u "$SMOKE_USER" -x niri >/dev/null 2>&1 && NIRI_UP=yes
+SESSION_DETAIL="session=${SID:-none} desktop=${S_DESK:-?} type=${S_TYPE:-?} niri=$NIRI_UP"
+if [[ "$GDM_OK" -eq 0 && "${S_DESK,,}" =~ ^(lucciola|niri)$ && "$S_TYPE" == wayland && "$NIRI_UP" == yes ]]; then
+  check SESSION 0 "gdm active, $SESSION_DETAIL"
 elif [[ "$GDM_OK" -eq 0 ]]; then
-  check GDM_SESSION 1 "gdm active but no gnome-shell for $SMOKE_USER yet"
+  check SESSION 1 "gdm active but not a Lucciola session: $SESSION_DETAIL"
 else
-  check GDM_SESSION 1 "gdm.service not active"
+  check SESSION 1 "gdm.service not active ($SESSION_DETAIL)"
 fi
 
-# 3. o-tiling extension present on disk AND in the enabled set.
-OTILING_UUID='o-tiling@oliwebd.github.com'
-OTILING_PRESENT=1
-for d in "/usr/share/gnome-shell/extensions/${OTILING_UUID}" \
-         "/usr/share/gnome-shell/extensions/${OTILING_UUID}"/*; do
-  [[ -f "$d/metadata.json" || -f "${d}/metadata.json" ]] 2>/dev/null && OTILING_PRESENT=0
+# 3. The public name: os-release and the product name Margine's own
+#    tooling reads both say Lucciola (ID and VARIANT_ID stay Margine's).
+OS_NAME="$(sed -n 's/^NAME=//p' /etc/os-release 2>/dev/null | tr -d '"')"
+PRODUCT="$(cat /usr/share/margine/product-name 2>/dev/null)"
+if [[ "$OS_NAME" == Lucciola && "$PRODUCT" == Lucciola ]]; then
+  check OS_NAME 0 "os-release NAME=$OS_NAME product-name=$PRODUCT"
+else
+  check OS_NAME 1 "os-release NAME=${OS_NAME:-?} product-name=${PRODUCT:-?}"
+fi
+
+# 4. New users get Lucciola. accounts-daemon fills a user with no record
+#    from the user template of its account type, and GDM preselects the
+#    Session written there. The smoke user (standard) already proves the
+#    path at runtime in check 2; the administrator template is the one
+#    the first user of a fresh install (wheel) gets. accounts-daemon reads
+#    the first template it finds in /run, /etc, then the data dirs.
+template() {
+  local d
+  for d in /run /etc /usr/local/share /usr/share; do
+    [[ -f "$d/accountsservice/user-templates/$1" ]] && { echo "$d/accountsservice/user-templates/$1"; return; }
+  done
+}
+DS_BAD=""
+for t in standard administrator; do
+  f="$(template "$t")"
+  grep -qx 'Session=lucciola' "${f:-/dev/null}" 2>/dev/null || DS_BAD+=" $t:${f:-missing}"
 done
-[[ -f "/usr/share/gnome-shell/extensions/${OTILING_UUID}/metadata.json" ]] && OTILING_PRESENT=0
+SESSION_FILE=/usr/share/wayland-sessions/lucciola.desktop
+grep -qx 'Exec=niri-session' "$SESSION_FILE" 2>/dev/null || DS_BAD+=" $SESSION_FILE"
+if [[ -z "$DS_BAD" ]]; then
+  check DEFAULT_SESSION 0 "user templates Session=lucciola, $SESSION_FILE runs niri-session"
+else
+  check DEFAULT_SESSION 1 "not Lucciola:$DS_BAD"
+fi
+
+# 5. The niri defaults load for a user. niri reads ~/.config/niri/config.kdl
+#    INSTEAD of /etc/niri/config.kdl, so session-start makes it start with
+#    an include of the system one; `niri validate` then parses the whole
+#    chain the compositor uses (Lucciola defaults, lucciola.kdl, the colours
+#    Noctalia renders, the screenshot path), as the user, so ~ resolves.
+UCFG="$SMOKE_HOME/.config/niri/config.kdl"
+if [[ ! -f "$UCFG" ]]; then
+  check NIRI_CONFIG 1 "$UCFG missing (session-start did not run?)"
+elif ! grep -qE '^[[:space:]]*include[[:space:]]+"/etc/niri/config\.kdl"' "$UCFG"; then
+  check NIRI_CONFIG 1 "$UCFG does not include /etc/niri/config.kdl: Lucciola defaults and keybindings are off"
+elif VALID="$(as_user timeout 30 niri validate -c "$UCFG" 2>&1)"; then
+  check NIRI_CONFIG 0 "$UCFG includes the system config and validates"
+else
+  check NIRI_CONFIG 1 "niri validate: $(printf '%s\n' "$VALID" | tail -n 2 | sed 's/\x1b\[[0-9;]*m//g' | tr '\n' ' ' | cut -c1-200)"
+fi
+
+# 6. Noctalia has the Margine look: dark, custom palette "Margine"
+#    (noctalia/20-margine-style.toml). Asked from Noctalia itself, whose
+#    IPC socket is named after the session's Wayland display, which niri
+#    publishes in the user manager's environment.
+WL="$(as_user systemctl --user show-environment 2>/dev/null | sed -n 's/^WAYLAND_DISPLAY=//p' | head -n 1)"
+SCHEME="$(as_user WAYLAND_DISPLAY="${WL:-wayland-1}" timeout 10 noctalia msg color-scheme-get 2>/dev/null)"
+MODE="$(as_user WAYLAND_DISPLAY="${WL:-wayland-1}" timeout 10 noctalia msg theme-mode-get 2>/dev/null)"
+if [[ "$SCHEME" == *Margine* && "$MODE" == *dark* ]]; then
+  check NOCTALIA_LOOK 0 "scheme=$SCHEME mode=$MODE"
+else
+  check NOCTALIA_LOOK 1 "expected the custom Margine palette, dark (scheme=${SCHEME:-no answer} mode=${MODE:-no answer} WAYLAND_DISPLAY=${WL:-unset})"
+fi
+
+# 7. GNOME is the stock fallback: Lucciola drops every extension Margine
+#    adds, o-tiling first, from disk and from the defaults a user gets.
+OTILING_UUID='o-tiling@oliwebd.github.com'
 ENABLED_LIST="$(usettings org.gnome.shell enabled-extensions)"
-if [[ "$OTILING_PRESENT" -eq 0 && "$ENABLED_LIST" == *"$OTILING_UUID"* ]]; then
-  check OTILING 0 "installed + in enabled-extensions"
-elif [[ "$OTILING_PRESENT" -eq 0 ]]; then
-  check OTILING 1 "installed but NOT in enabled-extensions ($ENABLED_LIST)"
+if [[ -e "/usr/share/gnome-shell/extensions/${OTILING_UUID}" ]]; then
+  check GNOME_STOCK 1 "o-tiling is installed (enabled-extensions=$ENABLED_LIST)"
+elif [[ "$ENABLED_LIST" == *o-tiling* || "$ENABLED_LIST" == *search-light* ]]; then
+  check GNOME_STOCK 1 "Margine extensions enabled for $SMOKE_USER: $ENABLED_LIST"
 else
-  check OTILING 1 "extension dir/metadata missing"
+  check GNOME_STOCK 0 "no Margine extension (enabled-extensions=${ENABLED_LIST:-?})"
 fi
 
-# 4. Margine Hyprland-style tiling keybindings present in dconf. The
-#    Super+1..0 workspace binds are applied per-user by margine-bootstrap
-#    (NOT run for this throwaway smoke user), so assert the SYSTEM-baked
-#    ones instead: o-tiling focus binds (03-margine-o-tiling) and the
-#    Smile custom keybinding (07-margine-custom-keybindings) both ship in
-#    /etc/dconf/db/distro.d and resolve through the user's dconf profile.
-FOCUS_LEFT="$(usettings org.gnome.shell.extensions.o-tiling focus-left)"
-SMILE_BIND="$(udconf /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/margine-smile/binding)"
-KB_HITS=0
-[[ "$FOCUS_LEFT" == *"<Super>h"* ]] && KB_HITS=$((KB_HITS + 1))
-[[ "$SMILE_BIND" == *"<Super>period"* ]] && KB_HITS=$((KB_HITS + 1))
-if [[ "$KB_HITS" -ge 2 ]]; then
-  check KEYBINDINGS 0 "o-tiling focus-left=$FOCUS_LEFT smile=$SMILE_BIND"
-elif [[ "$KB_HITS" -eq 1 ]]; then
-  check KEYBINDINGS 1 "partial (focus-left=$FOCUS_LEFT smile=$SMILE_BIND)"
-else
-  check KEYBINDINGS 1 "Margine binds absent (focus-left=$FOCUS_LEFT smile=$SMILE_BIND)"
-fi
-
-# 5. search-light NOT enabled (it was deliberately removed from the
-#    default enabled set; the package may stay installed for opt-in).
-if [[ "$ENABLED_LIST" == *"search-light"* ]]; then
-  check SEARCH_LIGHT 1 "search-light is in enabled-extensions (should be OFF)"
-else
-  check SEARCH_LIGHT 0 "not in enabled-extensions (correct)"
-fi
-
-# 6. Gaming ujust recipe exists — `ujust --list` shows margine-gaming*.
+# 8. Gaming ujust recipe exists: `ujust --list` shows margine-gaming*.
 #    Run as the smoke user (ujust is the user-facing entry point).
 UJUST_BIN=""
 for c in /usr/bin/ujust /usr/local/bin/ujust; do [[ -x "$c" ]] && UJUST_BIN="$c" && break; done
@@ -159,21 +206,15 @@ else
   check GAMING_UJUST 1 "ujust binary not found"
 fi
 
-# 7. zz1-margine gschema applied — assert two keys the override sets that
-#    are NOT GNOME/Bluefin defaults: accent-color=yellow and the bumped
-#    num-workspaces=10. Reading them via gsettings exercises the
-#    compiled glib schema + the override precedence (loads after zz0).
+# 9. zz1-margine gschema applied where Lucciola keeps it: accent-color=yellow
+#    (not a GNOME default) serves the GTK applications of the niri session.
+#    num-workspaces, checked here on Margine, went with the Shell and
+#    window-manager defaults lucciola/build.sh drops.
 ACCENT="$(usettings org.gnome.desktop.interface accent-color)"
-NUMWS="$(usettings org.gnome.desktop.wm.preferences num-workspaces)"
-GS_HITS=0
-[[ "$ACCENT" == *yellow* ]] && GS_HITS=$((GS_HITS + 1))
-[[ "$NUMWS" == *10* ]] && GS_HITS=$((GS_HITS + 1))
-if [[ "$GS_HITS" -ge 2 ]]; then
-  check GSCHEMA 0 "accent=$ACCENT num-workspaces=$NUMWS"
-elif [[ "$GS_HITS" -eq 1 ]]; then
-  check GSCHEMA 1 "partial (accent=$ACCENT num-workspaces=$NUMWS)"
+if [[ "$ACCENT" == *yellow* ]]; then
+  check GSCHEMA 0 "accent=$ACCENT"
 else
-  check GSCHEMA 1 "zz1-margine override not applied (accent=$ACCENT num-workspaces=$NUMWS)"
+  check GSCHEMA 1 "zz1-margine override not applied (accent=${ACCENT:-?})"
 fi
 
 # ---- Summary (one parseable line) -----------------------------------------
@@ -182,7 +223,7 @@ out "MARGINE-USER-SMOKE: SUMMARY pass=${PASS} warn=${WARN} total=${TOTAL}"
 if [[ "$WARN" -eq 0 ]]; then
   out "MARGINE-USER-SMOKE: VERDICT ALL-PASS (${PASS}/${TOTAL})"
 else
-  out "MARGINE-USER-SMOKE: VERDICT WARN (${PASS}/${TOTAL} ok, ${WARN} warning) — soft gate, promotion NOT blocked"
+  out "MARGINE-USER-SMOKE: VERDICT WARN (${PASS}/${TOTAL} ok, ${WARN} warning): soft gate, promotion NOT blocked"
 fi
 out "MARGINE-USER-SMOKE: DONE"
 

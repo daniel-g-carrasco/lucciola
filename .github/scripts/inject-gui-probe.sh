@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Layer C — offline-inject the GUI smoke probe into a freshly built
-# qcow2 (smoke user + GDM autologin + the gui-probe oneshot + a
-# permissive-SELinux karg for this throwaway boot).
+# Layer C: offline-inject the GUI smoke probe into a freshly built
+# qcow2 (smoke user + GDM autologin into the Lucciola session + the
+# gui-probe oneshot + a permissive-SELinux karg for this throwaway boot).
 #
 #   usage: sudo .github/scripts/inject-gui-probe.sh <image.qcow2>
 #
@@ -127,8 +127,9 @@ VAR=$(dirname "$(dirname "$DEP")")/var
 [[ -d "$ETC" && -d "$VAR" ]] || { echo "::warning::Layer C: deployment etc/var not found"; exit 1; }
 echo "deployment: $DEP"
 
-# 1. Test user (uid/gid 1010), offline useradd. Password locked — GDM
-#    autologin doesn't need one.
+# 1. Test user (uid/gid 1010), offline useradd. Password locked: GDM
+#    autologin doesn't need one. gnome-initial-setup-done keeps GNOME's
+#    first-login wizard away if the session ever falls back to GNOME.
 tee -a "$ETC/passwd" >/dev/null <<<'smoke:x:1010:1010:GUI smoke:/var/home/smoke:/bin/bash'
 tee -a "$ETC/group"  >/dev/null <<<'smoke:x:1010:'
 tee -a "$ETC/shadow" >/dev/null <<<'smoke:!:20000:0:99999:7:::'
@@ -137,7 +138,14 @@ mkdir -p "$VAR/home/smoke/.config"
 touch "$VAR/home/smoke/.config/gnome-initial-setup-done"
 chown -R 1010:1010 "$VAR/home/smoke"
 
-# 2. GDM autologin
+# 2. GDM autologin into the Lucciola session. custom.conf names the user
+#    only: GDM has no default-session key (with no session recorded for
+#    the user it falls back to "gnome") and takes the session from the
+#    user's AccountsService record. The smoke user has none, so
+#    accounts-daemon fills it from the image's user template
+#    (Session=lucciola), exactly as for the user a fresh install creates.
+#    No record is written here on purpose: the smoke boot exercises that
+#    path, and gui-probe.sh FAILs naming GNOME if autologin lands there.
 tee "$ETC/gdm/custom.conf" >/dev/null <<'GDMEOF'
 [daemon]
 AutomaticLoginEnable=True
