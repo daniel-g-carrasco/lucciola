@@ -16,6 +16,16 @@ base:
   derives_from: silverblue-main   # Universal Blue main; bluefin-dx until 2026-10-11 (ADR 0010)
   fedora_release: 44
   desktop: gnome
+  # Lucciola (2026-10): the login screen is greetd running Noctalia Greeter
+  # (lucciola/build.sh step 5); GDM stays installed as greetd's fallback
+  # and for the GNOME session. Checked by validate-margine-system (6b) and
+  # validate-image-rootfs.sh (A.3.login).
+  login_screen:
+    display_manager: greetd
+    greeter: noctalia-greeter   # built from a pinned upstream tag (Containerfile greeter-rpm stage)
+    pam_service: greetd         # /usr/lib/pam.d/greetd, Fedora's, plus pam_oo7 (password) and pam_env lines
+    autologin: greetd initial_session   # ujust margine-autologin
+    fallback: gdm               # greetd.service OnFailure=
   architecture: x86_64
   update_engine: bootc
   legacy_variants_for_reference:

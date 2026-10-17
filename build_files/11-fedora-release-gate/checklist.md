@@ -53,6 +53,13 @@ matches the base; go through this list first, then bump the number.
   A pre-release enables updates-testing by default, a released Fedora does
   not: once 45 is out, the pin resolves there only after that update is
   stable.
+- Login screen (greetd + Noctalia Greeter, lucciola/build.sh step 5): the
+  greeter RPM is built from `NOCTALIA_GREETER_VERSION` against the new
+  release's libraries; it needs `wlroots-0.20` (a release that moves to
+  another wlroots needs a greeter tag that supports it). Compare the new
+  `/usr/lib/pam.d/greetd` and `/usr/lib/pam.d/gdm-password` (build.sh 5c
+  fails on a changed layout), and boot to the greeter: password login,
+  GNOME from the session list, autologin.
 - `build_files/40-spec-scripts/scripts/validate-baseline-packages`:
   `quay.io/fedora/fedora:44`.
 - `build_files/40-spec-scripts/declarations/margine-atomic.yaml`: the

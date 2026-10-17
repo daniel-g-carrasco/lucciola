@@ -99,6 +99,29 @@ if grep -qs 'it\.mijorus\.smile' "$ROOTFS/usr/share/flatpak/preinstall.d/margine
   echo "::error::A.3 Smile is preinstalled again (Noctalia's launcher picks emoji)"; fail=1
 fi
 
+# A.3.login: the login screen is greetd running Noctalia Greeter, GDM its
+# fallback (lucciola/build.sh step 5). -L/readlink, not -e: the image's
+# absolute links dangle under $ROOTFS (see A.4.mok).
+dm="$(readlink "$ROOTFS/etc/systemd/system/display-manager.service" 2>/dev/null || true)"
+[[ "$dm" == */greetd.service ]] \
+  || { echo "::error::A.3.login display-manager.service points to '${dm:-nothing}', not greetd"; fail=1; }
+grep -qs '^command = ".*/usr/bin/noctalia-greeter-session"' "$ROOTFS/etc/greetd/config.toml" \
+  || { echo "::error::A.3.login etc/greetd/config.toml does not run Noctalia Greeter"; fail=1; }
+grep -qsE '^-password[[:space:]]+optional[[:space:]]+pam_oo7\.so' "$ROOTFS/usr/lib/pam.d/greetd" \
+  && grep -qsE '^session[[:space:]]+optional[[:space:]]+pam_env\.so.*session-type\.conf' "$ROOTFS/usr/lib/pam.d/greetd" \
+  && grep -qsE '^-auth[[:space:]]+optional[[:space:]]+pam_oo7\.so' "$ROOTFS/usr/lib/pam.d/greetd" \
+  || { echo "::error::A.3.login usr/lib/pam.d/greetd lacks Lucciola's pam_oo7/pam_env lines"; fail=1; }
+[[ ! -e "$ROOTFS/etc/pam.d/greetd" ]] \
+  || { echo "::error::A.3.login etc/pam.d/greetd shadows Fedora's usr/lib/pam.d/greetd"; fail=1; }
+grep -qsx 'OnFailure=gdm.service' "$ROOTFS/usr/lib/systemd/system/greetd.service.d/50-lucciola.conf" \
+  || { echo "::error::A.3.login greetd.service has no GDM fallback"; fail=1; }
+test -L "$ROOTFS/usr/lib/systemd/system/graphical.target.wants/lucciola-login-migrate.service" \
+  || { echo "::error::A.3.login lucciola-login-migrate.service is not enabled"; fail=1; }
+check_file "usr/lib/tmpfiles.d/lucciola-greeter.conf" "A.3.login"
+check_exec "usr/libexec/lucciola/autologin-session" "A.3.login"
+check_exec "usr/libexec/lucciola/login-migrate" "A.3.login"
+check_exec "usr/bin/dbus-run-session" "A.3.login"
+
 # A.4: first-boot status helper (its GNOME autostart is gone, see A.3)
 check_exec "usr/libexec/margine-first-boot-status" "A.4"
 
@@ -139,14 +162,16 @@ if ! command -v systemd-analyze >/dev/null 2>&1; then
 elif ! cycle_selftest; then
   echo "::warning::systemd-analyze did not report a deliberately cyclic pair: ordering-cycle check not trustworthy here, skipped"
 else
-  VERIFY_OUT="$(systemd-analyze --root="$ROOTFS" verify --man=no sysinit.target multi-user.target 2>&1 || true)"
+  # graphical.target too: the display manager and the login-screen
+  # migration unit order themselves there (2026-10, greetd).
+  VERIFY_OUT="$(systemd-analyze --root="$ROOTFS" verify --man=no sysinit.target multi-user.target graphical.target 2>&1 || true)"
   CYCLES="$(grep -iE "ordering cycle" <<<"$VERIFY_OUT" || true)"
   if [ -n "$CYCLES" ]; then
     echo "::error::A.4.units ordering cycle in the image's boot transaction:"
     echo "$CYCLES" | head -5
     fail=1
   else
-    echo "  ok: no ordering cycle in sysinit.target / multi-user.target (self-test passed)"
+    echo "  ok: no ordering cycle in sysinit.target / multi-user.target / graphical.target (self-test passed)"
   fi
 fi
 check_file "usr/lib/systemd/system/margine-grub-hidpi.service" "A.4.gfx"

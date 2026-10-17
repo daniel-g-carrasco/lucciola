@@ -5,7 +5,8 @@
 # and compare it against the canonical expected state. Catches drift
 # that the build-time Layer A checks and the pre-reboot
 # validate-staged-deployment cannot see: GNOME settings as actually
-# applied by GDM/Shell, Flatpaks really installed (not just declared),
+# applied by GDM/Shell, the login screen (greetd on Lucciola), Flatpaks
+# really installed (not just declared),
 # system users present at runtime (Bug 6 post-rebase), running kernel
 # signature, no failed services, branding assets in place, etc.
 #
@@ -507,6 +508,89 @@ else
   bad "GDM background resolves to '$gdm_bg_real' (expected '$exp_real')"
 fi
 fi  # IS_LIVE (section 6)
+
+# ---------------------------------------------------------------------------
+hdr "6b. Login screen: greetd + Noctalia Greeter (Lucciola)"
+# Lucciola's login screen is greetd running Noctalia Greeter; GDM (section 6)
+# stays installed as the fallback greetd.service starts when it fails
+# (lucciola/build.sh step 5, greetd.service.d/50-lucciola.conf).
+# ---------------------------------------------------------------------------
+if [[ "$EXPECTED_OS_NAME" != "Lucciola" ]]; then
+  info "skipped: Margine's login screen is GDM"
+else
+  for p in greetd greetd-selinux noctalia-greeter dbus-daemon gdm; do
+    rpm -q "$p" >/dev/null 2>&1 && ok "$p installed" || bad "$p missing (the login screen or its fallback)"
+  done
+  DM_UNIT="$(readlink /etc/systemd/system/display-manager.service 2>/dev/null)"
+  DM_UNIT="${DM_UNIT##*/}"
+  if [[ "$DM_UNIT" == greetd.service ]]; then
+    ok "display manager: greetd"
+  elif (( IS_LIVE )); then
+    # A machine may go back to GDM on purpose (systemctl enable --force gdm.service).
+    warn "display manager is '${DM_UNIT:-none}', not greetd: switched by hand, or lucciola-login-migrate.service switches it at the next boot. Back to greetd: sudo systemctl enable --force greetd.service"
+  else
+    bad "display-manager.service points to '${DM_UNIT:-nothing}' in the image, not greetd"
+  fi
+  if python3 - /etc/greetd/config.toml <<'PY'
+import sys, tomllib
+d = tomllib.load(open(sys.argv[1], "rb")).get("default_session", {})
+ok = d.get("command", "").endswith("/usr/bin/noctalia-greeter-session") and d.get("user") == "greetd"
+print(f"  {d}")
+sys.exit(0 if ok else 1)
+PY
+  then
+    ok "/etc/greetd/config.toml runs Noctalia Greeter as greetd"
+  else
+    bad "/etc/greetd/config.toml does not run Noctalia Greeter as greetd (reference: /usr/share/lucciola/greetd/config.toml)"
+  fi
+  PAM=/usr/lib/pam.d/greetd
+  pam_ok=1
+  for want in '^-auth[[:space:]]+optional[[:space:]]+pam_oo7\.so' \
+              '^-password[[:space:]]+optional[[:space:]]+pam_oo7\.so[[:space:]]+use_authtok' \
+              '^-session[[:space:]]+optional[[:space:]]+pam_oo7\.so[[:space:]]+auto_start' \
+              '^session[[:space:]]+optional[[:space:]]+pam_env\.so.*session-type\.conf' \
+              '^session[[:space:]]+required[[:space:]]+pam_selinux\.so[[:space:]]+open' \
+              '^session[[:space:]]+required[[:space:]]+pam_loginuid\.so' \
+              '^session[[:space:]]+include[[:space:]]+system-auth'; do
+    grep -qE "$want" "$PAM" 2>/dev/null || { bad "$PAM lacks /$want/ (the greetd PAM stack lucciola/build.sh 5c sets up)"; pam_ok=0; }
+  done
+  (( pam_ok )) && ok "$PAM: pam_oo7 (auth, password, session), the session type, pam_selinux, pam_loginuid, system-auth"
+  if [[ -e /etc/pam.d/greetd ]]; then
+    if (( IS_LIVE )); then
+      warn "/etc/pam.d/greetd exists and shadows the image's $PAM (pam_oo7 and the session type may be missing from it)"
+    else
+      bad "/etc/pam.d/greetd in the image shadows $PAM"
+    fi
+  fi
+  grep -qx 'OnFailure=gdm.service' /usr/lib/systemd/system/greetd.service.d/50-lucciola.conf 2>/dev/null \
+    && ok "greetd falls back to GDM when it cannot start" \
+    || bad "greetd.service has no GDM fallback (greetd.service.d/50-lucciola.conf)"
+  for d in /var/lib/noctalia-greeter /var/lib/greetd; do
+    ctx="$(matchpathcon -n "$d" 2>/dev/null)"
+    [[ "$ctx" == *:xdm_var_lib_t:* ]] && ok "SELinux labels $d xdm_var_lib_t" \
+      || bad "SELinux would label $d '${ctx:-?}', not xdm_var_lib_t: the greeter could not write its state when enforcing"
+  done
+  if (( IS_LIVE )); then
+    getent passwd greetd >/dev/null && ok "account greetd resolves" || bad "account greetd missing (systemd-sysusers creates it at boot)"
+    for d in /var/lib/greetd /var/lib/noctalia-greeter; do
+      [[ "$(stat -c %U "$d" 2>/dev/null)" == greetd ]] && ok "$d owned by greetd" \
+        || bad "$d missing or not owned by greetd (tmpfiles.d/lucciola-greeter.conf at boot)"
+    done
+    if [[ "$DM_UNIT" == greetd.service ]]; then
+      if systemctl is-active --quiet gdm.service; then
+        bad "GDM is running although greetd is the display manager: greetd failed and its fallback took over (journalctl -b -u greetd)"
+      elif systemctl is-active --quiet greetd.service; then
+        ok "greetd.service active"
+      else
+        bad "greetd.service is $(systemctl is-active greetd.service 2>/dev/null) (journalctl -b -u greetd)"
+      fi
+    fi
+    [[ -e /var/lib/lucciola/login-migrated ]] && ok "login screen migration done" \
+      || warn "lucciola-login-migrate.service has not finished yet (journalctl -b -u lucciola-login-migrate)"
+  else
+    info "account, directories and running units: checked on a booted system"
+  fi
+fi
 
 # ---------------------------------------------------------------------------
 hdr "7. GNOME Shell defaults (user session)"
