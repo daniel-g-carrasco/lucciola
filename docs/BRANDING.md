@@ -54,7 +54,8 @@ These five cut across almost every touchpoint below:
 | GNOME About distributor wordmark | `build_files/50-branding/install.sh` | `fedora_logo_med`, `fedora_whitelogo_med` |
 | Boot splash (Plymouth) | `build_files/50-branding/install.sh` + `…/kargs.d/10-margine-plymouth.toml` | `plymouth-set-default-theme`, `rhgb` |
 | GRUB menu text + HiDPI font | `live-env/src/iso.yaml` + `…/grub2-static/configs.d/05_margine-gfxmode.cfg` | `Install Margine`, `grub2-mkfont`, `margine.pf2` |
-| GDM background / logo | `build_files/50-branding/install.sh` | `gdm.d/01-margine-background`, `login-screen` |
+| GDM background / logo (Margine; Lucciola's fallback login screen) | `build_files/50-branding/install.sh` | `gdm.d/01-margine-background`, `login-screen` |
+| **Lucciola** login screen (Noctalia Greeter on greetd): look, logo, preselected session | `lucciola/system_files/usr/share/lucciola/greeter/{sync,greeter}.toml`, `lucciola/build.sh` (step 5) | `hide_logo`, `[appearance.palette]`, `last = "Lucciola"` |
 | Desktop wallpaper / accent / dock / workspaces | `build_files/50-branding/install.sh`, `build_files/30-gnome-defaults/install.sh` | `picture-uri`, `accent-color`, `favorite-apps`, `num-workspaces` |
 | Live ISO "Welcome to Margine" | `live-env/src/build.sh` | `Welcome to Fedora` (the sed targets) |
 | Anaconda installer **window icon** | `live-env/src/build.sh` | `AnacondaInstaller`, `_wmid in`, `StartupWMClass` |
@@ -229,6 +230,34 @@ large font:
 - The wallpaper must live under `/usr/share/` (mounted before /home at greeter
   time).
 - Run `dconf update` or GDM keeps the old compiled db.
+
+### 4b. Lucciola: Noctalia Greeter on greetd
+
+Lucciola's login screen is not GDM (GDM stays installed as the fallback greetd
+starts when the greeter cannot come up, and keeps the dconf branding above).
+
+- **Look** (`lucciola/system_files/usr/share/lucciola/greeter/sync.toml`, copied
+  once to `/var/lib/noctalia-greeter/sync.toml` by tmpfiles): `scheme =
+  "Synced"`, dark, the Margine palette (`palettes/Margine.json` with the keys
+  renamed: `mPrimary` becomes `primary`, `mOnSurfaceVariant` becomes
+  `on_surface_variant`, and so on), `JetBrains Mono`, the Margine wallpaper
+  (`/usr/share/backgrounds/margine/margine.png`), `[session] last = "Lucciola"`.
+- **Logo** (`.../greeter/greeter.toml`, linked as
+  `/var/lib/noctalia-greeter/greeter.toml`): `hide_logo = true`, so Noctalia's
+  logo does not appear on Lucciola's login screen. No Lucciola logo yet.
+- **Session name**: the greeter lists sessions by the `.desktop` file's
+  `Name=`, so the seeded `last` must stay equal to `Name=Lucciola` in
+  `lucciola.desktop` (lucciola/build.sh 5d checks it).
+
+**Gotchas**
+- `greeter.toml` wins over `sync.toml`. Anything visual put in `greeter.toml`
+  (palette, font, wallpaper) silently disables Noctalia's "Sync with Noctalia"
+  for that value: keep the look in `sync.toml`.
+- An installed system keeps its `/var/lib/noctalia-greeter/sync.toml` (the
+  greeter and Sync own it); a new look in the image reaches it only where the
+  file is deleted (it comes back from the image at the next boot).
+- The greeter only reads fonts installed system-wide (Fontconfig, as the
+  `greetd` account).
 
 ---
 

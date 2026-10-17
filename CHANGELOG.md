@@ -7,6 +7,30 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (login screen)
+- **The login screen is Noctalia Greeter on greetd**, in place of GDM: the
+  same look as the desktop (dark, the Lucciola palette, JetBrains Mono, the
+  Margine wallpaper), Lucciola preselected, GNOME and GNOME Classic in the
+  session list. The greeter remembers the session picked last. Noctalia's
+  Settings > Security > Noctalia Greeter > Sync Now copies the desktop's
+  colours, font, wallpaper and screen layout to it (with the administrator
+  password).
+  - A password login still opens the Login keyring (pam_oo7 is in greetd's
+    PAM stack, as in GDM's). Fingerprint login, if turned on with
+    authselect, works one step at a time: press Enter on the empty password
+    field, then touch the reader.
+  - `ujust margine-autologin on|off|status` now sets greetd's autologin. A
+    GDM autologin moves over by itself at the first boot of this image.
+  - GDM stays installed: if the greeter cannot start, GDM takes over after a
+    few attempts, so there is always a way to log in. To go back to GDM for
+    good: `sudo systemctl enable --force gdm.service`, then restart (and
+    `greetd.service` to return).
+  - GNOME started from greetd has no lock screen: GNOME Shell locks the
+    screen only when GDM is running. Lock with Lucciola, or switch back to
+    GDM if you use GNOME every day.
+  - Noctalia Greeter is built from its v1.6.0 tag by this repository's
+    build (Fedora does not package it); greetd comes from Fedora.
+
 ### Fixed (2026-10-18, from Margine)
 - **The fixes Margine got on 2026-10-17 (margine-image #517), brought over.** The system app compares the machine with the tag it follows instead of always `:stable`; the Secure Boot notice and `ujust margine-secureboot` say "Lucciola" (from `product-name`); `margine-collect-diagnostics` writes under `~/.local/state/margine/diagnostics/` instead of the read-only `/usr`; `lucciola-keep-awake` is on the PATH; Extension Manager is no longer preinstalled; `bar-widths` speaks of two workspaces.
 

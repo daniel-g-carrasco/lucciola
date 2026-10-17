@@ -8,7 +8,7 @@ Lucciola builds on Fedora Silverblue and Universal Blue, and adds a desktop made
 
 ## What you get
 
-- niri places windows in columns on a strip wider than the screen; Noctalia draws the bar, the dock, the launcher, notifications and the lock screen. GNOME stays on the login screen as a backup session.
+- niri places windows in columns on a strip wider than the screen; Noctalia draws the bar, the dock, the launcher, notifications and the lock screen. The login screen is Noctalia Greeter, with the same look, and GNOME stays there as a backup session.
 - The CachyOS kernel, signed with the project's own key, so Secure Boot stays on. The TPM can unlock the encrypted disk at boot.
 - Updates download in the background and apply at the next restart. The previous version stays in the boot menu, and your device checks every image's signature before installing it.
 - Zen Browser, Thunderbird, LibreOffice, GIMP, Inkscape, darktable and OBS Studio, with Bazaar to install more from Flathub. Common audio and video formats play out of the box. Distrobox and Toolbox run developer tools without changing the system.
@@ -34,7 +34,7 @@ Lucciola has no installer image yet: you switch to it from a Fedora Atomic syste
    systemctl reboot
    ```
    The first download is unverified on purpose: a stock Fedora system has no signature policy for Lucciola, and rpm-ostree refuses the signed transport under its default policy. The policy comes with the image, and at the first boot Lucciola moves itself to the signed transport, so every update after that is checked.
-3. On the login screen, choose Lucciola (the gear button, bottom right).
+3. The login screen opens on Lucciola: enter your password. GNOME is in the session list too.
 4. Restart once more. A blue screen asks you to register the key: press a key within 10 seconds, then choose Enroll MOK, Continue and Yes, type `margine` and choose Reboot. `ujust margine-secureboot enroll` makes that screen wait for you.
 5. Turn Secure Boot back on when `ujust margine-secureboot` says the key is in place.
 
@@ -73,7 +73,7 @@ Lucciola grew out of Margine OS, and this repository keeps Margine's history. Ma
 
 - [Fedora](https://fedoraproject.org/), for Silverblue and the official niri and Noctalia packages.
 - [Universal Blue](https://universal-blue.org/), for the `silverblue-main` base image, `uupd` and the automation patterns.
-- [niri](https://github.com/YaLTeR/niri) and [Noctalia](https://github.com/noctalia-dev/noctalia), the desktop.
+- [niri](https://github.com/YaLTeR/niri) and [Noctalia](https://github.com/noctalia-dev/noctalia), the desktop; [Noctalia Greeter](https://github.com/noctalia-dev/noctalia-greeter) and [greetd](https://git.sr.ht/~kennylevinsen/greetd), the login screen.
 - [CachyOS](https://cachyos.org/), for the kernel.
 - [Bluefin](https://projectbluefin.io/), Margine's base for its first months and the source of many ideas.
 - [Origami Linux](https://gitlab.com/origami-linux/images), the reference for the kernel signing script; [MorrOS](https://github.com/morrolinux/morros), for CI patterns; [coreos/chunkah](https://github.com/coreos/chunkah), for content-based image layers.

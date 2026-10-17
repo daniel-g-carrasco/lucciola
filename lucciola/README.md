@@ -64,9 +64,26 @@ verified by the device, rollback, and every Margine fix. This layer adds:
 - `ddcutil`, so Noctalia's brightness slider also drives external monitors
   over DDC/CI (the package's udev rule opens the i2c devices to the
   logged-in user, its modules-load entry loads i2c-dev);
+- the login screen: Noctalia Greeter on greetd, in place of GDM. Noctalia
+  Greeter is built from its pinned tag (`NOCTALIA_GREETER_VERSION` and its
+  sha256 in the Containerfile, spec in `greeter/`), greetd comes from
+  Fedora. `/etc/greetd/config.toml` (reference copy in
+  `/usr/share/lucciola/greetd/`) runs the greeter as the `greetd` account;
+  its fixed settings are `/usr/share/lucciola/greeter/greeter.toml` (linked
+  into `/var/lib/noctalia-greeter/`), its starting look (dark, the Margine
+  palette, JetBrains Mono, the Margine wallpaper, Lucciola preselected) is
+  `sync.toml`, copied once and then replaced by Noctalia's "Sync with
+  Noctalia". greetd uses Fedora's PAM file with pam_oo7 added to the
+  password stack and the Wayland session type set for autologin
+  (`ujust margine-autologin`). GDM stays installed and takes over when
+  greetd cannot start (`greetd.service.d/50-lucciola.conf`);
+  `lucciola-login-migrate.service` moves an install from GDM once,
+  autologin included. GNOME under greetd has no lock screen (GNOME Shell
+  locks only when GDM runs);
 - the "Lucciola" session on the login screen, the one a new user gets
-  (AccountsService user templates; whoever picks GNOME once keeps it), and
-  the public name in os-release;
+  (preselected by the greeter until someone picks another; the
+  AccountsService user templates for autologin and GDM), and the public
+  name in os-release;
 - GNOME as a stock fallback session: the image drops every GNOME Shell
   extension (Margine's and the base's), the Shell, window-manager and
   settings-daemon defaults that go with them and the GNOME first-login
@@ -112,4 +129,5 @@ Turn Secure Boot back on when `ujust margine-secureboot` says so.
 ("Lucciola" set in Aladin by Sudtipos, converted to outlines; the font is
 under the SIL Open Font License 1.1, copy in `assets/Aladin-OFL.txt`). Colors:
 lavender `#6b64a0` / `#b3addf`, firefly yellow `#f2c94c`. Not wired into the
-image yet: boot splash, login screen and the About page still show Margine's.
+image yet: boot splash and the About page still show Margine's, and the login
+screen shows no logo (Noctalia's is hidden) over Margine's wallpaper.
