@@ -1,11 +1,12 @@
-# Watch the upstream PRs our forked Titanoboa pin carries AND the
-# EGO-hosted GNOME-extension version_tag pins (hide-cursor, smile) that
-# Renovate has no datasource for. When a Titanoboa PR merges, or an EGO
-# extension has a newer GNOME-50 upload, open (once) an issue — otherwise
-# these pins rot in human memory (o-tiling sat at 2.8.8 right through the
-# 2.8.11 GNOME-50 toggle fix that way). Weekly is plenty.
-# NB: o-tiling itself IS Renovate-tracked now — see renovate.json5 +
-# otiling-pin-sha.yml — so it is intentionally NOT re-checked here.
+# Watch the EGO-hosted GNOME-extension version_tag pins (hide-cursor, smile)
+# that Renovate has no datasource for. When an EGO extension has a newer
+# GNOME-50 upload, open (once) an issue: otherwise these pins rot in human
+# memory (o-tiling sat at 2.8.8 right through the 2.8.11 GNOME-50 toggle fix
+# that way). Weekly is plenty.
+# Margine's version also watched the Titanoboa fork pinned in build-disk.yml,
+# for the ISO; Lucciola has no ISO workflow yet, so that check comes back
+# with it. o-tiling's pin is not watched by anything here (see the note in
+# .github/renovate.json5).
 name: Check upstream pins
 
 on:
@@ -25,58 +26,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Assert the two TITANOBOA pin copies agree
-        # GHA cannot template `uses:` from env, so the fork SHA exists
-        # twice in build-disk.yml (env.TITANOBOA_REF + the uses: line).
-        # They can drift independently — this catches it weekly.
-        run: |
-          set -euo pipefail
-          ENV_SHA="$(grep -oE 'TITANOBOA_REF: "[^"]+"' .github/workflows/build-disk.yml | grep -oE '@[0-9a-f]{40}' | tr -d @)"
-          USES_SHA="$(grep -oE 'uses: daniel-g-carrasco/titanoboa@[0-9a-f]{40}' .github/workflows/build-disk.yml | grep -oE '[0-9a-f]{40}')"
-          echo "env=$ENV_SHA uses=$USES_SHA"
-          if [[ -z "$ENV_SHA" || -z "$USES_SHA" || "$ENV_SHA" != "$USES_SHA" ]]; then
-            echo "::error::TITANOBOA_REF env and the uses: pin in build-disk.yml have drifted (env=$ENV_SHA uses=$USES_SHA)"
-            exit 1
-          fi
-
-      - name: Check carried patches against upstream
-        run: |
-          set -euo pipefail
-          # PR -> short description of the carried patch. NB: the fork
-          # carries a THIRD patch (cce73fc, grub.cfg trailing-slash) that
-          # has NO upstream PR — it is fork-permanent (load-bearing for our
-          # plain-file EFI/MOK.der placement), so it is intentionally NOT
-          # tracked here; only the upstreamable PRs are watched.
-          declare -A PRS=(
-            ["147"]="mksquashfs -e ordering (zstd fallback fix)"
-            ["148"]="grub2.extra_cfg (Secure Boot enroll menu entry)"
-          )
-          MERGED=()
-          for pr in "${!PRS[@]}"; do
-            STATE=$(gh api "repos/ublue-os/titanoboa/pulls/${pr}" --jq '.merged' 2>/dev/null || echo "unknown")
-            echo "ublue-os/titanoboa#${pr} (${PRS[$pr]}): merged=${STATE}"
-            [[ "$STATE" == "true" ]] && MERGED+=("$pr — ${PRS[$pr]}")
-          done
-          [[ ${#MERGED[@]} -gt 0 ]] || { echo "Nothing merged upstream yet."; exit 0; }
-
-          TITLE="Upstream titanoboa PR(s) merged — revisit TITANOBOA_REF pin"
-          EXISTING=$(gh issue list --repo "${{ github.repository }}" \
-            --search "in:title \"$TITLE\"" --state open --json number --jq '.[0].number // empty')
-          if [[ -n "$EXISTING" ]]; then
-            echo "Issue #$EXISTING already open — not duplicating."
-            exit 0
-          fi
-          BODY="The following patch(es) carried on our fork branch \`margine-pins\` have merged upstream:\n"
-          for m in "${MERGED[@]}"; do BODY+="\n- ublue-os/titanoboa#${m}"; done
-          BODY+="\n\nNext step: rebase \`margine-pins\` (drop the merged patch) or, if both are upstream, point \`TITANOBOA_REF\` and the \`uses:\` line in \`.github/workflows/build-disk.yml\` back at an upstream SHA. Then build + boot-test an ISO."
-          printf "%b" "$BODY" | gh issue create --repo "${{ github.repository }}" \
-            --title "$TITLE" --body-file - --label "upstream"
-          echo "Issue opened."
-
       - name: Check EGO-hosted extension pins (hide-cursor, smile)
-        # Renovate tracks the GitHub-released o-tiling pin; the EGO-hosted
-        # extensions are pinned by version_tag, which Renovate has no
-        # datasource for. Query the EGO API weekly and open an issue when a
+        # The EGO-hosted extensions are pinned by version_tag, which Renovate
+        # has no datasource for. Query the EGO API weekly and open an issue when a
         # newer GNOME-50 upload exists, so a fix can't sit unnoticed.
         run: |
           set -euo pipefail

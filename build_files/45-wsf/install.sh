@@ -17,10 +17,11 @@
 # WSF is installed from its official release RPM (not built from source).
 # That makes it a real rpmdb package — so a host can `rpm-ostree override
 # replace` a test build over it — and drops meson/ninja from the image
-# build. Pinned by version + sha256 for reproducibility; Renovate
-# (.github/renovate.json5) + .github/workflows/wsf-pin-sha.yml keep both
-# current on each upstream release. The fc tag tracks the base Fedora
-# release (the WSF release builds its RPM on the same Fedora).
+# build. Pinned by version + sha256 for reproducibility, bumped by hand:
+# Margine's Renovate manager and its wsf-pin-sha workflow were not carried
+# over to Lucciola, where WSF only acts in the GNOME fallback session. The
+# fc tag tracks the base Fedora release (the WSF release builds its RPM on
+# the same Fedora).
 set -euo pipefail
 . /ctx/00-common.sh
 

@@ -7,9 +7,9 @@ name: Fix scrcpy sha pin
 # would fail its `sha256sum -c`. This recomputes SCRCPY_SHA256 on the
 # Renovate branch right after the version bump, so the PR is mergeable as-is.
 #
-# Same pattern as otiling-pin-sha.yml. Runs only on Renovate branches that touch
-# 70-phone-cam/install.sh. The hash is committed back via the GraphQL API
-# (createCommitOnBranch) so the commit is VERIFIED / GitHub-signed: main
+# Margine ran the same pattern for o-tiling and WSF. Runs only on Renovate
+# branches that touch 70-phone-cam/install.sh. The hash is committed back via
+# the GraphQL API (createCommitOnBranch) so the commit is VERIFIED / GitHub-signed: main
 # requires signed commits, and a plain `git commit` from the runner is unsigned
 # and would block the PR (needing an admin bypass). Like a GITHUB_TOKEN push, an
 # API commit does not re-trigger workflows, so there is no loop.

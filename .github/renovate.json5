@@ -24,8 +24,8 @@
       // Mechanics: platformAutomerge (Renovate default)
       // arms GitHub's native auto-merge on the PR; branch protection
       // requires the `lint` check, so a red PR can never slip through,
-      // and the pin-sync workflows (wsf/otiling fix-sha) pushing to the
-      // branch simply re-arm the wait on the new SHA. Major updates stay
+      // and the pin-sync workflow (scrcpy fix-sha) pushing to the branch
+      // simply re-arms the wait on the new SHA. Major updates stay
       // manual by design: they are the ones that break rebases and APIs.
       automerge: true,
       // Renovate-side automerge (NOT GitHub's platform auto-merge):
@@ -44,8 +44,8 @@
       ],
     },
     {
-      // Wait a day before proposing these three. Every one of them is
-      // pinned by the sha256 of a GitHub RELEASE ASSET, and a release is
+      // Wait a day before proposing this one. It is pinned by the sha256
+      // of a GitHub RELEASE ASSET, and a release is
       // not atomic: the tag exists, Renovate sees it, the PR opens, and
       // the zip is still uploading. On 2026-08-24 the o-tiling PR lost
       // that race by nineteen minutes:
@@ -57,12 +57,12 @@
       // Two red checks and a manual re-run, for a bump that was fine.
       // The comment at the top of this file records the same dance
       // happening by hand twice in August. A day is generous against a
-      // window measured in minutes, and none of these three is
-      // security-critical enough to want it sooner.
+      // window measured in minutes, and scrcpy is not security-critical
+      // enough to want it sooner. (o-tiling and wayland-scroll-factor were
+      // tracked the same way in Margine; their managers and fix-sha
+      // workflows were not carried over, see customManagers below.)
       matchDepNames: [
-        'oliwebd/o-tiling',
         'Genymobile/scrcpy',
-        'daniel-g-carrasco/wayland-scroll-factor',
       ],
       minimumReleaseAge: '1 day',
     },
@@ -147,44 +147,24 @@
   ],
   customManagers: [
     {
-      // chunkah is pinned as an env value (CHUNKAH_REF) in build.yml and
-      // build-lts.yml, which no built-in manager reads: without this, a new
-      // release never surfaced (upstream review 2026-10, issue #437).
+      // chunkah is pinned as an env value (CHUNKAH_REF) in build.yml,
+      // which no built-in manager reads: without this, a new release never
+      // surfaced (upstream review 2026-10, issue #437).
       customType: 'regex',
       managerFilePatterns: [
-        '/\\.github/workflows/build(-lts)?\\.yml$/',
+        '/\\.github/workflows/build\\.yml$/',
       ],
       matchStrings: [
         'CHUNKAH_REF: (?<depName>quay\\.io/coreos/chunkah):(?<currentValue>v\\d+\\.\\d+\\.\\d+)@(?<currentDigest>sha256:[a-f0-9]{64})',
       ],
       datasourceTemplate: 'docker',
     },
-    {
-      customType: 'regex',
-      managerFilePatterns: [
-        '/build_files/45-wsf/install\\.sh$/',
-      ],
-      matchStrings: [
-        'WSF_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)',
-      ],
-      depNameTemplate: 'daniel-g-carrasco/wayland-scroll-factor',
-      datasourceTemplate: 'github-releases',
-      extractVersionTemplate: '^v(?<version>.+)$',
-    },
-    {
-      // o-tiling (default tiler) is a sha256-pinned GitHub release. Renovate
-      // proposes the OTILING_VERSION bump; the companion workflow
-      // .github/workflows/otiling-pin-sha.yml recomputes OTILING_SHA256 on
-      // the Renovate branch (hosted Renovate can't hash a release zip).
-      // Added 2026-06-14 after o-tiling sat at 2.8.8 through the 2.8.11
-      // GNOME-50 toggle-reentrancy fix (oliwebd/o-tiling#15) — nothing was
-      // watching this pin.
-      customType: 'regex',
-      managerFilePatterns: ['/build_files/build-margine-extensions\\.sh$/'],
-      matchStrings: ['OTILING_VERSION="(?<currentValue>v\\d+\\.\\d+\\.\\d+)"'],
-      depNameTemplate: 'oliwebd/o-tiling',
-      datasourceTemplate: 'github-releases',
-    },
+    // No managers for wayland-scroll-factor (45-wsf) and o-tiling
+    // (build-margine-extensions.sh): both act only in the GNOME session,
+    // Lucciola's fallback, and Renovate can bump their version but not
+    // their sha256, which Margine's wsf-pin-sha and otiling-pin-sha
+    // workflows recomputed. Without those, every bump would be a red build.
+    // Their pins move by hand until the slimming decides whether they stay.
     {
       // scrcpy (Phone Camera engine), pinned release tarball in
       // 70-phone-cam. Same sha-companion pattern: renovate bumps
