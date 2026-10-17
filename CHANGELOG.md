@@ -7,6 +7,9 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (Noctalia 5.3.0)
+- **Noctalia 5.3.0.** Fedora 44 replaced 5.2.1 with 5.3.0 on 2026-10-17, and its updates repository keeps only the newest build, so the old pin stopped installing; on Fedora 45 5.3.0 is in updates-testing until it goes stable. Lucciola's config validates with no warnings, Keep Awake's plugin API is supported, and every `noctalia msg` command it uses is unchanged. Workspace labels no longer take the palette's hover colour, which was nearly the bar's own; the screens now go off one minute after the idle lock, as intended. Checked on screen in a VM with GPU-accelerated graphics (margine-image #518).
+
 ### Changed (Fedora 45)
 - **Lucciola is built on Fedora 45** (`silverblue-main:45`). The `:stable`
   image waits for Fedora 45's release on 27 October: until then Fedora

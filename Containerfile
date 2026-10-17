@@ -115,7 +115,7 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
 # tree, so it stays after every Margine step.
 # Bump only together with a test boot: see the comment in lucciola/build.sh.
 # Version and release only: build.sh adds the base's Fedora tag (.fc44, .fc45).
-ARG NOCTALIA_VR=5.2.1-1
+ARG NOCTALIA_VR=5.3.0-1
 COPY lucciola/system_files/ /
 RUN --mount=type=bind,from=lucciola-ctx,source=/build.sh,target=/ctx/lucciola/build.sh \
     --mount=type=cache,dst=/var/cache \
