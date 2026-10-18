@@ -12,7 +12,7 @@ Lucciola builds on Fedora Silverblue and Universal Blue, and adds a desktop made
 - The CachyOS kernel, signed with the project's own key, so Secure Boot stays on. The TPM can unlock the encrypted disk at boot.
 - Updates download in the background and apply at the next restart. The previous version stays in the boot menu, and your device checks every image's signature before installing it.
 - Zen Browser, Thunderbird, LibreOffice, GIMP, Inkscape, darktable and OBS Studio, with Bazaar to install more from Flathub. Common audio and video formats play out of the box. Distrobox and Toolbox run developer tools without changing the system.
-- What only some people need comes with one command instead of sitting in every install: Steam and the other game launchers (`ujust margine-gaming`, or `ujust margine-gaming-native` for the native Steam), virtual machines with virt-manager (`ujust margine-vm`).
+- What only some people need comes with one command instead of sitting in every install: Steam and the other game launchers (`ujust lucciola-gaming`, or `ujust lucciola-gaming-native` for the native Steam), virtual machines with virt-manager (`ujust lucciola-vm`).
 
 ## Requirements
 
@@ -36,10 +36,10 @@ Lucciola has no installer image yet: you switch to it from a Fedora Atomic syste
    ```
    The first download is unverified on purpose: a stock Fedora system has no signature policy for Lucciola, and rpm-ostree refuses the signed transport under its default policy. The policy comes with the image, and at the first boot Lucciola moves itself to the signed transport, so every update after that is checked.
 3. The login screen opens on Lucciola: enter your password. GNOME is in the session list too.
-4. Restart once more. A blue screen asks you to register the key: press a key within 10 seconds, then choose Enroll MOK, Continue and Yes, type `margine` and choose Reboot. `ujust margine-secureboot enroll` makes that screen wait for you.
-5. Turn Secure Boot back on when `ujust margine-secureboot` says the key is in place.
+4. Restart once more. A blue screen asks you to register the key: press a key within 10 seconds, then choose Enroll MOK, Continue and Yes, type `margine` and choose Reboot. `ujust lucciola-secureboot enroll` makes that screen wait for you.
+5. Turn Secure Boot back on when `ujust lucciola-secureboot` says the key is in place.
 
-Some commands still begin with `margine-`, after Margine OS, the project Lucciola grew from. I will rename them.
+The commands begin with `lucciola-`: `ujust lucciola-update`, `ujust lucciola-status`, and `ujust --list` for the rest. Their old `margine-` names, from Margine OS, the project Lucciola grew from, still work.
 
 ## Verify the image signature
 
@@ -56,7 +56,7 @@ A valid signature prints the verified payload and exits 0. The public key is [`s
 ## This repository
 
 - `Containerfile` and `build_files/`: the build, as numbered steps on top of `ghcr.io/ublue-os/silverblue-main:45`.
-- `lucciola/`: the desktop, with niri's and Noctalia's defaults and the session.
+- `lucciola/`: the desktop, with niri's and Noctalia's defaults and the session; `lucciola/assets/` holds the logo, the wallpaper and the boot splash ([`docs/BRANDING.md`](docs/BRANDING.md) maps where each appears).
 - `.github/workflows/`: every change builds a candidate image, boots it in a virtual machine with Secure Boot and a TPM, and only then promotes it to `:stable`; another test updates a machine from the previous image to the new one.
 
 To build locally you need a MOK key and certificate to sign the kernel with (an image signed with your own key starts with Secure Boot on only after you enroll that key):

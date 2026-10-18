@@ -7,6 +7,44 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (Lucciola's own identity)
+- **Lucciola looks like Lucciola from the boot to the desktop.** Until now
+  the boot splash, the About page, notifications and the commands still
+  showed Margine OS, and the login screen and the desktop showed Margine's
+  and Noctalia's wallpapers.
+  - **Boot splash:** the lucciola wordmark centred on the dark surface, its
+    firefly breathing slowly as on the website (6 seconds, bright to dim
+    and back). The disk password prompt matches: a field in the login
+    screen's colours, a small firefly for each character typed, and a
+    "Caps Lock is on" hint. Sharp on HiDPI screens: the splash sizes itself
+    in the screen's own pixels.
+  - **Wallpaper:** dusk over dark hills with a few fireflies, on the
+    desktop, the login screen and the GNOME session (renders for 16:9, 3:2
+    and 16:10 screens in `/usr/share/backgrounds/lucciola/`). A wallpaper
+    picked by hand stays. The login screen of an existing install changes
+    too: its old wallpaper path now leads to the new one.
+  - **Logo:** the firefly on a dark tile is the system's logo (the About
+    page, notifications on the desktop and the lock screen), with the
+    wordmark as the About page's distributor logo; the login screen shows
+    the firefly at the bottom. fastfetch draws the firefly over the name
+    in the palette, and the console banner and the boot messages name
+    Lucciola, in its beige.
+  - **Login screen:** a wrong password reads "Wrong password, try again"
+    instead of `pam_authenticate: AUTH_ERR` (and too many attempts, an
+    expired account or password are said in words too).
+  - **Names:** the commands are `lucciola-*`: `ujust lucciola-update`,
+    `ujust lucciola-status`, `lucciola-fetch`, and the rest in
+    `ujust --list`. **The old `margine-*` names keep working**, as aliases
+    that `ujust --list` shows next to the new ones. The System app is
+    "Lucciola System", with an icon in Lucciola's colours (a dock pin of
+    it keeps working), next to "Lucciola CPU Scheduler"; the phone webcam
+    appears to apps as "Lucciola Phone Cam" after the next restart;
+    `ujust lucciola-report` writes `~/lucciola-report.txt`; new installs
+    are called `lucciola` on the network.
+  - Under the hood, unchanged on purpose: paths, unit names and
+    `VARIANT_ID` keep `margine`, and Secure Boot still asks for the
+    "Margine key" with the password `margine`.
+
 ### Removed (lighter image: on demand instead of in every install)
 - **What only some people use is installed when they ask for it.** Measured
   on two local builds of the same base (this branch and its parent): 450
