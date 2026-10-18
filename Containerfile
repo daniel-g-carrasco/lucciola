@@ -5,9 +5,9 @@
 #
 # This Containerfile composes the Lucciola image as:
 #
-#   FROM ghcr.io/ublue-os/silverblue-main:44  (Universal Blue main: Fedora Silverblue 44)
+#   FROM ghcr.io/ublue-os/silverblue-main:45  (Universal Blue main: Fedora Silverblue 45)
 #   + custom kernel from CachyOS COPR (signed with our MOK)
-#   + the Margine OS layer (build_files/: update flow, Secure Boot and TPM
+#   + the layer inherited from Margine OS (build_files/: update flow, Secure Boot and TPM
 #     tooling, branding, the GTK defaults, Flatpaks)
 #   + the Lucciola layer (lucciola/: niri, Noctalia, the Lucciola session;
 #     GNOME stays as a stock fallback session)
