@@ -27,11 +27,24 @@ have_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
 
+# The kernel reserve (:fedora-kernel) keeps Fedora's kernel on purpose and
+# says so in /usr/share/margine/kernel-flavor; there the checks below turn
+# around: Fedora's kernel expected, no CachyOS kernel package.
+flavor=$(head -n1 /usr/share/margine/kernel-flavor 2>/dev/null || true)
+[[ "$flavor" == fedora ]] || flavor=cachyos
+
 section "Kernel"
 kernel=$(uname -a)
 printf '%s\n' "$kernel"
+printf 'image kernel flavour: %s\n' "$flavor"
 
-if printf '%s\n' "$kernel" | grep -Eiq 'cachy|cachyos'; then
+if [[ "$flavor" == fedora ]]; then
+  if [[ "$(uname -r)" =~ \.fc[0-9]+\. && "$(uname -r)" != *cachy* ]]; then
+    ok "running kernel is Fedora's (the kernel reserve)"
+  else
+    fail "this is the kernel reserve image, but the running kernel is not Fedora's"
+  fi
+elif printf '%s\n' "$kernel" | grep -Eiq 'cachy|cachyos'; then
   ok "running kernel appears to be CachyOS"
 else
   fail "running kernel does not appear to be CachyOS"
@@ -40,7 +53,15 @@ fi
 section "Installed CachyOS packages"
 if have_cmd rpm; then
   cachy_packages=$(rpm -qa | grep -Ei 'cachy|kernel-cachyos' | sort || true)
-  if [[ -n "$cachy_packages" ]]; then
+  if [[ "$flavor" == fedora ]]; then
+    cachy_packages=$(rpm -qa | grep -Ei '^kernel-cachyos' | sort || true)
+    if [[ -n "$cachy_packages" ]]; then
+      printf '%s\n' "$cachy_packages"
+      fail "CachyOS kernel packages in the kernel reserve image"
+    else
+      ok "no CachyOS kernel package (the kernel reserve keeps Fedora's)"
+    fi
+  elif [[ -n "$cachy_packages" ]]; then
     printf '%s\n' "$cachy_packages"
     ok "CachyOS-related RPMs detected"
   else
@@ -86,7 +107,13 @@ if have_cmd rpm; then
   fedora_kernel_packages=$(rpm -qa | grep -E '^kernel(-core|-modules|-modules-core|-modules-extra)?-[0-9]' | sort || true)
   if [[ -n "$fedora_kernel_packages" ]]; then
     printf '%s\n' "$fedora_kernel_packages"
-    warn "Fedora kernel packages still visible; if booted into CachyOS check 'rpm-ostree status' and 'uname -a' to confirm active deployment"
+    if [[ "$flavor" == fedora ]]; then
+      ok "Fedora kernel packages present (the kernel reserve)"
+    else
+      warn "Fedora kernel packages still visible; if booted into CachyOS check 'rpm-ostree status' and 'uname -a' to confirm active deployment"
+    fi
+  elif [[ "$flavor" == fedora ]]; then
+    fail "no Fedora kernel package in the kernel reserve image"
   else
     ok "Fedora kernel packages are not visible in current deployment"
   fi
@@ -96,7 +123,11 @@ section "Secure Boot"
 if have_cmd mokutil; then
   if sb_state=$(mokutil --sb-state 2>&1); then
     printf '%s\n' "$sb_state"
-    if printf '%s\n' "$sb_state" | grep -qi 'enabled'; then
+    if [[ "$flavor" == fedora ]] && printf '%s\n' "$sb_state" | grep -qi 'enabled'; then
+      ok "Fedora's kernel is booted with Secure Boot enabled (signed by Fedora)"
+    elif [[ "$flavor" == fedora ]]; then
+      warn "Secure Boot is not enabled"
+    elif printf '%s\n' "$sb_state" | grep -qi 'enabled'; then
       warn "CachyOS kernel is booted with Secure Boot enabled; confirm signing/MOK/trust path is documented"
     else
       warn "Secure Boot is not enabled; this CachyOS result is lab-only and not target-compliant"

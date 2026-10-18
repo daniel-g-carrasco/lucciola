@@ -347,7 +347,7 @@ lucciola-gaming-native-remove:
 #
 #   ujust lucciola-scheduler          # show current state
 #   ujust lucciola-scheduler lavd     # start/switch to a shipped scheduler
-#   ujust lucciola-scheduler off      # stop scx_loader, return to BORE
+#   ujust lucciola-scheduler off      # stop scx_loader, back to the kernel default (BORE, EEVDF on Fedora's kernel)
 # Switch the CPU scheduler (sched_ext/BPF): status, off, or a scxctl name.
 [group('Performance')]
 lucciola-scheduler $MODE="status":
@@ -417,7 +417,9 @@ lucciola-scheduler $MODE="status":
         ;;
 
       default|stop|off)
-        echo "Stopping scx_loader.service; kernel default (BORE on Lucciola) takes over."
+        kdef=EEVDF
+        grep -q '^CONFIG_SCHED_BORE=y' "/usr/lib/modules/$(uname -r)/config" 2>/dev/null && kdef=BORE
+        echo "Stopping scx_loader.service; the kernel default ($kdef) takes over."
         stop_loader
         echo "ok - scx_loader.service is stopped and disabled."
         ;;
@@ -889,6 +891,24 @@ lucciola-update FORCE="":
     # client-layered deployment, e.g. after lucciola-gaming-native, so
     # layered systems must go through rpm-ostree.)
     sudo /usr/libexec/margine/system-update
+
+# Kernel: which one runs, or switch between the CachyOS kernel (:stable) and
+# Fedora's (the kernel reserve, :fedora-kernel): status / cachyos / fedora.
+# A bootc image carries one kernel, so this moves the install to the other
+# image (same commit, same base) at the next restart; the logic, the TPM
+# notice and the refusals live in /usr/libexec/margine/kernel-switch.
+[doc("Kernel: status, or switch between the CachyOS kernel (:stable) and Fedora's (:fedora-kernel).")]
+[group('Lucciola')]
+lucciola-kernel $ACTION="status":
+    #!/usr/bin/bash
+    set -uo pipefail
+    # ACTION arrives as an exported env var ($ on the param): a hostile
+    # argument stays inert data.
+    case "$ACTION" in
+      status|"")      exec /usr/libexec/margine/kernel-switch status ;;
+      cachyos|fedora) exec sudo /usr/libexec/margine/kernel-switch "$ACTION" ;;
+      *) echo "usage: ujust lucciola-kernel [status|cachyos|fedora]"; exit 1 ;;
+    esac
 
 # Enable/disable/inspect autologin on the login screen (greetd; default: status, read-only).
 [group('Lucciola')]
@@ -2057,6 +2077,7 @@ alias margine-gaming-remove := lucciola-gaming-remove
 alias margine-grub-hidpi := lucciola-grub-hidpi
 alias margine-grub-lock := lucciola-grub-lock
 alias margine-home-stock := lucciola-home-stock
+alias margine-kernel := lucciola-kernel
 alias margine-keyring := lucciola-keyring
 alias margine-naked := lucciola-naked
 alias margine-netflix-1080p := lucciola-netflix-1080p

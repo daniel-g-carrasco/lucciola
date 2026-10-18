@@ -33,6 +33,8 @@ capture_shell() {
 
 capture os-release.txt cat /etc/os-release
 capture uname.txt uname -a
+# cachyos, or fedora on the kernel reserve (:fedora-kernel)
+capture kernel-flavor.txt cat /usr/share/margine/kernel-flavor
 capture date-utc.txt date -u
 capture rpm-ostree-status.txt rpm-ostree status
 capture rpm-ostree-status-v.txt rpm-ostree status -v

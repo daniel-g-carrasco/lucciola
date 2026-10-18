@@ -7,6 +7,39 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Added (the kernel reserve: Lucciola with Fedora's kernel)
+- **A second image, `:fedora-kernel`, the same Lucciola with Fedora's own
+  kernel instead of the CachyOS one.** A bootc image carries one kernel,
+  so the fallback is an image: built from the same commit and the same
+  base as the current `:stable`, right after each promotion, signed the
+  same way (with its SBOM) and published only after the same QEMU boot
+  test with Secure Boot and a TPM. Fedora's kernel is generic x86-64 and
+  signed by Fedora: it starts on processors without x86-64-v3, and it is
+  the way out when a CachyOS kernel update misbehaves.
+  - **Switching:** `ujust lucciola-kernel fedora`, `ujust lucciola-kernel
+    cachyos`, and `ujust lucciola-kernel` to see which kernel runs. It
+    moves the install to the other image at the next restart, keeps the
+    signature-checked transport and layered packages, and leaves the
+    previous system in the boot menu. It refuses the CachyOS kernel on a
+    processor without x86-64-v3, or with Secure Boot on and the Margine key
+    not enrolled.
+  - **TPM disk unlock:** with Secure Boot on, PCR 7 records which key
+    signed the kernel, so the first boot after a switch asks for the disk
+    passphrase. The command says so before it switches, and what to run
+    after that boot: `ujust lucciola-tpm-unlock enable`.
+  - **The same everywhere else:** the phone camera's v4l2loopback is built
+    against Fedora's kernel and signed with the Margine key, the CPU
+    scheduler picker works (Fedora's kernel has sched_ext; its default is
+    EEVDF instead of BORE), same firmware, same apps. Fedora's kernel and
+    its modules keep Fedora's signature.
+  - Under the hood: `--build-arg KERNEL_FLAVOR=fedora` (default `cachyos`,
+    so `:stable` is built as before), `build-fedora-kernel.yml` (after each
+    promotion, and a manual run that publishes only `:fedora-kernel-test`),
+    `/usr/share/margine/kernel-flavor` in both images, and the validators,
+    `lucciola-status` and the boot probes accept Fedora's kernel on the
+    reserve only. The tag name lives in
+    `/usr/share/margine/kernel-reserve-tag`.
+
 ### Changed (Lucciola's own identity)
 - **Lucciola looks like Lucciola from the boot to the desktop.** Until now
   the boot splash, the About page, notifications and the commands still

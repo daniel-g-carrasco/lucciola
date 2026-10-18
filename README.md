@@ -32,6 +32,8 @@ This first download is unverified because a stock Fedora system has no signature
 
 The guide in [`site/`](site/index.html) walks through every step, including how to register Lucciola's key and turn Secure Boot back on.
 
+No x86-64-v3, or a CachyOS kernel update misbehaving on your PC? `ghcr.io/daniel-g-carrasco/lucciola:fedora-kernel` is the same system with Fedora's own kernel, and `ujust lucciola-kernel fedora` switches an installed system to it.
+
 ## More
 
 - [`lucciola/README.md`](lucciola/README.md): how the desktop layer is put together, and how to build the image.

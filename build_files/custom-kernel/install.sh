@@ -12,6 +12,15 @@
 #     0009, were not carried over to Lucciola)
 #   - signing is mandatory: this image is meant to boot under Secure Boot
 #
+# KERNEL_FLAVOR (build argument, 2026-10-18) picks the kernel:
+#   cachyos  (default) the above: :stable, :candidate, every PR image
+#   fedora   the kernel reserve: the base's own Fedora kernel stays, signed
+#            by Fedora and built for any x86-64 CPU. No kernel COPR, no
+#            swap, vmlinuz and Fedora's modules untouched; only what this
+#            build compiles (v4l2loopback) is signed with the MOK. Every
+#            other step below runs the same for both. Published as
+#            :fedora-kernel by build-fedora-kernel.yml.
+#
 # Inputs (BuildKit secrets):
 #   /run/margine-certs/MOK.key        — RSA private key (PEM)
 #   /run/margine-certs/MOK.pem        — X509 certificate (PEM)
@@ -144,10 +153,25 @@ REPOEOF
 }
 # kernel-cachyos is built for x86-64-v3 (CONFIG_X86_64_VERSION=3, read from
 # the package) and hangs at decompression on an x86-64-v2 CPU, before it can
-# print anything; the image has no fallback kernel (issue #382).
-KERNEL_PKG="kernel-cachyos"
-KERNEL_DEVEL_PKG="kernel-cachyos-devel-matched"
-KERNEL_PACKAGES=(kernel-cachyos kernel-cachyos-core kernel-cachyos-modules "$KERNEL_DEVEL_PKG")
+# print anything; the image has no fallback kernel (issue #382). The kernel
+# reserve (KERNEL_FLAVOR=fedora, see the header) is the image for those CPUs.
+KERNEL_FLAVOR="${KERNEL_FLAVOR:-cachyos}"
+case "$KERNEL_FLAVOR" in
+  cachyos)
+    KERNEL_PKG="kernel-cachyos"
+    KERNEL_DEVEL_PKG="kernel-cachyos-devel-matched"
+    KERNEL_PACKAGES=(kernel-cachyos kernel-cachyos-core kernel-cachyos-modules "$KERNEL_DEVEL_PKG")
+    ;;
+  fedora)
+    # kernel-core owns vmlinuz and carries the version; kernel-devel of
+    # exactly that version is fetched below, for akmods only.
+    KERNEL_PKG="kernel-core"
+    KERNEL_DEVEL_PKG="kernel-devel"
+    KERNEL_PACKAGES=()
+    ;;
+  *) err "unknown KERNEL_FLAVOR '$KERNEL_FLAVOR' (cachyos|fedora)"; exit 1 ;;
+esac
+log "Kernel flavour: $KERNEL_FLAVOR"
 # TRANSIENT packages are installed for build time only and removed at the end.
 # sbsigntools provides sbsign/sbverify; akmods is needed for v4l2loopback (best-effort).
 TRANSIENT=(akmods sbsigntools "$KERNEL_DEVEL_PKG")
@@ -239,11 +263,24 @@ sign_kernel() {
 
 sign_kernel_modules() {
   _module_root="/usr/lib/modules/${KERNEL_VERSION}"
-  _sign_file="${_module_root}/build/scripts/sign-file"
-  [[ -x "$_sign_file" ]] || { err "sign-file missing: $_sign_file"; return 1; }
   find "$_module_root" -type f \( \
       -name "*.ko" -o -name "*.ko.xz" -o -name "*.ko.zst" -o -name "*.ko.gz" \
-    \) | while IFS= read -r _mod; do
+    \) | sign_module_files
+}
+
+# Sign the module files named on stdin (one path per line) with the MOK.
+# The CachyOS flavour feeds it every module of the kernel; the Fedora
+# flavour only what this build compiled, because Fedora's own modules
+# carry Fedora's signature, which the kernel trusts without the MOK:
+# signing them again would make every module depend on an enrolled MOK.
+# xz with CRC32 and a 1 MiB dictionary, as the kernel's own module install
+# does (scripts/Makefile.modinst): with CONFIG_MODULE_DECOMPRESS (Fedora's
+# kernel) kmod hands the .ko.xz to the kernel, whose xz decoder checks
+# CRC32 only, and xz's default (CRC64) would not load.
+sign_module_files() {
+  _sign_file="/usr/lib/modules/${KERNEL_VERSION}/build/scripts/sign-file"
+  [[ -x "$_sign_file" ]] || { err "sign-file missing: $_sign_file"; return 1; }
+  while IFS= read -r _mod; do
     case "$_mod" in
       *.ko)
         "$_sign_file" sha256 "$SIGNING_KEY" "$SIGNING_CERT" "$_mod" ;;
@@ -251,12 +288,16 @@ sign_kernel_modules() {
         _raw="${_mod%.xz}"
         xz -d -q "$_mod"
         "$_sign_file" sha256 "$SIGNING_KEY" "$SIGNING_CERT" "$_raw"
-        xz -z -q "$_raw" ;;
+        xz -z -q --check=crc32 --lzma2=dict=1MiB "$_raw" ;;
       *.ko.zst)
         _raw="${_mod%.zst}"
         zstd -d -q --rm "$_mod"
         "$_sign_file" sha256 "$SIGNING_KEY" "$SIGNING_CERT" "$_raw"
-        zstd -q "$_raw" ;;
+        # --rm: unlike xz and gzip, zstd keeps its input. Without it every
+        # CachyOS module shipped twice, the signed .ko.zst that modules.dep
+        # names and an uncompressed .ko nothing loads: 6491 files, 686 MiB
+        # on 7.2.9-cachyos1 (counted on an installed system, 2026-10-18).
+        zstd -q --rm "$_raw" ;;
       *.ko.gz)
         _raw="${_mod%.gz}"
         gunzip -q "$_mod"
@@ -264,6 +305,64 @@ sign_kernel_modules() {
         gzip -q "$_raw" ;;
     esac
   done
+}
+
+# install_fedora_kernel_devel <kver>
+# akmods, with kernel-devel of exactly the base's kernel to build
+# v4l2loopback against. Two traps, both met on the first try (2026-10-18):
+#   - akmods requires "(kernel-devel-matched if kernel-core)", and
+#     kernel-devel-matched requires kernel-core of its own version: asked
+#     for akmods alone, dnf took the newest kernel-devel-matched and
+#     UPGRADED the kernel (7.2.9 to 7.2.11, from updates-testing). So
+#     kernel-devel and kernel-devel-matched of the base's version go into
+#     the same transaction as akmods, with the kernel packages excluded:
+#     if that cannot resolve, v4l2loopback is skipped; the kernel stays.
+#   - the base is a snapshot and lags the repositories: silverblue-main:45
+#     shipped 7.2.9-300.fc45 while Fedora offered only 7.2.11 (a branched
+#     release keeps no superseded builds; updates-archive gets only
+#     superseded updates). So the repositories first, then Koji, where
+#     every build stays, in the copy Fedora signed with the release key.
+# Either way the RPMs are checked against Fedora's release key before dnf
+# sees them: dnf does not check the signature of a local file.
+install_fedora_kernel_devel() {
+  local kver="$1" v r a keyfile="" fpr keyid dir pkg f out
+  v="$(rpm -q --qf '%{VERSION}\n' kernel-core | head -n1)"
+  r="$(rpm -q --qf '%{RELEASE}\n' kernel-core | head -n1)"
+  a="$(rpm -q --qf '%{ARCH}\n' kernel-core | head -n1)"
+  [[ "${v}-${r}.${a}" == "$kver" ]] || { err "kernel-core is ${v}-${r}.${a}, not $kver"; return 1; }
+  for f in "/usr/share/pki/rpm-gpg/RPM-GPG-KEY-fedora-${FEDORA_VER}-primary" \
+           "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-${FEDORA_VER}-primary"; do
+    [[ -s "$f" ]] && { keyfile="$f"; break; }
+  done
+  [[ -n "$keyfile" ]] || { err "no Fedora ${FEDORA_VER} release key in the image"; return 1; }
+  dir=/run/kernel-devel
+  rm -rf "$dir"; mkdir -p "$dir"
+  if retry 2 15 bash -c 'dnf -y clean metadata >/dev/null 2>&1 || true; exec dnf -y download --destdir "$0" "$@"' \
+       "$dir" "kernel-devel-${kver}" "kernel-devel-matched-${kver}"; then
+    log "kernel-devel-${kver}: downloaded from the repositories"
+  else
+    log "kernel-devel-${kver} is not in the repositories any more: fetching Fedora's signed build from Koji"
+    rm -f "$dir"/*.rpm
+    fpr="$(key_fingerprint "$keyfile")" || return 1
+    [[ "$fpr" =~ ^[0-9A-F]{40}$ ]] || { err "unreadable fingerprint for $keyfile"; return 1; }
+    # Koji keeps each signed copy under the key id: the fingerprint's last 8
+    # digits, in lower case.
+    keyid="${fpr: -8}"
+    for pkg in kernel-devel kernel-devel-matched; do
+      retry_curl_strict "https://kojipkgs.fedoraproject.org/packages/kernel/${v}/${r}/data/signed/${keyid,,}/${a}/${pkg}-${kver}.rpm" \
+        "$dir/${pkg}-${kver}.rpm" || return 1
+    done
+  fi
+  rpmkeys --import "$keyfile" || true   # already in the rpmdb on a Fedora base
+  for f in "$dir"/*.rpm; do
+    out="$(rpmkeys --checksig "$f" 2>&1)" || true
+    [[ "$out" == *"signatures OK"* ]] \
+      || { err "$(basename "$f") does not carry a valid Fedora ${FEDORA_VER} signature: $out"; return 1; }
+    log "  $out"
+  done
+  retry 3 30 bash -c 'dnf -y clean metadata >/dev/null 2>&1 || true; exec dnf -y install --refresh --exclude=kernel,kernel-core,kernel-modules,kernel-modules-core,kernel-modules-extra "$@"' \
+    _ "$dir"/*.rpm akmods || { err "akmods with kernel-devel-${kver} did not install"; return 1; }
+  rm -rf "$dir"
 }
 
 create_mok_enroll_unit() {
@@ -312,45 +411,96 @@ EOF
 # Main flow
 # ---------------------------------------------------------------------------
 
-log "Disabling kernel install hooks for the duration of the swap"
-disable_kernel_install_hooks
+KDEVEL_OK=1
+if [[ "$KERNEL_FLAVOR" == cachyos ]]; then
+  log "Disabling kernel install hooks for the duration of the swap"
+  disable_kernel_install_hooks
 
-log "Removing the stock kernel packages"
-dnf -y remove \
-    kernel kernel-core kernel-modules kernel-modules-core kernel-modules-extra \
-    kernel-devel kernel-devel-matched || true
-rm -rf /usr/lib/modules/* || true
+  log "Removing the stock kernel packages"
+  dnf -y remove \
+      kernel kernel-core kernel-modules kernel-modules-core kernel-modules-extra \
+      kernel-devel kernel-devel-matched || true
+  rm -rf /usr/lib/modules/* || true
 
-log "Enabling COPR: $COPR_REPO"
-copr_enable_direct "$COPR_REPO" "$COPR_CACHYOS_FPR" || exit 1
+  log "Enabling COPR: $COPR_REPO"
+  copr_enable_direct "$COPR_REPO" "$COPR_CACHYOS_FPR" || exit 1
 
-# On self-hosted runners, /var/cache is a persistent BuildKit cache
-# mount. A previous failed download (e.g. a partial RPM with bad
-# SHA256) gets stored there and dnf will keep re-using it, failing
-# every subsequent build with "Payload SHA256 ALT digest: BAD".
-# Clean packages + metadata before install so each kernel pull is fresh.
-log "Cleaning dnf packages + metadata to avoid cache poisoning on persistent runners"
-dnf -y clean packages metadata
+  # On self-hosted runners, /var/cache is a persistent BuildKit cache
+  # mount. A previous failed download (e.g. a partial RPM with bad
+  # SHA256) gets stored there and dnf will keep re-using it, failing
+  # every subsequent build with "Payload SHA256 ALT digest: BAD".
+  # Clean packages + metadata before install so each kernel pull is fresh.
+  log "Cleaning dnf packages + metadata to avoid cache poisoning on persistent runners"
+  dnf -y clean packages metadata
 
-log "Installing CachyOS kernel: ${KERNEL_PACKAGES[*]}"
-# COPR (copr.fedorainfracloud.org) is occasionally slow or returns 5xx
-# / curl timeouts for several minutes — observed 2026-06-02 with run
-# #26838562527 dying at "Curl error (28): Timeout was reached" after
-# 5 internal librepo retries. Outer retry (shared helper) with backoff
-# so transient COPR brownouts don't sink the whole 28-min image build.
-# Each attempt cleans metadata first to dodge the bad-metadata-cached
-# failure mode (see comment above).
-retry 5 30 bash -c 'dnf -y clean metadata >/dev/null 2>&1 || true; exec dnf -y install --refresh "$@"' _ "${KERNEL_PACKAGES[@]}" akmods \
-  || { err "CachyOS kernel install FAILED after 5 attempts (COPR likely down)"; exit 1; }
+  log "Installing CachyOS kernel: ${KERNEL_PACKAGES[*]}"
+  # COPR (copr.fedorainfracloud.org) is occasionally slow or returns 5xx
+  # / curl timeouts for several minutes: observed 2026-06-02 with run
+  # #26838562527 dying at "Curl error (28): Timeout was reached" after
+  # 5 internal librepo retries. Outer retry (shared helper) with backoff
+  # so transient COPR brownouts don't sink the whole 28-min image build.
+  # Each attempt cleans metadata first to dodge the bad-metadata-cached
+  # failure mode (see comment above).
+  retry 5 30 bash -c 'dnf -y clean metadata >/dev/null 2>&1 || true; exec dnf -y install --refresh "$@"' _ "${KERNEL_PACKAGES[@]}" akmods \
+    || { err "CachyOS kernel install FAILED after 5 attempts (COPR likely down)"; exit 1; }
 
-KERNEL_VERSION="$(rpm -q "$KERNEL_PKG" --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')"
-log "Installed kernel: $KERNEL_VERSION"
+  KERNEL_VERSION="$(rpm -q "$KERNEL_PKG" --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')"
+  log "Installed kernel: $KERNEL_VERSION"
 
-log "Restoring kernel install hooks"
-restore_kernel_install_hooks
+  log "Restoring kernel install hooks"
+  restore_kernel_install_hooks
 
-log "Removing COPR repo file (kept only at build time)"
-rm -f /etc/yum.repos.d/*copr*
+  log "Removing COPR repo file (kept only at build time)"
+  rm -f /etc/yum.repos.d/*copr*
+else
+  # The kernel reserve: Fedora's kernel, as the base ships it. Nothing is
+  # removed or installed in its place; this only checks that the base has
+  # exactly one kernel, Fedora's, signed for Secure Boot, and prepares the
+  # same akmods build the CachyOS flavour does.
+  KERNEL_VERSION="$(rpm -q "$KERNEL_PKG" --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}\n' | head -n1)"
+  [[ "$KERNEL_VERSION" =~ ^[0-9] ]] || { err "the base has no $KERNEL_PKG package: no Fedora kernel to keep"; exit 1; }
+  mapfile -t _kdirs < <(find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d -printf '%f\n')
+  if [[ "${#_kdirs[@]}" -ne 1 || "${_kdirs[0]}" != "$KERNEL_VERSION" ]]; then
+    err "expected exactly /usr/lib/modules/$KERNEL_VERSION, found: ${_kdirs[*]:-nothing}"; exit 1
+  fi
+  [[ -s "/usr/lib/modules/${KERNEL_VERSION}/vmlinuz" ]] || { err "no vmlinuz for $KERNEL_VERSION"; exit 1; }
+  # shim boots it with the vendor certificate it carries (Fedora's CA), so
+  # the image must ship it exactly as Fedora signed it.
+  _sigs="$(sbverify --list "/usr/lib/modules/${KERNEL_VERSION}/vmlinuz" 2>&1 || true)"
+  grep -q 'Fedora' <<<"$_sigs" \
+    || { err "vmlinuz $KERNEL_VERSION carries no Fedora signature: $(tr '\n' ' ' <<<"$_sigs")"; exit 1; }
+  log "Keeping Fedora's kernel: $KERNEL_VERSION (signed by Fedora)"
+
+  # What the CachyOS flavour loses with the stock kernel, the reserve
+  # drops too, so the two images differ in the kernel alone: removing the
+  # kernel packages takes the packages that require them
+  # (virtualbox-guest-additions on silverblue-main:45, with its enabled
+  # vboxservice unit). Asked of dnf the same way, without running it; only
+  # the dependents are removed, never a kernel package (the guard at the
+  # end of this step checks).
+  _plan="$(dnf remove --assumeno kernel kernel-core kernel-modules kernel-modules-core kernel-modules-extra \
+             kernel-devel kernel-devel-matched 2>&1 || true)"
+  mapfile -t _with_kernel < <(awk '/^Removing dependent packages:/ {f=1; next} /^[^ ]/ {f=0} f && NF {print $1}' <<<"$_plan" \
+                                | grep -v '^kernel' | sort -u || true)
+  if (( ${#_with_kernel[@]} )); then
+    log "Removing what the CachyOS flavour removes with the stock kernel: ${_with_kernel[*]}"
+    dnf -y remove --setopt=clean_requirements_on_remove=False "${_with_kernel[@]}"
+  fi
+
+  log "Cleaning dnf packages + metadata to avoid cache poisoning on persistent runners"
+  dnf -y clean packages metadata
+  if ! install_fedora_kernel_devel "$KERNEL_VERSION"; then
+    # No akmods then, so no v4l2loopback (best-effort, as below), and
+    # nothing of it to remove at the end.
+    KDEVEL_OK=0
+    TRANSIENT=(sbsigntools)
+  fi
+
+  # Same as the CachyOS flavour: the base's COPR repo files leave the
+  # image, so both flavours ship the same /etc/yum.repos.d.
+  log "Removing COPR repo files (as the CachyOS flavour does)"
+  rm -f /etc/yum.repos.d/*copr*
+fi
 
 # Refresh GPU firmware + microcode to match the (newer) CachyOS kernel.
 # The CachyOS kernel can be newer than the base image's linux-firmware
@@ -359,7 +509,10 @@ rm -f /etc/yum.repos.d/*copr*
 # black-screen before GDM on bare metal — invisible to the virtio-gpu CI
 # gate. Upgrade ONLY the firmware packages actually installed (so an
 # unknown-package name can't abort the transaction), from the always-on
-# Fedora repos; never block the build on it.
+# Fedora repos; never block the build on it. The Fedora flavour runs it
+# too: its kernel matches the base's firmware already, but the same
+# firmware in both images keeps their layers shared and their hardware
+# support the same.
 FW_PKGS="$(rpm -qa --qf '%{NAME}\n' 'linux-firmware*' 'amd-gpu-firmware*' 'amd-ucode*' 2>/dev/null | sort -u | tr '\n' ' ')"
 if [[ -n "${FW_PKGS// /}" ]]; then
   log "Refreshing firmware/microcode for $KERNEL_VERSION: $FW_PKGS"
@@ -390,7 +543,9 @@ log "Building v4l2loopback against $KERNEL_VERSION (best-effort)"
 install -d -m 1777 /var/tmp
 chmod 1777 /tmp /var/tmp
 V4L2_OK=0
-if disable_akmodsbuild; then
+if (( ! KDEVEL_OK )); then
+  log "no kernel-devel for $KERNEL_VERSION: v4l2loopback skipped"
+elif disable_akmodsbuild; then
   if dnf -y install \
         "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm" \
      && verify_rpmfusion_keys free \
@@ -451,6 +606,11 @@ fi
 # install — gaming variant inherits it without re-adding. Enable the
 # COPR just for the install, then disable + scrub the repo file so user
 # systems don't pull random updates from it outside our pipeline.
+# The Fedora flavour installs it too: Fedora's kernel has sched_ext
+# (CONFIG_SCHED_CLASS_EXT=y, 7.2.9-300.fc45), and Fedora's repositories
+# have no scx_loader or scxctl (only the 0.0.x scx_layered, scx_rusty and
+# scx_rustland of 2024), so this addons COPR is the one COPR that build
+# still reads; the kernel COPR it never touches.
 log "Enabling kernel-cachyos-addons COPR for scx-scheds"
 copr_enable_direct bieszczaders/kernel-cachyos-addons "$COPR_ADDONS_FPR" || exit 1
 # Same COPR host as the kernel (copr.fedorainfracloud.org), same 5xx /
@@ -603,20 +763,43 @@ fi
 # ---------------------------------------------------------------------------
 # Signing
 # ---------------------------------------------------------------------------
-log "Signing kernel image with MOK"
-sign_kernel
-
-log "Signing kernel modules with MOK"
-sign_kernel_modules
-# Signing rewrites every module, so each one carried the build time and the
+# Signing rewrites a module, so it would carry the build time, and the
 # modules' layers (and the initramfs that packs them) changed on every build
 # with identical bytes inside. Back to the kernel package's build time, the
 # same clock vmlinuz is signed with.
 _mod_epoch=$(rpm -q --qf '%{BUILDTIME}\n' "$KERNEL_PKG" | head -n1)
 [[ "$_mod_epoch" =~ ^[0-9]+$ ]] || { err "no build time for $KERNEL_PKG"; exit 1; }
-find "/usr/lib/modules/${KERNEL_VERSION}" -type f \( -name '*.ko' -o -name '*.ko.*' \) \
-  -exec touch -h -d "@${_mod_epoch}" {} +
-touch -h -d "@${_mod_epoch}" "/usr/lib/modules/${KERNEL_VERSION}/vmlinuz"
+if [[ "$KERNEL_FLAVOR" == cachyos ]]; then
+  log "Signing kernel image with MOK"
+  sign_kernel
+
+  log "Signing kernel modules with MOK"
+  sign_kernel_modules
+  find "/usr/lib/modules/${KERNEL_VERSION}" -type f \( -name '*.ko' -o -name '*.ko.*' \) \
+    -exec touch -h -d "@${_mod_epoch}" {} +
+  touch -h -d "@${_mod_epoch}" "/usr/lib/modules/${KERNEL_VERSION}/vmlinuz"
+else
+  # vmlinuz and Fedora's modules stay as Fedora signed them. Only the
+  # modules this build compiled (the kmod-* packages akmods installed for
+  # this kernel) get the MOK signature: the kernel accepts them once the
+  # MOK is enrolled (CONFIG_INTEGRITY_MACHINE_KEYRING=y in Fedora's
+  # config), and refuses only them, not the system, when it is not.
+  log "Fedora's vmlinuz and modules keep Fedora's signature"
+  sha256sum "/usr/lib/modules/${KERNEL_VERSION}/vmlinuz" > /tmp/vmlinuz.sha
+  mapfile -t _own < <(rpm -qa --qf '%{NAME}\n' 'kmod-*' | sort -u \
+                       | xargs -r rpm -ql 2>/dev/null \
+                       | grep -E "^(/usr)?/lib/modules/${KERNEL_VERSION//./\\.}/.*\\.ko(\\.(xz|zst|gz))?\$" || true)
+  if (( ${#_own[@]} )); then
+    log "Signing the modules built here with MOK: ${_own[*]}"
+    printf '%s\n' "${_own[@]}" | sign_module_files
+    for _m in "${_own[@]}"; do
+      touch -h -d "@${_mod_epoch}" "$_m"
+      log "  $(basename "$_m"): signer $(modinfo -F signer "$_m" 2>/dev/null || echo '?')"
+    done
+  else
+    log "No module was built here: nothing to sign with MOK"
+  fi
+fi
 
 log "Creating MOK enroll unit for first-boot import"
 create_mok_enroll_unit
@@ -692,12 +875,30 @@ mkdir -p "$ROOT_HOME"
 chmod 700 "$ROOT_HOME"
 
 # Final integrity check (Origami pattern): vmlinuz must still be the
-# exact bytes sign_kernel produced — a post-signing rewrite would ship
-# a kernel Secure Boot rejects with the cryptic "bad shim signature".
+# exact bytes sign_kernel produced (on the Fedora flavour, the bytes Fedora
+# signed): a post-signing rewrite would ship a kernel Secure Boot rejects
+# with the cryptic "bad shim signature".
 sha256sum -c /tmp/vmlinuz.sha >/dev/null \
   || { err "vmlinuz was modified AFTER signing — refusing to ship"; exit 1; }
 # Kept for 50-branding (same RUN, same /tmp): it checks again after the
 # build's dracut run, then deletes it.
 log "vmlinuz signature integrity verified at the end of the kernel step"
 
-log "custom-kernel install complete: $KERNEL_VERSION"
+# The Fedora flavour ships the base's kernel and nothing else: if any step
+# above changed it (an upgrade pulled in by a dependency, as akmods once
+# did), stop here rather than publish a reserve with an unplanned kernel.
+if [[ "$KERNEL_FLAVOR" == fedora ]]; then
+  _now="$(rpm -q --qf '%{VERSION}-%{RELEASE}.%{ARCH}\n' kernel-core | tr '\n' ' ')"
+  _dirs="$(find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d -printf '%f ')"
+  [[ "$_now" == "$KERNEL_VERSION " && "$_dirs" == "$KERNEL_VERSION " ]] \
+    || { err "the kernel changed during the kernel step: $KERNEL_VERSION became ${_now}(modules: ${_dirs})"; exit 1; }
+fi
+
+# Which kernel this image carries, for the validators, lucciola-status and
+# `ujust lucciola-kernel`: by the kernel's name alone a reserve image and a
+# CachyOS swap that silently failed look the same.
+install -d -m0755 /usr/share/margine
+printf '%s\n' "$KERNEL_FLAVOR" > /usr/share/margine/kernel-flavor
+chmod 0644 /usr/share/margine/kernel-flavor
+
+log "custom-kernel install complete: $KERNEL_VERSION ($KERNEL_FLAVOR)"
