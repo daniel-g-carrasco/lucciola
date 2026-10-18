@@ -84,6 +84,20 @@ fi
 EXPECTED_OS_ID="fedora"
 EXPECTED_OS_VARIANT_ID="margine"
 EXPECTED_KERNEL_PATTERN="cachy"   # kernel-cachyos (cachyos1)
+EXPECTED_KERNEL_DESC="the CachyOS kernel"
+# The kernel reserve (:fedora-kernel, KERNEL_FLAVOR=fedora at build) keeps
+# Fedora's kernel instead; the image says which one it carries. Its
+# release is <ver>-<rel>.fcNN.<arch>, which a CachyOS one also matches
+# (7.2.9-cachyos1.fc44), so "no cachy" is checked on top of the pattern.
+KERNEL_FLAVOR="$(head -n1 /usr/share/margine/kernel-flavor 2>/dev/null || true)"
+if [[ "$KERNEL_FLAVOR" == fedora ]]; then
+  EXPECTED_KERNEL_PATTERN='\.fc[0-9]+\.'
+  EXPECTED_KERNEL_DESC="Fedora's kernel (kernel reserve)"
+fi
+kernel_expected() {  # kernel_expected <release>
+  [[ "$1" =~ $EXPECTED_KERNEL_PATTERN ]] || return 1
+  [[ "$KERNEL_FLAVOR" != fedora || "$1" != *cachy* ]]
+}
 EXPECTED_PLYMOUTH_THEME="lucciola"
 EXPECTED_WALLPAPER="file:///usr/share/backgrounds/lucciola/lucciola.png"
 EXPECTED_GDM_LOGO=""   # empty: no logo in greeter, by design (see lessons-learned Bug 7)
@@ -177,11 +191,18 @@ hdr "2. Kernel and boot integrity"
 if (( ! IS_LIVE )); then
   # Container: uname reports the host/runner kernel; check the image's
   # shipped kernel tree instead.
-  KMOD_DIR=$(compgen -G "/usr/lib/modules/*${EXPECTED_KERNEL_PATTERN}*" | head -1 || true)
-  if [[ -n "$KMOD_DIR" && -f "$KMOD_DIR/vmlinuz" ]]; then
-    ok "image ships a '$EXPECTED_KERNEL_PATTERN' kernel tree ($KMOD_DIR)"
+  KMOD_DIR=""
+  for d in /usr/lib/modules/*/; do
+    d="${d%/}"
+    [[ -f "$d/vmlinuz" ]] && kernel_expected "${d##*/}" && { KMOD_DIR="$d"; break; }
+  done
+  if [[ -n "$KMOD_DIR" ]]; then
+    ok "image ships $EXPECTED_KERNEL_DESC: $KMOD_DIR"
   else
-    bad "no /usr/lib/modules/*${EXPECTED_KERNEL_PATTERN}* kernel tree in the image"
+    bad "no kernel tree under /usr/lib/modules is $EXPECTED_KERNEL_DESC (found: $(ls /usr/lib/modules 2>/dev/null | tr '\n' ' '))"
+  fi
+  if [[ "$KERNEL_FLAVOR" == fedora ]] && rpm -q kernel-cachyos >/dev/null 2>&1; then
+    bad "kernel-cachyos is installed in a kernel-reserve image"
   fi
   info "running-kernel and bootc checks skipped (image context)"
 fi
@@ -189,9 +210,9 @@ fi
 if (( IS_LIVE )); then
 KVER=$(uname -r)
 info "running kernel: $KVER"
-[[ "$KVER" =~ $EXPECTED_KERNEL_PATTERN ]] \
-  && ok "kernel matches '$EXPECTED_KERNEL_PATTERN' (CachyOS)" \
-  || bad "kernel doesn't match '$EXPECTED_KERNEL_PATTERN'"
+kernel_expected "$KVER" \
+  && ok "running kernel is $EXPECTED_KERNEL_DESC" \
+  || bad "running kernel $KVER is not $EXPECTED_KERNEL_DESC (rebooted after a kernel switch? ujust lucciola-kernel)"
 
 if command -v bootc >/dev/null; then
   BOOTED_IMAGE=$("${SUDO[@]}" bootc status --json 2>/dev/null | python3 -c '
@@ -283,7 +304,11 @@ elif command -v mokutil >/dev/null; then
     if "${SUDO[@]}" mokutil --list-enrolled 2>/dev/null | grep -qiE 'margine|daniel'; then
       ok "Margine MOK is enrolled"
     else
-      bad "Margine MOK NOT enrolled — CachyOS kernel will not load on next boot if SB stays on"
+      if [[ "$KERNEL_FLAVOR" == fedora ]]; then
+        warn "Margine MOK NOT enrolled: Fedora's kernel boots, but v4l2loopback (phone camera) will not load, and switching back to the CachyOS kernel needs the key first (ujust lucciola-secureboot enroll)"
+      else
+        bad "Margine MOK NOT enrolled: CachyOS kernel will not load on next boot if SB stays on"
+      fi
     fi
   else
     warn "Secure Boot is disabled — running unsigned kernel without verification"

@@ -185,16 +185,30 @@ if [[ -f "$INITRD" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-hdr "4. CachyOS kernel + Secure Boot signature"
+hdr "4. Kernel (CachyOS, or Fedora's on the kernel reserve) + Secure Boot signature"
 # ---------------------------------------------------------------------------
 
-if [[ "$KVER" =~ cachy ]]; then
+# The kernel reserve image (:fedora-kernel) says so in its own tree.
+STAGED_FLAVOR="$(head -n1 "$DEPLOY_PATH/usr/share/margine/kernel-flavor" 2>/dev/null || true)"
+if [[ "$STAGED_FLAVOR" == fedora ]]; then
+  if [[ "$KVER" =~ \.fc[0-9]+\. && "$KVER" != *cachy* ]]; then
+    ok "kernel reserve: Fedora's kernel ($KVER)"
+  else
+    bad "kernel reserve image, but its kernel is not Fedora's ($KVER)"
+  fi
+elif [[ "$KVER" =~ cachy ]]; then
   ok "kernel version contains 'cachy' (cachyos1 default or cachylts1 LTS variant)"
 else
   warn "kernel does not contain 'cachy'; Margine swaps to a CachyOS kernel, this is unexpected"
 fi
 
-if [[ -f "$VMLINUZ" ]] && command -v sbverify >/dev/null; then
+if [[ "$STAGED_FLAVOR" == fedora && -f "$VMLINUZ" ]] && command -v sbverify >/dev/null; then
+  if sbverify --list "$VMLINUZ" 2>&1 | grep -q 'Fedora'; then
+    ok "vmlinuz carries Fedora's signature (shim trusts it without the Margine key)"
+  else
+    bad "vmlinuz has no Fedora signature: Secure Boot would refuse it"
+  fi
+elif [[ -f "$VMLINUZ" ]] && command -v sbverify >/dev/null; then
   if sbverify --list "$VMLINUZ" 2>&1 | grep -qiE 'margine|daniel'; then
     ok "vmlinuz is signed (Margine MOK present in signature)"
   elif sbverify --list "$VMLINUZ" 2>&1 | grep -q 'No signature table'; then
