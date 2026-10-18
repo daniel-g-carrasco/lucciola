@@ -81,17 +81,12 @@ matches the base; go through this list first, then bump the number.
 
 ## Desktop and apps
 
-- GNOME major version: extensions built in `build-margine-extensions.sh`
-  (o-tiling, hide-cursor, gradia-integration) declare the new shell version;
-  dconf keys in 30-gnome-defaults still exist. GNOME 51: o-tiling v2.12.01,
-  hide-cursor v15, the Gradia and Bazaar companions at their 2026-10-16
-  commits list 51. Smile has no 51 build and GNOME 51 removed the
-  Clutter call its paste uses: the step patches both (proposed upstream,
-  mijorus/smile-gnome-extension#23), tested on a headless GNOME Shell 51.0
-  and 50.5 with the CopiedEmoji signal. Fedora's Caffeine 60 does not load
-  on 51 (OUT_OF_DATE, seen in a VM session): the build swaps in EGO's v61
-  while Fedora's package lags (dist-git PR 6 updates it), and now fails if
-  any enabled extension does not declare the running GNOME.
+- GNOME major version: GNOME is Lucciola's stock fallback session, with
+  no extension, Shell default or keybinding of Margine's to port (they
+  left the image on 2026-10-18). Check that the zz1 override in
+  30-gnome-defaults still compiles against the new schemas
+  (glib-compile-schemas in the build log) and that GNOME starts from the
+  session list.
 - Flatpak: the GL runtime branch the preinstalled apps use, and the
   `org.gnome.Platform` versions.
 - `validate-margine-system`, smoke-boot and the install gate pass on the

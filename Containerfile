@@ -8,7 +8,7 @@
 #   FROM ghcr.io/ublue-os/silverblue-main:44  (Universal Blue main: Fedora Silverblue 44)
 #   + custom kernel from CachyOS COPR (signed with our MOK)
 #   + the Margine OS layer (build_files/: update flow, Secure Boot and TPM
-#     tooling, branding, curated GNOME settings, Flatpaks)
+#     tooling, branding, the GTK defaults, Flatpaks)
 #   + the Lucciola layer (lucciola/: niri, Noctalia, the Lucciola session;
 #     GNOME stays as a stock fallback session)
 #

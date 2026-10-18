@@ -13,100 +13,22 @@ set -euo pipefail
 log "Installing seahorse (saved passwords and keys GUI)"
 dnf -y install --setopt=install_weak_deps=False seahorse
 
-# 2. Margine GNOME defaults (gschema override)
+# 2. GTK defaults (gschema override)
 # ---------------------------------------------------------------------------
-# Write a gschema override that loads AFTER Bluefin's zz0 and overrides
-# the few keys we care about. Naming the file zz1-margine-* makes glib
-# load it after Bluefin's zz0-bluefin-modifications.
+# A gschema override named zz1-* so it loads after the base's own
+# (00_*, 10_*). It carries only what the GTK applications of a Lucciola
+# session read: the accent colour here, the virt-manager connections, and
+# the wallpaper 50-branding appends. GNOME is Lucciola's stock fallback
+# session (2026-10-18): Margine's Shell, mutter and window-manager defaults
+# (enabled extensions, dock favourites, five fixed workspaces, sloppy focus,
+# Super+D) and its dconf keyfiles for the extensions, the tiling keybindings
+# and the Smile shortcut are not in the image any more.
 log "Writing zz1-margine.gschema.override"
 
 cat > /usr/share/glib-2.0/schemas/zz1-margine.gschema.override <<'OVERRIDE'
-[org.gnome.shell]
-# The default enabled set. Three Bluefin-baked extensions are not just
-# disabled but REMOVED from the image entirely (2026-06-16, see
-# build-margine-extensions.sh) — a user who wants one back installs it from
-# extensions.gnome.org:
-#   * search-light — GNOME-50 crash class; GNOME-native overview (Super) +
-#     app-grid (Super+Space) search replace it.
-#   * blur-my-shell — per-frame dynamic blur janked the 120Hz HiDPI iGPU
-#     (its own transitions AND o-tiling animations) + three unfixed-upstream
-#     GNOME-50 defects (hotplug black bg #561, overview ghost icons #738,
-#     dynamic dock blur #574).
-#   * logomenu — branding we don't use.
-enabled-extensions=['appindicatorsupport@rgcjonas.gmail.com', 'bazaar-integration@kolunmi.github.io', 'dash-to-dock@micxgx.gmail.com', 'gradia-integration@alexandervanhee.github.io', 'gsconnect@andyholmes.github.io', 'o-tiling@oliwebd.github.com', 'hide-cursor@elcste.com', 'caffeine@patapon.info', 'smile-extension@mijorus.it']
-# Decision (2026-06-07): drop VS Code from the dock favourites and pin
-# Bazaar there instead. Reasoning: VS Code is a creator's tool but its
-# daily presence in the dock is project-specific (users jump in and
-# out by .desktop launch / cli); Bazaar is the entry point for "I want
-# a new app" — a verb every user does, so it earns a dock slot. Order
-# corresponds to the muscle-memory grid: 1=browser, 2=mail, 3=files,
-# 4=apps, 5=terminal.
-favorite-apps=['app.zen_browser.zen.desktop', 'org.mozilla.Thunderbird.desktop', 'org.gnome.Nautilus.desktop', 'io.github.kolunmi.Bazaar.desktop', 'org.gnome.Ptyxis.desktop']
-
-# NOTE — icon-size coherence (overview app-grid / folder / search):
-# Tried 2026-06-06 to pin `[org.gnome.shell.app-grid]` keys
-# app-grid-icon-size + folder-icon-size to 96 here. Diagnose script on
-# the live VM reported "schema-absent" for org.gnome.shell.app-grid:
-# the schema does NOT exist in GNOME 47/48 (it was a 3.x-era key set).
-# The visible icon-size drift between app-grid (~96px) and folder
-# view (~64px) is enforced by gnome-shell's CSS theme, not by dconf.
-# Fix is a CSS overlay or a shell-extension monkeypatch — not a
-# gschema override. Tracked as a separate cosmetic issue; do not
-# re-add a [org.gnome.shell.app-grid] block here.
-
 [org.gnome.desktop.interface]
 accent-color='yellow'
-# Bluefin's zz0 hard-sets Adwaita Sans (their pick). We leave fonts as
-# GNOME default here — daniel hasn't picked a Margine type system yet;
-# revisit when there's a documented choice. Removing the keys lets
-# GNOME's distro defaults win over Bluefin's, which is what we want
-# until we have an opinion.
-
-# Workspaces: a FIXED set of FIVE (an explicit, standing preference of this image,
-# reaffirmed 2026-06-15 — NOT 10). dynamic-workspaces=false makes the count
-# fixed; with it true, num-workspaces is ignored and GNOME grows them
-# on demand. Super+1..5 switch to the five; the Super+6..0 binds from the
-# Hyprland chain are simply inert with only five workspaces (harmless).
-[org.gnome.mutter]
-dynamic-workspaces=false
-# workspaces-only-on-primary is left at GNOME's default (true): a second
-# monitor is one fixed workspace and Super+1..5 drive the primary only.
-# Considered flipping it on 2026-08-25 after the reference host felt
-# "strange" with a 4K on the dock; the decision was to keep the
-# fixed second screen, which is also what GNOME ships. Windows still move
-# between monitors with o-tiling's Super+Shift+Ctrl+arrows. Anyone who
-# wants workspaces to span every screen sets it themselves:
-#   gsettings set org.gnome.mutter workspaces-only-on-primary false
-
-[org.gnome.desktop.wm.preferences]
-# Override Bluefin's num-workspaces=4 → 5 (standing preference).
-num-workspaces=5
-
-[org.gnome.desktop.wm.keybindings]
-# Bluefin remaps Super+d → show-desktop, which collides with
-# Margine's Hyprland-style binds. Reset only that single key.
-#
-# IMPORTANT — do NOT clear switch-applications / switch-
-# applications-backward / switch-windows / switch-windows-backward
-# here. Earlier versions of zz1 cleared them all to @as [] thinking
-# configure-gnome-keybindings would restore them with Hyprland
-# semantics. It DOESN'T — the script has an explicit
-# "INTENTIONALLY LEFT AT THEIR GNOME DEFAULT" comment. So clearing
-# here means Alt+Tab and Super+Tab end up unbound and daniel
-# reported (2026-06-05) they don't work. Keep GNOME defaults.
-show-desktop=@as []
-
-# Terminal default: leave Bluefin's choice (Ptyxis) — do NOT override
-# org.gnome.desktop.default-applications.terminal. Users who want a
-# different terminal can install one and flip the setting per session.
-
-# Focus follows mouse (sloppy mode) — Hyprland muscle memory.
-# `sloppy` keeps focus when the pointer leaves a window (vs `mouse`
-# which removes it). auto-raise=false so hover doesn't pop windows
-# above each other unexpectedly (only an explicit click raises).
-[org.gnome.desktop.wm.preferences]
-focus-mode='sloppy'
-auto-raise=false
+# Fonts stay GNOME's defaults: no Margine type system has been picked yet.
 
 # virt-manager — show the rootless USER SESSION out of the box (UX, not branding).
 # `ujust margine-test-vm` and the ISO-creator GUI put their throwaway test VMs on
@@ -122,16 +44,9 @@ uris=['qemu:///system', 'qemu:///session']
 autoconnect=['qemu:///session']
 OVERRIDE
 
-# Extension preferences use dconf keyfiles rather than gschema
-# overrides. GNOME Shell Extension.getSettings() loads an extension's
-# local schemas/ directory ahead of the global schema source, so global
-# gschema override defaults for org.gnome.shell.extensions.* can be
-# shadowed at runtime. dconf defaults are keyed by path and apply to
-# the actual settings backend the extension reads.
-log "Installing Margine dconf defaults into /etc/dconf/db/distro.d/"
-mkdir -p /etc/dconf/db/distro.d/locks /etc/dconf/profile
-install -m 0644 /ctx/30-gnome-defaults/dconf/* /etc/dconf/db/distro.d/
-
+# The dconf profile reads the distro database (authselect's defaults live
+# there). The base's profile already lists it; this keeps it that way.
+mkdir -p /etc/dconf/profile
 if [[ ! -f /etc/dconf/profile/user ]]; then
   cat > /etc/dconf/profile/user <<'PROFILE'
 user-db:user
