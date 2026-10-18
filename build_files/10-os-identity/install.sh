@@ -34,7 +34,7 @@ set -euo pipefail
 # See docs/lessons-learned/2026-05-28-initramfs-and-bootc-labels.md
 # for the full investigation, and docs/lessons-learned/2026-06-03-
 # rechunk-and-fixb.md for the wind-down.
-log "Stamping os-release as Margine (canonical Fedora layout: /etc → /usr/lib symlink)"
+log "Stamping os-release as Lucciola (canonical Fedora layout: /etc → /usr/lib symlink)"
 
 # (var defined in 00-common.sh)
 # (var defined in 00-common.sh)
@@ -59,25 +59,31 @@ log "Stamping os-release as Margine (canonical Fedora layout: /etc → /usr/lib 
 #   * VARIANT_ID=margine — the discriminator. validate-margine-system in
 #     margine-fedora-atomic now checks this instead of ID to identify a
 #     Margine install.
+#
+# The public identity is Lucciola's from this step on (2026-10-18; until
+# then lucciola/build.sh rewrote it at the end of the build). The
+# initramfs 50-branding writes carries this file, so its "Welcome to ..."
+# line and colour must already be Lucciola's then. Everything the tooling
+# keys on stays Margine's: VARIANT_ID=margine, CPE_NAME, ID.
 OS_RELEASE_CONTENT=$(cat <<EOF
-NAME="Margine OS"
-VERSION="${FEDORA_VER} (Margine OS)"
+NAME="Lucciola"
+VERSION="${FEDORA_VER} (Lucciola)"
 ID=fedora
 ID_LIKE=fedora
 VERSION_ID=${FEDORA_VER}
 VERSION_CODENAME=""
 PLATFORM_ID="platform:f${FEDORA_VER}"
-PRETTY_NAME="Margine OS ${FEDORA_VER} (${BUILD_DATE})"
-VARIANT="Margine OS"
+PRETTY_NAME="Lucciola ${FEDORA_VER} (${BUILD_DATE})"
+VARIANT="Lucciola"
 VARIANT_ID=margine
-ANSI_COLOR="0;38;2;232;186;0"
-LOGO=margine-logo
+ANSI_COLOR="0;38;2;230;213;191"
+LOGO=lucciola-logo
 CPE_NAME="cpe:/o:daniel-g-carrasco:margine:${FEDORA_VER}"
-HOME_URL="https://margine.dev"
-DOCUMENTATION_URL="https://margine.dev/docs"
+HOME_URL="https://github.com/daniel-g-carrasco/lucciola"
+DOCUMENTATION_URL="https://github.com/daniel-g-carrasco/lucciola#readme"
 SUPPORT_URL="https://github.com/daniel-g-carrasco/lucciola/issues"
 BUG_REPORT_URL="https://github.com/daniel-g-carrasco/lucciola/issues"
-DEFAULT_HOSTNAME="margine"
+DEFAULT_HOSTNAME="lucciola"
 EOF
 )
 

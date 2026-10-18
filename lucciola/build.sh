@@ -11,7 +11,9 @@
 # defaults, dconf keyfiles, first-login autostarts, Smile and Extension
 # Manager); the Margine steps no longer add any of it, and 2b only checks
 # that GNOME arrives stock. Still redoing a Margine step:
-#   3   rewrites the os-release 10-os-identity writes;
+#   3   rewrites the os-release public identity, which 10-os-identity
+#       writes as Lucciola's already since 2026-10-18 (the initramfs needs
+#       it there): a no-op that checks it;
 #   the closing dnf clean repeats what 99-cleanup.sh does anyway.
 set -euo pipefail
 
