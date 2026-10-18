@@ -2,7 +2,7 @@
 # lucciola/build.sh installs this file as /etc/greetd/config.toml; the copy
 # in /usr/share/lucciola/greetd/ is the reference to go back to.
 #
-# Autologin: `ujust margine-autologin on|off` adds or removes an
+# Autologin: `ujust lucciola-autologin on|off` adds or removes an
 # [initial_session] section at the end of this file.
 
 [terminal]

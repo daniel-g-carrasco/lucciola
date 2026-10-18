@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 # Privileged apply helper for the Margine CPU scheduler (GTK picker + the
-# `ujust margine-scheduler` recipe). Runs as root via pkexec; the scoped polkit
+# `ujust lucciola-scheduler` recipe). Runs as root via pkexec; the scoped polkit
 # rule (49-margine-scheduler.rules) makes that one prompt, cached — so the GUI
 # no longer asks on every change. Does the three privileged steps in one shot:
 #   1. write/clear the scx_loader boot config (/etc/scx_loader/config.toml) so

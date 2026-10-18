@@ -14,7 +14,7 @@
 #      is how people end up without a login screen. A link pointing anywhere
 #      else, or none, was a choice made on this machine and stays.
 #   2. GDM autologin (/etc/gdm/custom.conf) carries over to greetd's
-#      [initial_session] through `margine-autologin on`, which also checks
+#      [initial_session] through `lucciola-autologin on`, which also checks
 #      the account is still a real one.
 # GDM is not removed: greetd.service falls back to it when it cannot start.
 # The marker makes this run once; a failed step leaves no marker and is
@@ -27,7 +27,7 @@ DM_LINK="${LOGIN_MIGRATE_DM_LINK:-/etc/systemd/system/display-manager.service}"
 GREETD_UNIT=/usr/lib/systemd/system/greetd.service
 GDM_CONF="${LOGIN_MIGRATE_GDM_CONF:-/etc/gdm/custom.conf}"
 GREETD_CONF="${LOGIN_MIGRATE_GREETD_CONF:-/etc/greetd/config.toml}"
-AUTOLOGIN="${LOGIN_MIGRATE_AUTOLOGIN:-/usr/bin/margine-autologin}"
+AUTOLOGIN="${LOGIN_MIGRATE_AUTOLOGIN:-/usr/bin/lucciola-autologin}"
 log() { echo "lucciola-login-migrate: $*"; }
 rc=0
 
@@ -75,7 +75,7 @@ PY
     elif "$AUTOLOGIN" on "$user"; then
       log "GDM autologin for $user carried over to greetd"
     else
-      log "GDM autologin for $user NOT carried over (see above): log in with the password, then: ujust margine-autologin on"
+      log "GDM autologin for $user NOT carried over (see above): log in with the password, then: ujust lucciola-autologin on"
     fi
   fi
 fi

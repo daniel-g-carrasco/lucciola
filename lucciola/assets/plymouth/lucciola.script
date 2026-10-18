@@ -1,0 +1,368 @@
+// Lucciola boot splash (Plymouth script plugin).
+//
+// The wordmark centred on the Lucciola surface (#121212), its firefly
+// breathing as on the website (6 s cycle, opacity 1 -> 0.4 -> 1), and a disk
+// unlock prompt in the same palette: the prompt text, a field drawn like the
+// greeter's, one small firefly per typed character, a Caps Lock hint.
+//
+// Images: rendered from lucciola/assets/*.svg by lucciola/assets/render.sh
+// and committed (the build has no SVG renderer, and the script plugin reads
+// PNG only). Each comes in a ladder of sizes, and layout() takes the smallest
+// one at least as large as needed: Image.Scale is a plain bilinear sample,
+// which stays sharp shrinking by up to about 2x and turns thin strokes
+// ragged beyond that.
+//
+// SIZES ARE DEVICE PIXELS. 50-branding sets DeviceScale=1 in plymouthd.conf:
+// with Plymouth's automatic scale (2 on the 2880x1920 reference laptop) every
+// image and every Image.Text label of a script theme is drawn at scale 1 and
+// then stretched 2x, soft. Everything here is sized from the screen height
+// instead, so it is the same size on every screen and sharp. A boot with
+// plymouth.force-scale=2 on the kernel command line still works (only
+// softer).
+//
+// WHY THE DIALOG CODE EXISTS: the script plugin has no built-in password
+// rendering. plymouthd always forwards DisplayPassword to the plugin, and the
+// plugin runs only what the theme registered with
+// Plymouth.SetDisplayPasswordFunction; without it there is no prompt at all
+// and the boot looks stuck at the disk unlock (Margine's issue #7).
+//
+// NO Window.GetX()/GetY() IN THE LAYOUT. With several displays Plymouth
+// draws on a canvas as large as the biggest one, and each display shows the
+// part around the canvas centre, which is GetWidth()/2, GetHeight()/2. The
+// stock example themes add the non-indexed Window.GetX()/GetY(), which
+// plymouth 24.004.60 (Fedora 44) returned as the offset of the smallest
+// display instead of 0: the logo landed off-centre on the big screen of a
+// laptop plus monitor (fixed upstream 2025-12-01; the term is wrong on old
+// versions and useless on new ones). validate-branding fails on it.
+//
+// Text: Image.Text goes through label-freetype in the initramfs, with the
+// fonts plymouth-populate-initrd packs (the default and the monospace one).
+// A family containing "Mono" picks the monospace face; "NNpx" sets the size
+// in device pixels. The initramfs runs in the C locale, so labels stay ASCII
+// (a U+2022 bullet came out mangled in Margine's theme).
+
+// ---------------------------------------------------------------------------
+// Palette (Lucciola: surface, text, text variant, sand)
+// ---------------------------------------------------------------------------
+Window.SetBackgroundTopColor    (0.0706, 0.0706, 0.0706);   // #121212
+Window.SetBackgroundBottomColor (0.0706, 0.0706, 0.0706);
+
+text_color.red = 0.925; text_color.green = 0.902; text_color.blue = 0.875;   // #ece6df
+dim_color.red  = 0.722; dim_color.green  = 0.698; dim_color.blue  = 0.671;   // #b8b2ab
+sand_color.red = 0.761; sand_color.green = 0.631; sand_color.blue = 0.502;   // #c2a180
+
+// ---------------------------------------------------------------------------
+// Geometry of the assets (render.sh writes them this way)
+// ---------------------------------------------------------------------------
+// The wordmark's SVG canvas is 5675 x 1304 units. wordmark-N.png is that
+// canvas without the firefly, N pixels wide; firefly-N.png is the firefly
+// alone, cut from x = 4600 to the right edge (1075 units) at the same scale,
+// so it sits at x + 4600/5675 of the wordmark and breathes on its own.
+WORD_W = 5675;
+WORD_H = 1304;
+FLY_X  = 4600;
+FLY_W  = 1075;
+word_ladder[0] = 320;
+word_ladder[1] = 480;
+word_ladder[2] = 720;
+word_ladder[3] = 1080;
+word_ladder[4] = 1620;
+// field-N.png: the entry field, N pixels high and 9N wide.
+// bullet-N.png: one typed character for a field N high, a square cell of
+// BULLET_CELL x N pixels with a small firefly in the middle; tiled into a row.
+field_ladder[0] = 32;
+field_ladder[1] = 48;
+field_ladder[2] = 72;
+field_ladder[3] = 108;
+FIELD_ASPECT = 9;
+BULLET_CELL  = 0.44;
+
+// The smallest size in ladder at least as large as want, else the largest.
+fun pick (ladder, want)
+  {
+    local.i = 0;
+    while (ladder[i + 1] && ladder[i] < want)
+      i++;
+    return ladder[i];
+  }
+
+// ---------------------------------------------------------------------------
+// Layout: the wordmark, and the measures the dialog uses
+// ---------------------------------------------------------------------------
+// Globals layout() fills. They must exist before the first call: a name a
+// function assigns that is not global yet becomes local to that function.
+logo.src    = 0;
+field.src   = 0;
+bullet.cell = 0;
+font.px     = 14;
+dialog_top  = 0;
+
+fun layout ()
+  {
+    local.sw = Window.GetWidth();
+    local.sh = Window.GetHeight();
+
+    // The wordmark's canvas is 40% of the screen height wide (on 2880x1920,
+    // 768 px, the letters about 650), at most 60% of the width (portrait).
+    local.cw = Math.Int(sh * 0.40);
+    if (cw > sw * 0.60)
+      cw = Math.Int(sw * 0.60);
+    local.ch = Math.Int(cw * WORD_H / WORD_W);
+    local.src = pick(word_ladder, cw);
+    if (src != logo.src)
+      {
+        logo.word_orig = Image("wordmark-" + src + ".png");
+        logo.fly_orig  = Image("firefly-" + src + ".png");
+        logo.src = src;
+      }
+    logo.word_image = logo.word_orig.Scale(cw, ch);
+    logo.fly_image  = logo.fly_orig.Scale(Math.Int(cw * FLY_W / WORD_W), ch);
+    logo.x = Math.Int(sw / 2 - cw / 2);
+    logo.y = Math.Int(sh / 2 - ch / 2);
+    logo.w = cw;
+    logo.h = ch;
+
+    if (!logo.word_sprite)
+      {
+        logo.word_sprite = Sprite();
+        logo.fly_sprite  = Sprite();
+      }
+    logo.word_sprite.SetImage(logo.word_image);
+    logo.word_sprite.SetPosition(logo.x, logo.y, 10);
+    logo.fly_sprite.SetImage(logo.fly_image);
+    logo.fly_sprite.SetPosition(logo.x + Math.Int(cw * FLY_X / WORD_W), logo.y, 11);
+
+    // The dialog scales with the wordmark: the field is 78% of its width.
+    field.w = Math.Int(cw * 0.78);
+    field.h = Math.Int(field.w / FIELD_ASPECT);
+    local.fsrc = pick(field_ladder, field.h);
+    if (fsrc != field.src)
+      {
+        field.orig  = Image("field-" + fsrc + ".png");
+        bullet.orig = Image("bullet-" + fsrc + ".png");
+        field.src = fsrc;
+      }
+    field.image = field.orig.Scale(field.w, field.h);
+    bullet.cell = Math.Int(field.h * BULLET_CELL);
+    if (bullet.cell < 4)
+      bullet.cell = 4;
+    bullet.image = bullet.orig.Scale(bullet.cell, bullet.cell);
+    field.pad = Math.Int(field.h * 0.40);
+    bullet.max = Math.Int((field.w - 2 * field.pad) / bullet.cell);
+
+    // Text sizes, in device pixels: about 13 px at 2x on the reference
+    // laptop, never below 14 px.
+    font.px = Math.Int(field.h * 0.40);
+    if (font.px < 14)
+      font.px = 14;
+    font.prompt = "Monospace " + font.px + "px";
+    font.small  = "Monospace " + Math.Int(font.px * 0.88) + "px";
+
+    // The dialog block starts one field height below the wordmark.
+    dialog_top = logo.y + ch + field.h;
+  }
+
+layout();
+screen.w = Window.GetWidth();
+screen.h = Window.GetHeight();
+
+// ---------------------------------------------------------------------------
+// The unlock dialog
+// ---------------------------------------------------------------------------
+dialog.visible = 0;
+dialog.prompt  = "";
+dialog.secret  = 1;
+dialog.count   = 0;
+dialog.answer  = "";
+dialog.caps    = 0;
+
+fun dialog_sprites ()
+  {
+    if (!dialog.prompt_sprite)
+      {
+        dialog.prompt_sprite = Sprite();
+        dialog.field_sprite  = Sprite();
+        dialog.input_sprite  = Sprite();
+        dialog.caps_sprite   = Sprite();
+      }
+  }
+
+// Draw everything the dialog has from its state: called by the password and
+// question callbacks, and again after a mode change (refresh_callback).
+fun dialog_draw ()
+  {
+    dialog_sprites();
+    local.sw = Window.GetWidth();
+    local.text = dialog.prompt;
+    if (text == "")
+      text = "Password";
+
+    local.p = Image.Text(text, dim_color.red, dim_color.green, dim_color.blue, 1, font.prompt);
+    dialog.prompt_sprite.SetImage(p);
+    dialog.prompt_sprite.SetPosition(Math.Int(sw / 2 - p.GetWidth() / 2), dialog_top, 10000);
+    dialog.prompt_sprite.SetOpacity(1);
+
+    local.fx = Math.Int(sw / 2 - field.w / 2);
+    local.fy = Math.Int(dialog_top + p.GetHeight() + field.h * 0.35);
+    dialog.field_sprite.SetImage(field.image);
+    dialog.field_sprite.SetPosition(fx, fy, 10000);
+    dialog.field_sprite.SetOpacity(1);
+
+    if (dialog.secret)
+      {
+        // One firefly per typed character, in one tiled image (one sprite).
+        local.n = dialog.count;
+        if (n > bullet.max)
+          n = bullet.max;
+        if (n > 0)
+          {
+            dialog.input_sprite.SetImage(bullet.image.Tile(n * bullet.cell, bullet.cell));
+            dialog.input_sprite.SetPosition(fx + field.pad, Math.Int(fy + field.h / 2 - bullet.cell / 2), 10001);
+            dialog.input_sprite.SetOpacity(1);
+          }
+        else
+          dialog.input_sprite.SetOpacity(0);
+      }
+    else
+      {
+        if (dialog.answer != "")
+          {
+            local.a = Image.Text(dialog.answer, text_color.red, text_color.green, text_color.blue, 1, font.prompt);
+            dialog.input_sprite.SetImage(a);
+            dialog.input_sprite.SetPosition(fx + field.pad, Math.Int(fy + field.h / 2 - a.GetHeight() / 2), 10001);
+            dialog.input_sprite.SetOpacity(1);
+          }
+        else
+          dialog.input_sprite.SetOpacity(0);
+      }
+
+    if (dialog.caps)
+      {
+        local.c = Image.Text("Caps Lock is on", sand_color.red, sand_color.green, sand_color.blue, 1, font.small);
+        dialog.caps_sprite.SetImage(c);
+        dialog.caps_sprite.SetPosition(Math.Int(sw / 2 - c.GetWidth() / 2), Math.Int(fy + field.h * 1.35), 10000);
+        dialog.caps_sprite.SetOpacity(1);
+      }
+    else
+      dialog.caps_sprite.SetOpacity(0);
+  }
+
+fun dialog_hide ()
+  {
+    dialog.visible = 0;
+    if (dialog.prompt_sprite)
+      {
+        dialog.prompt_sprite.SetOpacity(0);
+        dialog.field_sprite.SetOpacity(0);
+        dialog.input_sprite.SetOpacity(0);
+        dialog.caps_sprite.SetOpacity(0);
+      }
+  }
+
+// Password prompt (disk unlock): bullets is the number of characters typed.
+fun display_password_callback (prompt, bullets)
+  {
+    dialog.prompt  = prompt;
+    dialog.secret  = 1;
+    dialog.count   = bullets;
+    dialog.caps    = Plymouth.GetCapslockState();
+    dialog.visible = 1;
+    dialog_draw();
+  }
+
+// A question whose answer is shown as typed (systemd-ask-password --echo).
+fun display_question_callback (prompt, entry)
+  {
+    dialog.prompt  = prompt;
+    dialog.secret  = 0;
+    dialog.answer  = entry;
+    dialog.caps    = Plymouth.GetCapslockState();
+    dialog.visible = 1;
+    dialog_draw();
+  }
+
+fun display_normal_callback ()
+  {
+    dialog_hide();
+  }
+
+Plymouth.SetDisplayPasswordFunction(display_password_callback);
+Plymouth.SetDisplayQuestionFunction(display_question_callback);
+Plymouth.SetDisplayNormalFunction(display_normal_callback);
+
+// ---------------------------------------------------------------------------
+// Boot messages (fsck progress, systemd status lines)
+// ---------------------------------------------------------------------------
+message.sprite = Sprite();
+message.text = "";
+
+fun message_draw ()
+  {
+    if (message.text == "")
+      message.sprite.SetOpacity(0);
+    else
+      {
+        local.m = Image.Text(message.text, dim_color.red, dim_color.green, dim_color.blue, 1, font.small);
+        message.sprite.SetImage(m);
+        message.sprite.SetPosition(Math.Int(Window.GetWidth() / 2 - m.GetWidth() / 2), Math.Int(Window.GetHeight() * 0.90), 10000);
+        message.sprite.SetOpacity(1);
+      }
+  }
+
+fun display_message_callback (text)
+  {
+    message.text = text;
+    message_draw();
+  }
+
+fun hide_message_callback (text)
+  {
+    message.text = "";
+    message_draw();
+  }
+
+Plymouth.SetDisplayMessageFunction(display_message_callback);
+Plymouth.SetHideMessageFunction(hide_message_callback);
+
+// ---------------------------------------------------------------------------
+// Every frame: the firefly breathes; layout follows a mode change; the Caps
+// Lock hint follows the key.
+// ---------------------------------------------------------------------------
+// The script plugin calls this 50 times a second (FRAMES_PER_SECOND in
+// plugin.c), so 300 frames are the website's 6 s cycle: cos from 1 to -1 and
+// back gives opacity 1 -> 0.4 -> 1, eased like its ease-in-out keyframes. A
+// busy machine drops frames and the firefly breathes a little slower.
+BREATH_FRAMES = 300;
+frame = 0;
+
+fun refresh_callback ()
+  {
+    frame++;
+    if (frame >= BREATH_FRAMES)
+      frame = 0;
+    logo.fly_sprite.SetOpacity(0.7 + 0.3 * Math.Cos(2 * Math.Pi * frame / BREATH_FRAMES));
+
+    // The early framebuffer often has another resolution than the final
+    // mode (notably in VMs): lay everything out again when it changes.
+    if (Window.GetWidth() != screen.w || Window.GetHeight() != screen.h)
+      {
+        screen.w = Window.GetWidth();
+        screen.h = Window.GetHeight();
+        layout();
+        if (dialog.visible)
+          dialog_draw();
+        message_draw();
+      }
+
+    if (dialog.visible && dialog.secret)
+      {
+        local.caps = Plymouth.GetCapslockState();
+        if (caps != dialog.caps)
+          {
+            dialog.caps = caps;
+            dialog_draw();
+          }
+      }
+  }
+
+Plymouth.SetRefreshFunction(refresh_callback);

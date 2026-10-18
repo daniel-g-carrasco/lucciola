@@ -8,8 +8,8 @@ set -euo pipefail
 
 # Seahorse: the GUI for saved passwords (any Secret Service, oo7 from
 # Fedora 45) and for SSH and GPG keys. On Fedora 44 it backed
-# `ujust margine-keyring blank`; oo7 has no empty keyring password, and
-# margine-keyring uses a TPM-bound credential instead (see that script).
+# `ujust lucciola-keyring blank`; oo7 has no empty keyring password, and
+# lucciola-keyring uses a TPM-bound credential instead (see that script).
 log "Installing seahorse (saved passwords and keys GUI)"
 dnf -y install --setopt=install_weak_deps=False seahorse
 
@@ -31,7 +31,7 @@ accent-color='yellow'
 # Fonts stay GNOME's defaults: no Margine type system has been picked yet.
 
 # virt-manager — show the rootless USER SESSION out of the box (UX, not branding).
-# `ujust margine-test-vm` and the ISO-creator GUI put their throwaway test VMs on
+# `ujust lucciola-test-vm` and the ISO-creator GUI put their throwaway test VMs on
 # qemu:///session (rootless: reads ISOs straight from $HOME, no polkit). But
 # virt-manager's stock default is uris=[] and it only auto-adds qemu:///system on
 # first launch — so those session VMs are INVISIBLE in the default window (I

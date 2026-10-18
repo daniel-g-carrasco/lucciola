@@ -50,6 +50,12 @@ COPY build_files /
 # time via the installer/ working dir. The gaming variant was retired
 # 2026-06-06 so there is no installer/flatpaks-gaming any more.
 COPY installer/flatpaks-base    /installer-flatpaks-base
+# Lucciola's brand (logos, wallpaper, the Plymouth theme), for 50-branding.
+# In ctx rather than a stage of its own because the boot splash must be in
+# place before 50-branding writes the initramfs, in the same RUN as the
+# kernel; an asset change costs that layer's cache, like any other
+# build_files change does.
+COPY lucciola/assets            /lucciola-assets
 
 # lucciola/build.sh gets a context stage of its own, not a place in ctx:
 # the kernel RUN below mounts the whole ctx, and an edit to the Lucciola
@@ -77,11 +83,15 @@ COPY lucciola/build.sh /build.sh
 # the sha256 of https://github.com/noctalia-dev/noctalia-greeter/archive/refs/tags/v<version>.tar.gz
 # (the ARGs at the top), check the spec's BuildRequires against the tag's
 # meson.build, test-boot. v1.6.0 is commit
-# 44337ecba043749c29de6f3d563315b91987a908 (a signed tag).
+# 44337ecba043749c29de6f3d563315b91987a908 (a signed tag). On top of the
+# tag the spec applies one patch (PAM results in words, the .patch file in
+# lucciola/greeter/ says why) and puts Lucciola's mark in place of the
+# Noctalia logo; check that the patch still applies when the tag moves.
 FROM ${BASE_IMAGE} AS greeter-rpm
 ARG NOCTALIA_GREETER_VERSION
 ARG NOCTALIA_GREETER_SHA256
 COPY lucciola/greeter/ /src/
+COPY lucciola/assets/lucciola-mark.svg /src/
 RUN --mount=type=cache,dst=/var/cache \
     --mount=type=tmpfs,dst=/tmp \
     env NOCTALIA_GREETER_VERSION="${NOCTALIA_GREETER_VERSION}" \

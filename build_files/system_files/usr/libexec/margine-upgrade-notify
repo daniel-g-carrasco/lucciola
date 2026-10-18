@@ -6,7 +6,7 @@ Reassures them that the reboot actually did something.
 
 2026-07-10 rewrite, after "I never saw any of this" (daniel):
  - bootc omits .status.booted.image on client-layered deployments
-   (e.g. after ujust margine-gaming-native), which made this crash;
+   (e.g. after ujust lucciola-gaming-native), which made this crash;
    fall back to rpm-ostree and select the deployment with booted=true
    (deployments[0] is the STAGED one when an update is pending).
  - the state file was written even when the notification failed or the

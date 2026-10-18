@@ -1,8 +1,11 @@
-# Margine branding — the complete map
+# Lucciola branding: the complete map
 
-**Purpose.** Every place Margine overrides Fedora/Bluefin identity — logos, names,
-boot splash, login screen, installer, notifications, CLI — lives here, so changing
-one thing later doesn't silently break another. Each entry says **where** it is,
+**Purpose.** Every place the image overrides Fedora/Universal Blue identity (logos,
+names, boot splash, login screen, installer, notifications, CLI) lives here, so
+changing one thing later doesn't silently break another. Since 2026-10-18 the
+identity is Lucciola's: its sources are in `lucciola/assets/`, installed by the
+Margine machinery in `build_files/50-branding`; the Margine OS names that stay
+are internal (paths, units, `VARIANT_ID`) or kept as aliases. Each entry says **where** it is,
 **what** it sets, **how** (the mechanism), and the **gotchas** that bite.
 
 > **Anchors, not line numbers.** This doc points at files and *grep-able strings*
@@ -48,61 +51,72 @@ These five cut across almost every touchpoint below:
 
 | What you want to change | File | Anchor to grep |
 |---|---|---|
-| Distro name / version / URLs / accent | `build_files/10-os-identity/install.sh` | `PRETTY_NAME`, `VARIANT_ID`, `LOGO`, `ANSI_COLOR` |
-| The square "M" logo (everywhere) | `build_files/50-branding/install.sh` | `margine-logo.svg`, `gtk-update-icon-cache` |
-| GNOME **About** logo | `build_files/50-branding/install.sh` | `margine-logo`, `LOGO=` in os-release |
+| Brand sources: logos, wallpaper, boot splash, fastfetch logo, and the PNGs rendered from them | `lucciola/assets/` (`render.sh` renders, the PNGs are committed) | `render.sh`, `make-wallpaper.py` |
+| Distro name / version / URLs / accent | `build_files/10-os-identity/install.sh` (re-checked by `lucciola/build.sh` step 3) | `PRETTY_NAME`, `VARIANT_ID`, `LOGO`, `ANSI_COLOR` |
+| The logo: `lucciola-logo` (the tile, everywhere) and `lucciola-mark` (the firefly alone) | `build_files/50-branding/install.sh` | `lucciola-logo.svg`, `gtk-update-icon-cache` |
+| GNOME **About** logo | `build_files/50-branding/install.sh` | `lucciola-logo`, `LOGO=` in os-release |
 | GNOME About distributor wordmark | `build_files/50-branding/install.sh` | `fedora_logo_med`, `fedora_whitelogo_med` |
-| Boot splash (Plymouth) | `build_files/50-branding/install.sh` + `…/kargs.d/10-margine-plymouth.toml` | `plymouth-set-default-theme`, `rhgb` |
+| Boot splash (Plymouth) | `lucciola/assets/plymouth/`, `build_files/50-branding/install.sh` + `…/kargs.d/10-margine-plymouth.toml` | `plymouth-set-default-theme`, `DeviceScale`, `rhgb` |
 | GRUB menu text + HiDPI font | `live-env/src/iso.yaml` + `…/grub2-static/configs.d/05_margine-gfxmode.cfg` | `Install Margine`, `grub2-mkfont`, `margine.pf2` |
-| GDM background / logo (Margine; Lucciola's fallback login screen) | `build_files/50-branding/install.sh` | `gdm.d/01-margine-background`, `login-screen` |
-| **Lucciola** login screen (Noctalia Greeter on greetd): look, logo, preselected session | `lucciola/system_files/usr/share/lucciola/greeter/{sync,greeter}.toml`, `lucciola/build.sh` (step 5) | `hide_logo`, `[appearance.palette]`, `last = "Lucciola"` |
-| Desktop wallpaper / accent colour (GTK; GNOME itself stock) | `build_files/50-branding/install.sh`, `build_files/30-gnome-defaults/install.sh` | `picture-uri`, `accent-color` |
+| GDM background / logo (Lucciola's fallback login screen) | `build_files/50-branding/install.sh` | `gdm.d/01-margine-background`, `login-screen` |
+| **Lucciola** login screen (Noctalia Greeter on greetd): look, logo, preselected session, failed-login text | `lucciola/system_files/usr/share/lucciola/greeter/{sync,greeter}.toml`, `lucciola/greeter/` (spec, patch), `lucciola/build.sh` (step 5) | `hide_logo`, `Source1`, `authErrorText`, `[appearance.palette]`, `last = "Lucciola"` |
+| Desktop wallpaper (GNOME, GDM, Noctalia, the greeter) / accent colour (GTK; GNOME itself stock) | `build_files/50-branding/install.sh`, `lucciola/system_files/usr/share/lucciola/noctalia/15-wallpaper.toml`, `build_files/30-gnome-defaults/install.sh` | `picture-uri`, `wallpaper.default`, `accent-color` |
 | Live ISO "Welcome to Margine" | `live-env/src/build.sh` | `Welcome to Fedora` (the sed targets) |
 | Anaconda installer **window icon** | `live-env/src/build.sh` | `AnacondaInstaller`, `_wmid in`, `StartupWMClass` |
 | Installer product/storage config | `live-env/src/anaconda/profile.d/margine.conf` | `variant_id`, `default_partitioning` |
 | "Secure Boot is disabled" notice | `live-env/src/build.sh` | `margine-live-sb-notice` |
 | MOK passphrase / enrollment | `build_files/custom-kernel/install.sh` | `margine`, `mok-enroll` |
-| First-login bootstrap + notification (no autostart in Lucciola: `ujust margine-bootstrap` by hand) | `build_files/system_files/usr/libexec/margine/first-boot-bootstrap`, `…/usr/libexec/margine-first-boot-status` | `first-boot-bootstrap`, `first-boot-status` |
+| First-login bootstrap + notification (no autostart in Lucciola: `ujust lucciola-bootstrap` by hand) | `build_files/system_files/usr/libexec/margine/first-boot-bootstrap`, `…/usr/libexec/margine-first-boot-status` | `first-boot-bootstrap`, `first-boot-status` |
 | Update notifications | `build_files/system_files/usr/libexec/margine*` (units in `…/usr/lib/systemd/user/`) | `margine-notify` |
-| Notification icon on the lock screen | `build_files/system_files/usr/libexec/margine/margine-notify` | `app_icon`, `image-path` |
-| Margine System app (name/icon/id) | `…/applications/dev.margine.System.desktop` + `…/icons/hicolor/scalable/apps/dev.margine.System.svg` + `…/libexec/margine/system-gui` | `dev.margine.System`, `Margine System` |
-| Phone Camera app (name/icon/id) | `…/applications/dev.margine.PhoneCam.desktop` + `…/icons/hicolor/scalable/apps/dev.margine.PhoneCam.svg` + `…/libexec/margine/phone-cam-gui` | `dev.margine.PhoneCam`, `Margine Phone Cam` |
-| fastfetch / MOTD / `/etc/issue` | `build_files/50-branding/install.sh`, `…/fastfetch/margine.jsonc`, `build_files/60-ujust-services/install.sh` | `ascii-logo.txt`, `no-show-user-motd`, `/etc/issue` |
+| Notification icon and sender (lock screen included) | `build_files/system_files/usr/libexec/margine/margine-notify` | `app_icon`, `image-path`, `APP_NAME` |
+| Lucciola System app (name/icon/id) | `…/applications/dev.margine.System.desktop` + `…/icons/hicolor/scalable/apps/dev.margine.System.svg` + `…/libexec/margine/system-gui` | `dev.margine.System`, `Lucciola System` |
+| Lucciola CPU Scheduler, system update launcher | `…/applications/margine-scheduler.desktop`, `…/libexec/margine/scheduler-picker`, `…/applications/margine-system-update.desktop` | `Lucciola CPU Scheduler`, `Lucciola system update` |
+| Phone Camera app (name/icon/id), virtual webcam label | `…/applications/dev.margine.PhoneCam.desktop` + `…/icons/hicolor/scalable/apps/dev.margine.PhoneCam.svg` + `…/libexec/margine/phone-cam-gui` + `…/modprobe.d/margine-phone-cam.conf` | `dev.margine.PhoneCam`, `Lucciola Phone Cam` |
+| fastfetch / MOTD / `/etc/issue` | `build_files/50-branding/install.sh`, `lucciola/assets/fastfetch-logo.txt`, `…/fastfetch/margine.jsonc`, `build_files/60-ujust-services/install.sh` | `ascii-logo.txt`, `no-show-user-motd`, `/etc/issue` |
+| Command names: `lucciola-*` in /usr/bin and ujust, `margine-*` kept as links and aliases | `build_files/system_files/usr/bin/`, `build_files/40-spec-scripts/install.sh`, `build_files/60-custom.just` | `lucciola-status`, `alias margine-` |
 | **Lucciola** (niri + Noctalia product on top of Margine): public name, login session, validator name | `lucciola/build.sh`, `lucciola/system_files/usr/share/margine/product-name` | `NAME="Lucciola"`, `lucciola.desktop`, `product-name` |
-| Product name in messages (`margine-status`, Secure Boot notice and `ujust margine-secureboot`, the System app's "Built from"): `product-name`, else os-release `NAME`, else "Margine OS"; "Margine key" stays, it is the MOK's own name | `…/usr/bin/margine-status`, `…/libexec/margine/mok-notify`, `build_files/60-custom.just`, `…/libexec/margine/system-gui` | `product-name` |
+| Product name in messages (`lucciola-status`, Secure Boot notice and `ujust lucciola-secureboot`, the System app's "Built from"): `product-name`, else os-release `NAME`, else "Margine OS"; "Margine key" stays, it is the MOK's own name | `…/usr/bin/lucciola-status`, `…/libexec/margine/mok-notify`, `build_files/60-custom.just`, `…/libexec/margine/system-gui` | `product-name` |
 
 ---
 
 ## The foundation: one logo, many names
 
-All visual branding resolves to **one asset, `margine-logo`** (the square "M"),
-installed once and then aliased to every name Fedora/GNOME hardcodes.
+All visual branding resolves to **two icon names**, installed once and then
+aliased to every name Fedora/GNOME hardcodes. Sources in `lucciola/assets/`
+(the PNGs rendered by `render.sh`).
 
 Installed by `build_files/50-branding/install.sh`:
 
-- `/usr/share/icons/hicolor/scalable/apps/margine-logo.svg` ← **primary**; the icon
-  *name* `margine-logo` resolves here.
-- `/usr/share/pixmaps/margine-logo.png` ← raster fallback for legacy/non-theme
-  consumers.
+- `lucciola-logo`: the firefly on its dark rounded tile, the OS and app icon
+  (os-release `LOGO=`, notifications). `hicolor/scalable/apps/lucciola-logo.svg`
+  (**primary**), the same at 16 to 512 px under `hicolor/NxN/apps/` (raster
+  consumers, notification badges), and `/usr/share/pixmaps/lucciola-logo.png`.
+- `lucciola-mark`: the firefly alone (`hicolor/scalable/apps/`, plus a 256 px
+  render), and `lucciola-mark-symbolic` for symbolic slots.
 
-Then **aliased** (copied onto names other software hardcodes — these cannot be
+Then **aliased** (copied onto names other software hardcodes; these cannot be
 renamed or deleted):
 
-- `fedora-logo-icon.{svg,png}` — hardcoded by **anaconda-live's welcome dialog**
+- `margine-logo.{svg,png}`: the old name, now carrying the tile. The live
+  ISO's installer icon (`live-env/src/build.sh`) and older references use it.
+- `fedora-logo-icon.{svg,png}`: hardcoded by **anaconda-live's welcome dialog**
   (`Adw.StatusPage iconName`) and by **gnome-initial-setup** (which maps
-  `os-release ID=fedora` → this icon name). Must be *replaced*, never deleted.
-- `org.fedoraproject.AnacondaInstaller.{svg,png}` — the installer window icon name
+  `os-release ID=fedora` to this icon name). Must be *replaced*, never deleted.
+- `start-here-symbolic` (Adwaita): the symbolic firefly, for
+  gnome-initial-setup's language page.
+- `org.fedoraproject.AnacondaInstaller.{svg,png}`: the installer window icon name
   (see [Anaconda installer icon](#7-anaconda-installer--window-icon-the-hard-one)).
   Lives in the **live image** (`live-env/src/build.sh`), not the base.
 
 **Gotchas**
-- The GNOME **About** panel looks up `LOGO=` via the **icon theme only** — the
+- The GNOME **About** panel looks up `LOGO=` via the **icon theme only**; the
   `/usr/share/pixmaps` fallback does *not* apply there. The SVG under
   `hicolor/scalable/apps/` is mandatory.
 - Rebuild the icon cache after every drop (Golden Rule 3).
-- Symbolic icons (e.g. the `start-here-symbolic` override) **cannot embed raster
-  images** — GTK4 refuses them. The build validates this (greps for `<image`/
-  `data:image/`) and fails if violated.
+- Symbolic icons **cannot embed raster images**: GTK4 refuses them. The build
+  validates this (greps for `<image`/`data:image/`) and fails if violated.
+- The SVGs use `feGaussianBlur` for the glow. librsvg (GTK, the greeter,
+  `render.sh`) draws it; a consumer that cannot will show the bare dot.
 
 ---
 
@@ -112,6 +126,13 @@ renamed or deleted):
 (`/etc/os-release` is a *relative* symlink to it, so it resolves in any chroot).
 
 Fields that matter for branding:
+
+**Lucciola (2026-10-18):** `10-os-identity` writes Lucciola's public
+identity (`NAME`, `VERSION`, `PRETTY_NAME`, `VARIANT`, `LOGO`, `ANSI_COLOR`,
+`HOME_URL`, `DEFAULT_HOSTNAME`) from the first step, so the initramfs
+50-branding writes (which carries os-release: the initrd's "Welcome to ..."
+line) has it too; `lucciola/build.sh` step 3 re-asserts it. The values below
+are the image's. Margine's policy, for the identifiers that stay:
 
 **Naming policy (2026-07-11, fixed with the DistroWatch submission):** the
 public product name is **"Margine OS"**: titles, first mentions, About panel,
@@ -123,18 +144,18 @@ the `margine.dev` domain, the ghcr.io/`margine` image name.
 
 | Key | Value | Consumed by |
 |---|---|---|
-| `NAME` | `Margine OS` | GNOME About title, many tools |
-| `PRETTY_NAME` | `Margine OS <ver> (<build-date>)` | login banners, `hostnamectl`, BLS boot entries |
-| `VERSION` | `<ver> (Margine OS)` | About |
-| `VARIANT` | `Margine OS` | About |
+| `NAME` | `Lucciola` | GNOME About title, many tools, countme `os_name` |
+| `PRETTY_NAME` | `Lucciola <ver> (<build-date>)` | login banners, `hostnamectl`, BLS boot entries |
+| `VERSION` | `<ver> (Lucciola)` | About |
+| `VARIANT` | `Lucciola` | About |
 | `VARIANT_ID` | `margine` | **the authoritative discriminator** (anaconda profile, scripts, countme) — do not change |
 | `ID` | `fedora` | kept for bootc-image-builder / tooling compat — **do not change** |
 | `ID_LIKE` | `fedora` | family (was `bluefin` until the base switch of 2026-10-11) |
-| `LOGO` | `margine-logo` | GNOME About logo (icon-theme lookup) |
-| `ANSI_COLOR` | `0;38;2;232;186;0` | terminal accent = **#E8BA00** (the Margine yellow) |
-| `HOME_URL` / `DOCUMENTATION_URL` | `https://margine.dev` / `/docs` | About "Website", links |
+| `LOGO` | `lucciola-logo` | GNOME About logo (icon-theme lookup), margine-notify's default icon |
+| `ANSI_COLOR` | `0;38;2;230;213;191` | terminal accent = **#e6d5bf** (the firefly's beige) |
+| `HOME_URL` / `DOCUMENTATION_URL` | the Lucciola repository / its README | About "Website", links |
 | `SUPPORT_URL` / `BUG_REPORT_URL` | GitHub issues | About links |
-| `DEFAULT_HOSTNAME` | `margine` | first-boot hostname |
+| `DEFAULT_HOSTNAME` | `lucciola` | first-boot hostname |
 
 **About panel extras** (`build_files/50-branding/install.sh`):
 - The lower **distributor wordmark** uses two *hardcoded* filenames from
@@ -161,28 +182,69 @@ the `margine.dev` domain, the ghcr.io/`margine` image name.
 
 ## 2. Plymouth boot splash
 
-**Theme name:** `margine` → `/usr/share/plymouth/themes/margine/`
-(`margine.plymouth` + `margine.script` + `watermark.png`).
+**Theme name:** `lucciola` → `/usr/share/plymouth/themes/lucciola/`
+(`lucciola.plymouth`, `lucciola.script`, and the images below). Source:
+`lucciola/assets/plymouth/`.
+
+**What it shows:** the wordmark centred on `#121212`, its firefly breathing as
+on the website (6 s, opacity 1 to 0.4 and back: 300 frames of the script
+plugin's 50 per second, a cosine); the disk unlock prompt in the same palette
+(the prompt text, a field drawn like the greeter's, one small firefly per
+typed character, a "Caps Lock is on" hint in sand); boot messages near the
+bottom.
+
+**Images:** committed PNGs, rendered by `lucciola/assets/render.sh` (the build
+has no SVG renderer, the plugin reads PNG only). Each comes in a **ladder of
+sizes** (`wordmark-`/`firefly-` 320 to 1620 px wide, `field-`/`bullet-` for
+fields 32 to 108 px high); the script picks the smallest one at least as
+large as needed and scales it down. `Image.Scale` is a bilinear sample:
+sharp down to about half size, ragged beyond. The firefly is a layer of its
+own, cut from x 4600 of the wordmark's 5675-unit canvas (the script knows
+those numbers; `render.sh` refuses a wordmark of another shape).
 
 **Mechanism** (`build_files/50-branding/install.sh`):
-- Installs `plymouth-plugin-script` (the script-based theme needs
-  `libply-splash-graphics.so`).
-- Copies the three theme files from in-repo `build_files/50-branding/assets/plymouth/`.
-- `plymouth-set-default-theme margine`.
-- **Regenerates the initramfs** with `dracut --force --zstd --no-hostonly
-  --no-hostonly-cmdline --add ostree` for every kernel — the theme is embedded
-  in the initramfs, so this is mandatory at build.
+- Installs `plymouth-plugin-script` (the base does not ship `script.so`).
+- Copies the theme from `/ctx/lucciola-assets/plymouth/` (the Containerfile's
+  ctx stage copies `lucciola/assets/`), and checks every image the script
+  builds a name for exists.
+- `plymouth-set-default-theme lucciola` and **`DeviceScale=1`** in
+  `/etc/plymouth/plymouthd.conf`.
+- **Regenerates the initramfs** once, for every kernel (`regenerate_initramfs`:
+  generic, `--add ostree`, zstd, reproducible), then checks with `lsinitrd`
+  that it carries the theme, `script.so`, `label-freetype.so` and
+  `DeviceScale=1`.
 
 **Kargs** (`build_files/system_files/usr/lib/bootc/kargs.d/10-margine-plymouth.toml`):
-`rhgb quiet plymouth.ignore-serial-consoles` — `rhgb` enables graphical splash;
+`rhgb quiet plymouth.ignore-serial-consoles`: `rhgb` enables graphical splash;
 `ignore-serial-consoles` stops Plymouth from treating a VM serial console as
 headless and skipping the splash.
 
 **Gotchas**
-- `bootc upgrade` does **not** re-embed the theme — it's baked into the initramfs at
-  build time only.
-- `--add ostree` is required on bootc/ostree or switch-root fails.
-- Don't drop `plymouth.ignore-serial-consoles` or VMs lose the splash.
+- **Device pixels.** With Plymouth's own HiDPI scale (2 on the 2880x1920
+  reference laptop) a script theme's images and `Image.Text` labels are drawn
+  at scale 1 and stretched 2x. The theme sizes everything from
+  `Window.GetHeight()` in device pixels instead (wordmark canvas 40% of the
+  height), which needs `DeviceScale=1`. Side effect: Plymouth's own text (the
+  Esc console view) is small on HiDPI panels; `plymouth.force-scale=2` on the
+  kernel command line (it wins over the file) brings it back for a debugging
+  boot.
+- **No `Window.GetX()`/`GetY()`** in the layout (validate-branding fails on
+  it): plymouth 24.004.60 returned the smallest display's offset there and
+  the logo landed off-centre on a laptop plus monitor.
+- A name a function assigns that is not global yet becomes **local** to that
+  function: globals the layout fills are initialised before its first call.
+- The initramfs has `label-freetype` only (no pango) and the C locale: text
+  stays ASCII; a family containing "Mono" picks the packed monospace face,
+  "NNpx" sets the size.
+- To look at it without booting: plymouthd's X11 renderer (in
+  `plymouth-devel`) under Xvfb, `plymouthd --no-daemon --tty=/dev/console`
+  in a container started with `-t`, then `plymouth --show-splash`,
+  `plymouth ask-for-password`, and a screenshot of the root window;
+  `PLY_CREATE_FAKE_MULTI_HEAD_SETUP=1` gives two heads. Remove
+  `label-pango.so` first to draw text as the initramfs does.
+- `bootc upgrade` does **not** re-embed the theme: it's baked into the initramfs
+  at build time only. `--add ostree` is required or switch-root fails. Don't
+  drop `plymouth.ignore-serial-consoles` or VMs lose the splash.
 
 ---
 
@@ -206,7 +268,7 @@ large font:
 **Gotchas**
 - `bootupd` renders `grub.cfg` from the static configs only at install /
   `bootupctl install`, **not** on `bootc upgrade`. Existing installs must run
-  `ujust margine-grub-hidpi` once to pick up the font.
+  `ujust lucciola-grub-hidpi` once to pick up the font.
 - `gfxpayload=keep` (native res) beats mode-switching, which is flaky on AMD
   amdgpu UEFI.
 
@@ -218,12 +280,12 @@ large font:
 `dconf update`; GDM uses its **own** dconf profile at `/etc/dconf/profile/gdm`).
 
 - **Background** (`gdm.d/01-margine-background`): `picture-uri[-dark]` →
-  `/usr/share/backgrounds/margine/margine.png`, `picture-options='zoom'`,
-  `primary-color='#000000'`.
+  `/usr/share/backgrounds/lucciola/lucciola.png`, `picture-options='zoom'`,
+  `primary-color='#121212'`.
 - **Greeter logo** (`gdm.d/02-margine-logo`): `[org/gnome/login-screen] logo=''`
-  — **intentionally empty**, and **locked** (`gdm.d/locks/…`). The Margine mark is
-  a wide banner; GDM would stretch it across the password field. Disabled is
-  cleaner.
+  is **intentionally empty**, and **locked** (`gdm.d/locks/…`). Margine's mark was
+  a wide banner GDM stretched across the password field; GDM is only the
+  fallback now, so it stays off.
 
 **Gotchas**
 - GDM dconf ≠ user-session dconf. Edit the `gdm.d/` db, not the user one.
@@ -240,11 +302,25 @@ starts when the greeter cannot come up, and keeps the dconf branding above).
   once to `/var/lib/noctalia-greeter/sync.toml` by tmpfiles): `scheme =
   "Synced"`, dark, the Margine palette (`palettes/Margine.json` with the keys
   renamed: `mPrimary` becomes `primary`, `mOnSurfaceVariant` becomes
-  `on_surface_variant`, and so on), `JetBrains Mono`, the Margine wallpaper
-  (`/usr/share/backgrounds/margine/margine.png`), `[session] last = "Lucciola"`.
+  `on_surface_variant`, and so on), `JetBrains Mono`, Lucciola's wallpaper
+  (`/usr/share/backgrounds/lucciola/lucciola.png`), `[session] last = "Lucciola"`.
+  Installed systems keep their copy, which names
+  `/usr/share/backgrounds/margine/margine.png`: that path is a link to the
+  new wallpaper, so they change too.
 - **Logo** (`.../greeter/greeter.toml`, linked as
-  `/var/lib/noctalia-greeter/greeter.toml`): `hide_logo = true`, so Noctalia's
-  logo does not appear on Lucciola's login screen. No Lucciola logo yet.
+  `/var/lib/noctalia-greeter/greeter.toml`): `hide_logo = false`. The greeter
+  has no setting for its logo: it draws `assets/noctalia.svg` 64 px high at the
+  bottom centre, **tinted** with the palette's `on_surface` (multiplied).
+  `noctalia-greeter.spec` installs `lucciola-mark.svg` in its place
+  (`Source1`; the Containerfile copies the mark into the greeter-rpm stage).
+- **Failed login text**: greetd reports `<PAM call>: <PAM result>` and the
+  greeter showed it as is (`pam_authenticate: AUTH_ERR`).
+  `lucciola/greeter/0001-say-pam-results-in-words.patch` (`authErrorText` in
+  `src/greeter/greeter_surface.cpp`) maps the common results to sentences
+  ("Wrong password, try again", too many attempts, expired account or
+  password, login not allowed, auth service not answering); anything else and
+  the log stay raw. Upstream candidate. When the pinned tag moves, check the
+  patch still applies (`%autosetup -p1` fails the build otherwise).
 - **Session name**: the greeter lists sessions by the `.desktop` file's
   `Name=`, so the seeded `last` must stay equal to `Name=Lucciola` in
   `lucciola.desktop` (lucciola/build.sh 5d checks it).
@@ -263,11 +339,24 @@ starts when the greeter cannot come up, and keeps the dconf branding above).
 
 ## 5. Desktop defaults (installed system)
 
-**Wallpaper** (`build_files/50-branding/install.sh`): gschema override
-`/usr/share/glib-2.0/schemas/zz1-margine.gschema.override` →
-`picture-uri[-dark]` = `/usr/share/backgrounds/margine/margine.png`. Named **zz1**
-so it loads *after* the base's own overrides. A compat symlink
-`autumn-leaves.png → margine.png` keeps old user dconf working.
+**Wallpaper**: dusk over dark hills with a few fireflies, the scene of the
+website's desktop picture (`lucciola/assets/wallpaper/make-wallpaper.py`, a
+3840x2400 master anchored at the bottom: other shapes crop sky or sides,
+never the hills). `/usr/share/backgrounds/lucciola/` has the 3840x2160,
+2880x1920 and 2560x1600 renders; `lucciola.png` links to the 16:9 one and is
+the default everywhere:
+- GNOME and its lock screen: gschema override
+  `/usr/share/glib-2.0/schemas/zz1-margine.gschema.override` (named **zz1** so
+  it loads *after* the base's own overrides), `picture-uri[-dark]`;
+- GDM: `gdm.d/01-margine-background` (section 4);
+- Noctalia: `lucciola/system_files/usr/share/lucciola/noctalia/15-wallpaper.toml`
+  (`[wallpaper.default] path`; a wallpaper picked in Noctalia goes to its
+  `settings.toml`, which wins);
+- the greeter: `sync.toml` (section 4b).
+
+Compat links `/usr/share/backgrounds/margine/{margine,autumn-leaves}.png` →
+`../lucciola/lucciola.png` keep every old path (user dconf, installed
+greeters' `sync.toml`) showing the new wallpaper.
 
 **Accent** (`build_files/30-gnome-defaults/install.sh`): `accent-color='yellow'`,
 read by the GTK applications of the Lucciola session. GNOME is Lucciola's stock
@@ -276,6 +365,13 @@ Shell default of Margine's (Margine OS keeps them in its own tree).
 
 **Gotcha:** after editing any `.gschema.override`, `glib-compile-schemas
 /usr/share/glib-2.0/schemas` must run (the build does this).
+
+**App menu entries** (`build_files/50-branding/install.sh`): Bluefin's
+`discourse.desktop` and `documentation.desktop` are removed, `system-update.desktop`
+gives way to `margine-system-update.desktop`. The **Margine Documentation**
+launcher (`margine-documentation.desktop`, icon `margine-documentation`,
+`margine-docs-open`) left on 2026-10-18 with the offline docs: Lucciola's guide
+is online and nothing replaces the entry.
 
 ---
 
@@ -401,7 +497,7 @@ passphrase `margine`), and links the docs. Idempotent via a marker in
 - Installed cert: `/usr/share/cert/MOK.der`. `mok-enroll.service` imports it on
   every boot until shim has it, **with Secure Boot on or off** (the key must be
   in shim before SB is turned on); a login notification explains the MOK Manager
-  screen; `ujust margine-secureboot` shows the state (2026-10-04).
+  screen; `ujust lucciola-secureboot` shows the state (2026-10-04).
 - ISO offers `Enroll Secure Boot key (MokManager)` (chainloads `mmx64.efi`) so the
   key can be enrolled from the boot menu before install.
 
@@ -424,10 +520,11 @@ All under `build_files/system_files/`. All autostart entries follow Golden Rules
 4 & 5 (no `X-GNOME-Autostart-Phase`; `Exec=` → a `/usr/libexec` wrapper).
 
 - **Bootstrap** (`usr/libexec/margine/first-boot-bootstrap`): runs `ujust
-  margine-bootstrap unattended` (home layout, default applications, Zen,
-  darktable). Idempotent marker `~/.config/margine/bootstrapped`. Margine starts
-  it from a GNOME-only autostart entry; Lucciola ships no autostart for it
-  (2026-10-18), so in Lucciola it runs only by hand.
+  lucciola-bootstrap unattended` (default applications, Zen, darktable; the
+  Margine home layout left it on 2026-10-18, new accounts keep the standard
+  XDG folders). Idempotent marker `~/.config/margine/bootstrapped`. Margine
+  starts it from a GNOME-only autostart entry; Lucciola ships no autostart for
+  it (2026-10-18), so in Lucciola it runs only by hand.
 - **First-boot status** (`usr/libexec/margine-first-boot-status`): notifies if
   `flatpak-preinstall.service` is still installing the deferred heavy apps
   ("installing extra apps… ~5–15 min"), and "Margine is ready" when done. Marker
@@ -463,20 +560,40 @@ All under `build_files/system_files/`. All autostart entries follow Golden Rules
 
 **File:** `build_files/50-branding/install.sh` + `60-ujust-services/install.sh`.
 
-- **fastfetch:** ASCII logo `/usr/share/margine/ascii-logo.txt`, config
-  `…/fastfetch/margine.jsonc` (logo color `yellow`), wired as the system default
-  via a `/etc/fastfetch/config.jsonc` symlink.
+- **fastfetch:** logo `/usr/share/margine/ascii-logo.txt` (from
+  `lucciola/assets/fastfetch-logo.txt`: the firefly in shaded blocks over the
+  name), config `…/fastfetch/margine.jsonc` (logo colours `$1` beige, `$2`
+  sand, `$3` the halo, `$4` text; keys in sand), wired as the system default
+  via a `/etc/fastfetch/config.jsonc` symlink; `lucciola-fetch` runs it.
 - **MOTD off:** Bluefin's tipline is suppressed by pre-creating
   `/etc/skel/.config/no-show-user-motd`; the Bluefin shell-init files
   (`ublue-motd.sh`, `ublue-fastfetch.sh`, `90-bluefin-starship.sh`,
   `91-bluefin-aliases.sh`) are deleted from **both** `/etc/profile.d` and
   `/usr/etc/profile.d` (Golden Rule 1).
-- **`/etc/issue`:** first line `Margine \r (\m): Fedora Silverblue + CachyOS signed
+- **`/etc/issue`:** first line `Lucciola \r (\m): Fedora Silverblue + CachyOS signed
   kernel`, second line `\d \t` (emergency console only).
 - **ujust:** recipes live in `build_files/60-custom.just`, mostly under
-  `[group('Margine')]` (`margine-bootstrap`, `margine-ai`, `margine-test-vm`, …;
-  `margine-gaming` sits under `[group('Gaming')]`), discoverable via
-  `ujust --list`.
+  `[group('Lucciola')]` (`lucciola-bootstrap`, `lucciola-ai`, `lucciola-test-vm`, …;
+  `lucciola-gaming` sits under `[group('Gaming')]`), discoverable via
+  `ujust --list`. They were `margine-*` until 2026-10-18; each old name is a
+  just `alias` (the block at the end of the file), which `ujust --list` shows
+  as `[alias: margine-…]` on the recipe's line. `margine-tpm2-enroll` stays a
+  deprecated recipe of its own. A `[doc('...')]` attribute gives a recipe its
+  one-line description where the comment above it is long.
+- **Commands:** `/usr/bin/lucciola-*` (status, autologin, keyring, tpm-unlock,
+  fetch, dev-groups, and the `validate-*`/`configure-*` helpers that
+  `40-spec-scripts` installs) are the real files; each `margine-*` name is a
+  relative link to its `lucciola-*` file (`validate-image-rootfs.sh` A.4.names
+  checks them).
+- **Names that keep `margine`** on purpose: paths (`/usr/libexec/margine`,
+  `/etc/margine`, `/usr/share/margine`, `~/.local/state/margine`), unit names,
+  `VARIANT_ID`, the app ids (`dev.margine.System`, `dev.margine.PhoneCam`:
+  the Wayland app_id must match the `.desktop` name, and dock pins refer to
+  it), the managed-block markers written into users' Zen `user.js`
+  (`margine-configure-zen-browser`, `margine-netflix-1080p`: they are found by
+  them), the test VM names (`margine-test-*`), "Margine key" (the MOK's own
+  name), and the GRUB static config (any byte change makes
+  `margine-grub-hidpi` rewrite `/boot/grub2/grub.cfg` on every install).
 
 ---
 
@@ -496,9 +613,11 @@ icons:
   `app_icon` field (or a matching `.desktop` app) and **never** from
   `image-path` → empty → `St.Icon` falls back to `application-x-executable`.
 
-**Fix:** `usr/libexec/margine/margine-notify` — a notify-send stand-in that
+**Fix:** `usr/libexec/margine/margine-notify`, a notify-send stand-in that
 calls `Notify` over D-Bus (gdbus) with **both** `app_icon` and `image-path`
-set. All Margine notifiers (staged-update, upgrade, staleness, first-boot
+set. Defaults (2026-10-18): the icon is os-release `LOGO` (`lucciola-logo`),
+the sender name `/usr/share/margine/product-name` (Lucciola), with os-release
+`NAME` and "Margine OS" as fallbacks; `-i` and `-a APP_NAME` override them. All Margine notifiers (staged-update, upgrade, staleness, first-boot
 status) go through it. Matrix-tested on the lock screen 2026-07-15: themed
 name, absolute path and Adwaita icons via notify-send all fail; the same
 themed name via `app_icon` shows the logo.
@@ -539,8 +658,9 @@ themed name via `app_icon` shows the logo.
 
 ---
 
-*Source map assembled 2026-07-01 from a full sweep of `build_files/` and
-`live-env/`. Re-verified claim-by-claim against the code 2026-07-15 (stale
+*Updated for Lucciola's own identity on 2026-10-18 (logo, wallpaper, boot
+splash, greeter, names). Source map assembled 2026-07-01 from a full sweep of
+`build_files/` and `live-env/`. Re-verified claim-by-claim against the code 2026-07-15 (stale
 notifier semantics, timer schedule, anchors and package lists corrected; the
 icon-cache `-t` rule is now actually enforced in `50-branding`). Line numbers
 deliberately omitted — grep the anchors.*

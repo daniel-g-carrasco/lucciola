@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Disturbance probe for `ujust margine-darktable-bench`.
+"""Disturbance probe for `ujust lucciola-darktable-bench`.
 
   probe.py clocks                  print the monotonic and boot clocks: their
                                    difference grows only while the system

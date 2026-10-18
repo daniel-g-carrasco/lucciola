@@ -2,7 +2,7 @@
 # Margine: set a plaintext gnome-keyring login keyring aside before
 # oo7-daemon starts (ExecStartPre, oo7-daemon.service.d/50-margine-keyring-legacy.conf).
 #
-# `ujust margine-keyring blank` (Fedora 44 and older) left the login keyring
+# `ujust lucciola-keyring blank` (Fedora 44 and older) left the login keyring
 # in gnome-keyring's plaintext format. oo7, the Secret Service from Fedora
 # 45, reads only the encrypted one: with the login password at hand it tries
 # to migrate keyrings/login.keyring, fails on the header and exits, so the
@@ -10,7 +10,7 @@
 # file and starts an empty Login keyring. Renamed out of the *.keyring names
 # oo7 scans, the file stays on disk and keyring-import-legacy moves its
 # items into oo7 (margine-keyring-import.service at login, or
-# `ujust margine-keyring import`). Back on Fedora 44 the file can be renamed
+# `ujust lucciola-keyring import`). Back on Fedora 44 the file can be renamed
 # back to login.keyring.
 #
 # Only for oo7 0.7.0~beta, what Fedora 45 ships today: the next oo7 reads

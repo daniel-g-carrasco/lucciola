@@ -1,0 +1,62 @@
+Lucciola: say the common PAM results in words on a failed login
+
+greetd reports a failed login as "<PAM call>: <PAM result>" and the
+greeter shows that text as it is, so a wrong password reads
+"pam_authenticate: AUTH_ERR". Map the results a person can meet
+(wrong password, unknown user, too many attempts, expired account or
+password, login not allowed, the auth service not answering) to a
+sentence; anything else is shown as greetd sent it, and the log keeps
+the raw text in every case.
+
+Applied by lucciola/greeter/noctalia-greeter.spec to the v1.6.0 tag.
+Could be proposed upstream (noctalia-dev/noctalia-greeter); the greeter
+has no translations yet, so the strings are English like its others.
+
+--- a/src/greeter/greeter_surface.cpp
++++ b/src/greeter/greeter_surface.cpp
+@@ -52,6 +52,36 @@
+   constexpr float kHeaderUserIconBase = 64.0f;
+   constexpr float kHeaderAvatarBorderScale = 2.0f;
+ 
++  // greetd reports a failed login as "<PAM call>: <PAM result>", for example
++  // "pam_authenticate: AUTH_ERR" for a wrong password. Say the common results
++  // in words; anything else is shown as greetd sent it.
++  std::string authErrorText(const std::string& description) {
++    const auto colon = description.rfind(": ");
++    const std::string result = colon == std::string::npos ? description : description.substr(colon + 2);
++    if (result == "AUTH_ERR") {
++      return "Wrong password, try again";
++    }
++    if (result == "USER_UNKNOWN") {
++      return "Wrong user name or password, try again";
++    }
++    if (result == "MAXTRIES") {
++      return "Too many attempts, wait a moment and try again";
++    }
++    if (result == "ACCT_EXPIRED") {
++      return "This account has expired";
++    }
++    if (result == "NEW_AUTHTOK_REQD" || result == "AUTHTOK_EXPIRED") {
++      return "The password has expired";
++    }
++    if (result == "PERM_DENIED") {
++      return "This account cannot log in here";
++    }
++    if (result == "AUTHINFO_UNAVAIL") {
++      return "The login service did not answer, try again";
++    }
++    return description;
++  }
++
+   Button::ButtonStateColors
+   makePaletteState(ColorRole bg, std::optional<ColorRole> border, ColorRole label, float alpha = 1.0f) {
+     return Button::ButtonStateColors{
+@@ -1663,7 +1693,7 @@
+   m_pendingResponse.clear();
+   m_pendingReplies.clear();
+   clearPasswordInput();
+-  updateStatus(error.description, true);
++  updateStatus(authErrorText(error.description), true);
+   kLog.warn("authentication failed: {}", error.description);
+   if (!resetAuthSession()) {
+     return;

@@ -1,5 +1,5 @@
 [Unit]
-Description=Margine: notify when a staged update has been waiting for days
+Description=Lucciola: notify when a staged update has been waiting for days
 # Notifications need the session bus + a notification daemon.
 After=graphical-session.target
 

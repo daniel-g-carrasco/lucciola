@@ -25,6 +25,10 @@
 # qemu for a dozen foreign architectures and others that Margine never
 # asked for, and this is not the place to start.
 #
+# Since 2026-10-18 the virtualisation stack is not part of it: libvirt,
+# QEMU/KVM, virt-manager, OVMF, swtpm and podman-machine are layered on
+# demand with `ujust lucciola-vm`.
+#
 # Third-party repos are handled the way custom-kernel handles RPMFusion
 # and NVIDIA (#363): fetch the key, verify its fingerprint, only then let
 # dnf use the repo, and remove the repo file afterwards so the image ships
@@ -46,19 +50,20 @@ missing() {
   for p in "$@"; do rpm -q "$p" >/dev/null 2>&1 || echo "$p"; done
 }
 
-# --- 1. Virtualisation + container tooling from Fedora's own repos -------
-# The list is margine-atomic.yaml host_packages.virtualization plus the
-# podman extras DX carried. podman-docker answers to `docker` for scripts:
-# Margine ships Podman only (2026-10-10), Docker CE is `ujust margine-docker`.
+# --- 1. Container tooling from Fedora's own repos --------------------------
+# The podman extras DX carried. podman-docker answers to `docker` for
+# scripts: Margine ships Podman only (2026-10-10), Docker CE is
+# `ujust lucciola-docker`.
+# The virtualisation stack (libvirt, qemu-kvm, virt-manager, virt-viewer,
+# virt-install, edk2-ovmf, swtpm, dnsmasq, the qemu display and USB
+# modules) and podman-machine, which runs on the same QEMU, left the image
+# on 2026-10-18 (about 290 MiB): `ujust lucciola-vm` layers them.
 FEDORA_PKGS=(
-  libvirt libvirt-nss qemu-kvm virt-manager virt-viewer edk2-ovmf swtpm dnsmasq
-  qemu-img qemu-device-display-virtio-gpu qemu-device-display-virtio-vga
-  qemu-device-usb-redirect qemu-char-spice
-  podman-compose podman-machine podman-docker
+  podman-compose podman-docker
 )
 mapfile -t NEED < <(missing "${FEDORA_PKGS[@]}")
 if (( ${#NEED[@]} == 0 )); then
-  log "virtualisation + container tooling already in the base (${#FEDORA_PKGS[@]} packages present)"
+  log "container tooling already in the base (${#FEDORA_PKGS[@]} packages present)"
 else
   log "base lacks ${#NEED[@]} packages, installing: ${NEED[*]}"
   retry 3 30 dnf -y install --setopt=install_weak_deps=False "${NEED[@]}"
@@ -76,26 +81,31 @@ fi
 # Lucciola's stock fallback session, and the four Margine enabled
 # (AppIndicator, Dash to Dock, Caffeine, GSConnect) went with the rest of
 # Margine's Shell customisation.
-# vkBasalt is declared (desktop_host_helpers) and present in today's image,
-# but not because DX ships it: it was a leftover of the GAMING_BAKE
-# transaction in custom-kernel (lutris dragged in vkBasalt and wine as
-# weak dependencies, the four gaming packages were removed afterwards,
-# their dependencies stayed). Since 2026-10-10 the bake installs without
-# weak dependencies and 12-base-trim removes the wine family, so it no
-# longer lingers. The gaming layer is the user's (ujust margine-gaming),
-# so it is not backfilled here.
+# vkBasalt, mangohud and goverlay are not backfilled: the gaming layer is
+# the user's (ujust lucciola-gaming, ujust lucciola-gaming-native). Until
+# 2026-10-18 the image carried all three: custom-kernel installed mangohud
+# and goverlay, and vkBasalt came as goverlay's weak dependency (with
+# mesa-demos and vulkan-tools).
+# Left on 2026-10-18 because nothing in the image calls them: mesa-demos
+# (glxinfo and eglinfo, which the diagnostics run only when present),
+# glow, podman-tui, python3-pip (toolbox packages in the declaration, not
+# host ones). vulkan-tools stays: validate-gaming-runtime needs vulkaninfo
+# once Steam is installed. tmux is the base's own.
 DECLARED_PKGS=(
-  mesa-demos vulkan-tools                  # media_diagnostics
+  vulkan-tools                             # media_diagnostics; vulkaninfo for validate-gaming-runtime
   rocminfo rocm-opencl                     # amd_gpu_extras
   lm_sensors powertop powerstat smartmontools  # hardware_diagnostics
   nautilus-python                          # gnome_tools: Files extensions (Spola's sync emblems)
-  libappindicator-gtk3                     # gnome_tools: the tray library Koofr's GUI dlopens (47-koofr-tray-fix);
-                                           # came as a dependency of the AppIndicator extension until 2026-10-18
+  # libappindicator-gtk3 left on 2026-10-18 with the Koofr tray shim: only
+  # Koofr Desktop's GUI used it, and Spola replaced Koofr Desktop.
   jetbrains-mono-fonts cascadia-code-fonts # fonts
-  tmux glow                                # core_cli
-  podman-tui                               # container_tooling
-  python3-pip                              # build_essentials
-  virt-install                             # not declared: the margine-vm just recipes call it
+  tmux                                     # core_cli (the base ships it)
+  btop                                     # Lucciola's system monitor: Mod+Ctrl+T in the niri config
+  # zenity: Noctalia, distrobox-export and gnome-session call it, and the
+  # validator's desktop list expects it. silverblue-main lacks it; until
+  # 2026-10-18 it was in the image only as a dependency of steam left behind
+  # by the gaming bake in custom-kernel.
+  zenity
   # Bluefin shipped it; Universal Blue's main images do not (silverblue-main
   # trial, 2026-10-10). fastfetch is what 50-branding configures.
   fastfetch
@@ -115,40 +125,8 @@ DECLARED_PKGS=(
   # retired it (NetworkManager 1.58 Obsoletes NetworkManager-vpnc{,-gnome}).
   NetworkManager-ssh-gnome sshpass nm-connection-editor
 )
-mapfile -t NEED < <(missing "${DECLARED_PKGS[@]}")
-if (( ${#NEED[@]} == 0 )); then
-  log "declared host packages already in the base (${#DECLARED_PKGS[@]} present)"
-else
-  log "base lacks ${#NEED[@]} declared host packages, installing: ${NEED[*]}"
-  retry 3 30 dnf -y install --setopt=install_weak_deps=False "${NEED[@]}"
-fi
-
-# --- 1c. ROCm: keep OpenCL and the HIP runtime, drop the HIP compiler ------
-# Lived in 12-base-trim while the base shipped rocm-hip; Universal Blue's
-# main does not, so rocm-hip is installed above (DECLARED_PKGS) and the
-# compiler it drags in is removed here, right after.
-# rocm-hip requires hipcc, and rocm-device-libs requires rocm-llvm-static
-# (1963 MB), by packaging, not at run time: with all of them gone,
-# rocm-opencl still builds every one of darktable's 42 kernels and
-# libamdhip64 and libamdocl64 resolve (tested in a fedora:44 container,
-# 2026-10-10). dnf would cascade the removal up to rocm-hip, so these go
-# through rpm alone. That leaves rocm-hip requiring a name nothing
-# provides, and rpm-ostree re-solves every installed package when it
-# layers: the first image built this way failed the smoke test's
-# gaming-native dry run (2026-10-10). So a package of Margine's own,
-# margine-rocm-hip-runtime, provides the name `hipcc` and nothing else,
-# and the prove-it of this script asks dnf for every unmet dependency.
-ROCM_DEV=(hipcc rocm-device-libs rocm-llvm-static rocm-clang rocm-llvm rocm-lld
-          rocm-clang-devel rocm-llvm-devel rocm-libc++-devel rocm-clang-runtime-devel rocm-runtime-devel)
-ROCM_PRESENT=()
-for p in "${ROCM_DEV[@]}"; do
-  rpm -q "$p" >/dev/null 2>&1 && ROCM_PRESENT+=("$p")
-done
-if (( ${#ROCM_PRESENT[@]} )); then
-  log "removing the HIP compiler and ROCm development packages: ${ROCM_PRESENT[*]}"
-  rpm -e --nodeps "${ROCM_PRESENT[@]}"
-fi
-if rpm -q rocm-hip >/dev/null 2>&1 && ! rpm -q hipcc >/dev/null 2>&1; then
+# margine-rocm-hip-runtime: provides the name `hipcc`, nothing else (see 1c).
+install_hip_stub() {
   # rpm-build is not in the image (custom-kernel removes it with the other
   # build-only packages): borrow it for one rpmbuild and take back exactly
   # what the borrowing added.
@@ -190,18 +168,71 @@ SPEC
     dnf -y remove --setopt=clean_requirements_on_remove=False "${borrowed[@]}"
   fi
   log "margine-rocm-hip-runtime provides hipcc: rocm-hip's requirement is met without the compiler"
+}
+
+# The stub goes in BEFORE rocm-hip (2026-10-18). Installed after, as until
+# then, it came too late: dnf had already pulled hipcc, and with it
+# rocm-device-libs, rocm-llvm-static and the rest of the HIP compiler, only
+# for 1c to delete them with rpm a minute later. Measured on
+# silverblue-main:45 for rocminfo, rocm-opencl and rocm-hip: 84 packages,
+# 437 MiB downloaded and 3 GiB unpacked without the stub; 7 packages,
+# 44 MiB and 166 MiB with it. With `hipcc` already provided, rocm-hip
+# installs without any of the compiler; 1c stays as the guard for a base
+# that ships it.
+if ! rpm -q hipcc >/dev/null 2>&1 && ! rpm -q margine-rocm-hip-runtime >/dev/null 2>&1; then
+  install_hip_stub
+fi
+
+mapfile -t NEED < <(missing "${DECLARED_PKGS[@]}")
+if (( ${#NEED[@]} == 0 )); then
+  log "declared host packages already in the base (${#DECLARED_PKGS[@]} present)"
+else
+  log "base lacks ${#NEED[@]} declared host packages, installing: ${NEED[*]}"
+  retry 3 30 dnf -y install --setopt=install_weak_deps=False "${NEED[@]}"
+fi
+
+# --- 1c. ROCm: keep OpenCL and the HIP runtime, drop the HIP compiler ------
+# Lived in 12-base-trim while the base shipped rocm-hip; Universal Blue's
+# main does not, so rocm-hip is installed above (DECLARED_PKGS), after the
+# stub that keeps it from dragging the compiler in. What follows removes
+# the compiler where a base ships it anyway.
+# rocm-hip requires hipcc, and rocm-device-libs requires rocm-llvm-static
+# (1963 MB), by packaging, not at run time: with all of them gone,
+# rocm-opencl still builds every one of darktable's 42 kernels and
+# libamdhip64 and libamdocl64 resolve (tested in a fedora:44 container,
+# 2026-10-10). dnf would cascade the removal up to rocm-hip, so these go
+# through rpm alone. That leaves rocm-hip requiring a name nothing
+# provides, and rpm-ostree re-solves every installed package when it
+# layers: the first image built this way failed the smoke test's
+# gaming-native dry run (2026-10-10). So a package of Margine's own,
+# margine-rocm-hip-runtime, provides the name `hipcc` and nothing else,
+# and the prove-it of this script asks dnf for every unmet dependency.
+ROCM_DEV=(hipcc rocm-device-libs rocm-llvm-static rocm-clang rocm-llvm rocm-lld
+          rocm-clang-devel rocm-llvm-devel rocm-libc++-devel rocm-clang-runtime-devel rocm-runtime-devel)
+ROCM_PRESENT=()
+for p in "${ROCM_DEV[@]}"; do
+  rpm -q "$p" >/dev/null 2>&1 && ROCM_PRESENT+=("$p")
+done
+if (( ${#ROCM_PRESENT[@]} )); then
+  log "removing the HIP compiler and ROCm development packages: ${ROCM_PRESENT[*]}"
+  rpm -e --nodeps "${ROCM_PRESENT[@]}"
+fi
+if rpm -q rocm-hip >/dev/null 2>&1 && ! rpm -q hipcc >/dev/null 2>&1 && ! rpm -q margine-rocm-hip-runtime >/dev/null 2>&1; then
+  # A base that shipped hipcc (removed just above) leaves rocm-hip without it.
+  install_hip_stub
 fi
 
 # --- 2. Docker CE: not in the image since 2026-10-10 ---------------------
-# 12-base-trim removes what a base ships; `ujust margine-docker` layers it
+# 12-base-trim removes what a base ships; `ujust lucciola-docker` layers it
 # from Docker's repository (key pinned by fingerprint, same as the key
 # check here used to do) for the few tools wired to Docker's own daemon.
 
-# --- 3. VS Code: a Flatpak since 2026-10-10 ------------------------------
-# com.visualstudio.code is in the preinstall list (20-flatpaks); the RPM a
-# base ships is removed by 12-base-trim, and `ujust margine-vscode` layers
-# it from Microsoft's repository (key pinned) for whoever needs the native
-# build, e.g. extensions that run host tools.
+# --- 3. VS Code: on demand ------------------------------------------------
+# The RPM a base ships is removed by 12-base-trim; `ujust lucciola-vscode`
+# layers it from Microsoft's repository (key pinned) for whoever needs the
+# native build, e.g. extensions that run host tools. The Flatpak
+# (com.visualstudio.code) was preinstalled from 2026-10-10 to 2026-10-18;
+# now it is in Bazaar like any other app.
 
 # --- 3b. uupd, the updater margine-update drives ---------------------------
 # Bluefin ships it; Universal Blue's main images install ublue-os-just and
@@ -251,8 +282,10 @@ systemctl --global mask flatpak-user-update.timer >/dev/null
 # Group membership is Margine's job on every base (2026-10-10): the base's
 # bluefin-dx-groups expects the docker and incus-admin groups, which left
 # the image with Docker CE and incus, and it restarts every 30 s when
-# usermod fails. margine-dev-groups adds wheel users to the groups that
-# exist (libvirt, and docker after `ujust margine-docker`), every boot.
+# usermod fails. lucciola-dev-groups adds wheel users to the groups that
+# exist (libvirt after `ujust lucciola-vm`, docker after
+# `ujust lucciola-docker`), every boot. margine-libvirt-workaround only runs
+# where /var/lib/libvirt exists, i.e. once libvirt is layered.
 if [[ -f /usr/lib/systemd/system/bluefin-dx-groups.service ]]; then
   systemctl mask bluefin-dx-groups.service
   log "masked the base's bluefin-dx-groups.service (its groups are gone)"
@@ -274,8 +307,12 @@ fi
 # --- 5. Prove it ---------------------------------------------------------
 # What this script promises the rest of the image. A base that still lacks
 # any of these after the steps above is not something to ship.
-for p in libvirt virt-manager qemu-kvm podman-docker uupd "${DECLARED_PKGS[@]}"; do
+for p in podman-docker uupd "${DECLARED_PKGS[@]}"; do
   rpm -q "$p" >/dev/null 2>&1 || { err "$p still missing after devstack"; exit 1; }
+done
+# The VM stack is layered on demand (ujust lucciola-vm), never shipped.
+for p in libvirt-daemon qemu-kvm virt-manager swtpm edk2-ovmf podman-machine; do
+  if rpm -q "$p" >/dev/null 2>&1; then err "$p is in the image: the VM stack is layered on demand (ujust lucciola-vm)"; exit 1; fi
 done
 for p in "${ROCM_DEV[@]}"; do
   if rpm -q "$p" >/dev/null 2>&1; then err "$p still present after the ROCm trim"; exit 1; fi
@@ -290,7 +327,6 @@ done
 if ! unmet="$(dnf check --dependencies 2>&1)"; then
   err "unmet dependencies after devstack:"; echo "$unmet" >&2; exit 1
 fi
-grep -q "^libvirt:" /usr/lib/group /etc/group 2>/dev/null || { err "group libvirt missing after devstack"; exit 1; }
 [[ -f /usr/lib/systemd/system/flatpak-preinstall.service ]] || { err "flatpak-preinstall.service missing: no Flatpak would be installed at first boot"; exit 1; }
 if rpm -q docker-ce >/dev/null 2>&1 || rpm -q incus >/dev/null 2>&1; then
   err "docker-ce or incus still in the image after base-trim"; exit 1

@@ -10,7 +10,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # The configure-* scripts are user-state helpers. We don't run them at
 # image build time (no user yet); we install them so the user can run e.g.
-#   margine-configure-home-layout --apply
+#   lucciola-configure-home-layout --apply
 # from any terminal post-install. The GNOME ones (keybindings, appearance,
 # app folders, extensions, install-user-extensions) left with the rest of
 # Margine's GNOME customisation (2026-10-18): GNOME is Lucciola's stock
@@ -36,8 +36,11 @@ for s in \
     validate-declared-state \
     validate-branding \
     collect-diagnostics ; do
-  install -Dm0755 "/ctx/40-spec-scripts/scripts/${s}" "/usr/bin/margine-${s}"
-  log "Installed: /usr/bin/margine-${s}"
+  # lucciola-<name> since 2026-10-18; the margine-<name> it had before
+  # stays as a link while installs and habits move over.
+  install -Dm0755 "/ctx/40-spec-scripts/scripts/${s}" "/usr/bin/lucciola-${s}"
+  ln -sf "lucciola-${s}" "/usr/bin/margine-${s}"
+  log "Installed: /usr/bin/lucciola-${s} (+ margine-${s})"
 done
 
 # Also install the declarations YAML the scripts read.

@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Lucciola
+Description=Lucciola boot splash: the wordmark on #121212, its firefly breathing
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/lucciola
+ScriptFile=/usr/share/plymouth/themes/lucciola/lucciola.script

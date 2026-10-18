@@ -37,12 +37,13 @@ set -euo pipefail
 #   /usr/share/flatpak/preinstall.d/margine-defaults.preinstall
 #       — read by flatpak-preinstall.service on first boot.
 #
-# VS Code is intentionally NOT in either list: Bluefin DX already
-# preinstalls VS Code from the Microsoft repo with dev container
-# tooling already wired up.
+# Not preinstalled since 2026-10-18 (Lucciola): VS Code (`ujust
+# margine-vscode` layers the RPM; the Flatpak is in Bazaar), Bitwarden,
+# GNOME Weather, GNOME Maps, Blanket and Fragments. flatpak-preinstall
+# never uninstalls, so a system that has them keeps them.
 #
 # The gaming variant was retired 2026-06-06. Users who want gaming run
-# `ujust margine-gaming` after first boot — see build_files/60-custom.just.
+# `ujust lucciola-gaming` after first boot: see build_files/60-custom.just.
 
 # ---- BAKE list (instant at first boot) ----
 # Source of truth: installer/flatpaks-base, accessible from this script
@@ -99,9 +100,7 @@ mkdir -p /usr/share/flatpak/preinstall.d
       net.sapples.LiveCaptions \
       app.zen_browser.zen \
       org.mozilla.thunderbird_esr \
-      com.bitwarden.desktop \
       org.libreoffice.LibreOffice \
-      com.visualstudio.code \
       org.gnome.Snapshot \
       org.gnome.Showtime \
       org.gnome.Papers \
@@ -111,8 +110,6 @@ mkdir -p /usr/share/flatpak/preinstall.d
       org.gnome.Calendar \
       org.gnome.clocks \
       org.gnome.Contacts \
-      org.gnome.Weather \
-      org.gnome.Maps \
       org.gnome.TextEditor \
       org.gnome.baobab \
       org.gnome.Characters \
@@ -128,8 +125,6 @@ mkdir -p /usr/share/flatpak/preinstall.d
       org.audacityteam.Audacity \
       com.github.wwmm.easyeffects \
       com.github.neithern.g4music \
-      com.rafaelmardojai.Blanket \
-      de.haeckerfelix.Fragments \
       com.ranfdev.DistroShelf \
       com.github.tchx84.Flatseal \
       io.github.flattool.Warehouse \
@@ -148,7 +143,8 @@ mkdir -p /usr/share/flatpak/preinstall.d
     #
     #   moved BAKE: Pinta, Audacity, EasyEffects, Reaper, g4music,
     #               Blanket, Fragments (sum ~420 MB additional in
-    #               kickstart download)
+    #               kickstart download; Blanket and Fragments left the
+    #               set on 2026-10-18)
     #   kept DEFER: GIMP, Inkscape, darktable, OBS Studio (the four
     #               creative-pro macigni totaling ~2 GB).
     #

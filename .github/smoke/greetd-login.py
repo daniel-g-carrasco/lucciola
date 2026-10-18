@@ -6,7 +6,7 @@ injected offline by .github/scripts/inject-gui-probe.sh. Standard library only.
 Three phases, each with its own marker on the serial console:
 
   MARGINE-GREETD: AUTOLOGIN PASS|FAIL|SKIP ...  greetd's [initial_session]
-      (what `ujust margine-autologin on` writes) started the smoke user's
+      (what `ujust lucciola-autologin on` writes) started the smoke user's
       session: niri runs, logind has a wayland session from the greetd PAM
       service, desktop lucciola.
   MARGINE-GREETD: GREETER PASS|FAIL ...  after that session logs out, greetd

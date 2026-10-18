@@ -1,0 +1,11 @@
+# Lucciola: the wallpaper, dusk over dark hills with a few fireflies
+# (/usr/share/backgrounds/lucciola/, made by lucciola/assets/wallpaper/
+# make-wallpaper.py). lucciola.png is the 16:9 render; the 3:2 and 16:10
+# ones are next to it. A wallpaper picked in Noctalia goes to its
+# settings.toml, which loads last and wins over this default.
+[wallpaper]
+fill_mode = "crop"
+fill_color = "#121212"
+
+[wallpaper.default]
+path = "/usr/share/backgrounds/lucciola/lucciola.png"

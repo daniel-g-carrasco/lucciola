@@ -22,7 +22,7 @@
 #   qcow2|      B/C, manual VM tests) — BAKE check is skipped because no
 #   non-iso     Anaconda %post ever ran there.
 #   image       the build container itself (`podman run --rm -e
-#               MARGINE_VALIDATE_CONTEXT=image $IMG margine-validate-margine-system`)
+#               MARGINE_VALIDATE_CONTEXT=image $IMG lucciola-validate-margine-system`)
 #               — only filesystem-level checks run; anything that needs a
 #               booted system (running kernel, bootc status, EFI/mokutil,
 #               dconf/gsettings, systemd state, installed Flatpaks) is
@@ -36,7 +36,7 @@ set -u
 
 case "${1:-}" in
   -h|--help)
-    sed -n '2,40p' "${BASH_SOURCE[0]:-/usr/bin/margine-validate-margine-system}" 2>/dev/null \
+    sed -n '2,40p' "${BASH_SOURCE[0]:-/usr/bin/lucciola-validate-margine-system}" 2>/dev/null \
       || echo "Margine acceptance test. See script header for MARGINE_VALIDATE_CONTEXT values."
     exit 0
     ;;
@@ -84,8 +84,8 @@ fi
 EXPECTED_OS_ID="fedora"
 EXPECTED_OS_VARIANT_ID="margine"
 EXPECTED_KERNEL_PATTERN="cachy"   # kernel-cachyos (cachyos1)
-EXPECTED_PLYMOUTH_THEME="margine"
-EXPECTED_WALLPAPER="file:///usr/share/backgrounds/margine/margine.png"
+EXPECTED_PLYMOUTH_THEME="lucciola"
+EXPECTED_WALLPAPER="file:///usr/share/backgrounds/lucciola/lucciola.png"
 EXPECTED_GDM_LOGO=""   # empty: no logo in greeter, by design (see lessons-learned Bug 7)
 EXPECTED_GHCR_IMAGE="ghcr.io/daniel-g-carrasco/lucciola"
 
@@ -107,7 +107,7 @@ fi
 # GNOME bootstrap sections this validator had for Margine are gone.
 
 EXPECTED_MARGINE_HELPERS=(
-  margine-fetch
+  lucciola-fetch
 )
 
 # Services that are expected to fail and are NOT counted as
@@ -203,7 +203,7 @@ print(img)
   info "booted image: $BOOTED_IMAGE"
   if [[ -z "$BOOTED_IMAGE" ]]; then
     # `bootc status` needs root and a real booted deployment. Run without
-    # privilege (or in an image/container context, e.g. ujust margine-doctor),
+    # privilege (or in an image/container context, e.g. ujust lucciola-doctor),
     # it returns nothing — that's "can't determine", not "wrong image".
     warn "couldn't read the booted image (need root + a booted deployment; e.g. 'sudo $0')"
   elif [[ "$BOOTED_IMAGE" == ${EXPECTED_GHCR_IMAGE}* ]]; then
@@ -244,7 +244,7 @@ done
 # A failure here means the user has to manually `sudo usermod -aG ...`
 # or stay sudo-bound for docker/incus/libvirt commands.
 if (( ! IS_LIVE )); then
-  info "wheel-membership check skipped (image context: margine-dev-groups applies it at boot)"
+  info "wheel-membership check skipped (image context: lucciola-dev-groups applies it at boot)"
 elif WHEEL_USERS=$(getent group wheel 2>/dev/null | cut -d: -f4 | tr ',' ' '); [[ -z "${WHEEL_USERS// /}" ]]; then
   warn "wheel group is empty — no admin users to check group membership for"
 else
@@ -253,16 +253,18 @@ else
     # id -nG is robust (uses NSS, sees both /etc/group and /etc/passwd
     # secondary groups, plus any LDAP/SSSD source on enterprise installs).
     USER_GROUPS=" $(id -nG "$u" 2>/dev/null) "
-    # libvirt always; docker and incus-admin only when the package that
-    # brings the group is layered (ujust margine-docker, or incus by hand).
-    REQUIRED_GROUPS=(libvirt)
+    # Each group only when the package that brings it is layered: libvirt
+    # (ujust lucciola-vm, since 2026-10-18), docker (ujust lucciola-docker),
+    # incus-admin (incus by hand).
+    REQUIRED_GROUPS=()
+    rpm -q libvirt-daemon >/dev/null 2>&1 && REQUIRED_GROUPS+=(libvirt)
     rpm -q docker-ce >/dev/null 2>&1 && REQUIRED_GROUPS+=(docker)
     rpm -q incus >/dev/null 2>&1 && REQUIRED_GROUPS+=(incus-admin)
     for required in "${REQUIRED_GROUPS[@]}"; do
       if [[ "$USER_GROUPS" == *" $required "* ]]; then
-        ok "user '$u' is in group '$required' (margine-dev-groups effect OK)"
+        ok "user '$u' is in group '$required' (lucciola-dev-groups effect OK)"
       else
-        bad "user '$u' is NOT in group '$required': margine-dev-groups may have failed at boot. Manual fix: sudo usermod -aG $required $u && relogin"
+        bad "user '$u' is NOT in group '$required': lucciola-dev-groups may have failed at boot. Manual fix: sudo usermod -aG $required $u && relogin"
       fi
     done
   done
@@ -291,14 +293,18 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-hdr "5. Margine branding assets"
+hdr "5. Branding assets (Lucciola's)"
 # ---------------------------------------------------------------------------
-[[ -f /usr/share/pixmaps/margine-logo.png ]] && ok "margine-logo.png present" \
-  || bad "/usr/share/pixmaps/margine-logo.png missing"
-[[ -f /usr/share/backgrounds/margine/margine.png ]] && ok "wallpaper present" \
-  || bad "/usr/share/backgrounds/margine/margine.png missing"
-[[ -d /usr/share/plymouth/themes/margine ]] && ok "Plymouth theme dir present" \
-  || bad "/usr/share/plymouth/themes/margine missing"
+[[ -f /usr/share/pixmaps/lucciola-logo.png ]] && ok "lucciola-logo.png present" \
+  || bad "/usr/share/pixmaps/lucciola-logo.png missing"
+[[ -f /usr/share/icons/hicolor/scalable/apps/margine-logo.svg ]] && ok "margine-logo alias present (older references)" \
+  || bad "/usr/share/icons/hicolor/scalable/apps/margine-logo.svg missing"
+[[ -f /usr/share/backgrounds/lucciola/lucciola.png ]] && ok "wallpaper present" \
+  || bad "/usr/share/backgrounds/lucciola/lucciola.png missing"
+[[ -f /usr/share/backgrounds/margine/margine.png ]] && ok "old wallpaper path still resolves (sync.toml and dconf of older installs)" \
+  || bad "/usr/share/backgrounds/margine/margine.png does not resolve"
+[[ -d /usr/share/plymouth/themes/lucciola ]] && ok "Plymouth theme dir present" \
+  || bad "/usr/share/plymouth/themes/lucciola missing"
 [[ -f /usr/share/margine/ascii-logo.txt ]] && ok "fastfetch ASCII logo present" \
   || warn "fastfetch ASCII logo missing (cosmetic)"
 
@@ -306,34 +312,33 @@ hdr "5. Margine branding assets"
 # distro logo. Without LOGO=, GNOME falls back to the inherited Bluefin
 # asset → wrong logo. Fixed 2026-06-02 (commit f40d793 margine-image).
 LOGO_KEY=$(grep -E '^LOGO=' /etc/os-release | cut -d= -f2- | tr -d '"')
-[[ "$LOGO_KEY" == "margine-logo" ]] \
-  && ok "os-release LOGO=margine-logo (GNOME About will find /usr/share/pixmaps/margine-logo.png)" \
-  || bad "os-release LOGO='$LOGO_KEY' (expected 'margine-logo') — GNOME About will show wrong distro logo"
+[[ "$LOGO_KEY" == "lucciola-logo" ]] \
+  && ok "os-release LOGO=lucciola-logo (GNOME About finds it in hicolor)" \
+  || bad "os-release LOGO='$LOGO_KEY' (expected 'lucciola-logo'): GNOME About would show the wrong logo"
 
 # /etc/fastfetch/config.jsonc is the system-wide default config that
 # vanilla `fastfetch` (no --config flag) picks up. Without it,
 # fastfetch falls back to its built-in default → Fedora ASCII +
 # generic modules instead of Margine ASCII. Fixed 2026-06-02
-# (commit f40d793 margine-image). margine-fetch wrapper still works
+# (commit f40d793 margine-image). lucciola-fetch wrapper still works
 # regardless because it explicitly passes --config.
 [[ -f /etc/fastfetch/config.jsonc ]] \
   && ok "/etc/fastfetch/config.jsonc present (vanilla fastfetch → Margine config)" \
   || warn "/etc/fastfetch/config.jsonc missing — vanilla fastfetch will show Fedora default (cosmetic)"
 
-# Plymouth watermark dimensions — Margine ships at 480x120 (≈25% of a
-# 1080p viewport, consistent with Fedora/Bluefin stock).
-# Pre-2026-06-02 was 720x180 (too big, daniel flagged it).
-if command -v identify >/dev/null 2>&1 && [[ -f /usr/share/plymouth/themes/margine/watermark.png ]]; then
-  PLY_DIM=$(identify -format '%wx%h' /usr/share/plymouth/themes/margine/watermark.png 2>/dev/null)
-  [[ "$PLY_DIM" == "480x120" ]] \
-    && ok "Plymouth watermark = 480x120 (expected)" \
-    || warn "Plymouth watermark = '$PLY_DIM' (expected 480x120; cosmetic)"
+# Plymouth: the theme sizes itself in device pixels and needs Plymouth's
+# own HiDPI scale off (DeviceScale=1), or it is drawn at scale 1 and
+# stretched 2x on HiDPI panels (50-branding, lucciola.script).
+if grep -qx 'DeviceScale=1' /etc/plymouth/plymouthd.conf 2>/dev/null; then
+  ok "plymouthd.conf: DeviceScale=1 (the theme sizes itself)"
+else
+  warn "plymouthd.conf has no DeviceScale=1: the boot splash is soft on HiDPI panels (cosmetic)"
 fi
 
 # start-here-symbolic.svg — Bluefin overrides this Adwaita icon with
 # a mascot glyph that bleeds through into gnome-initial-setup's
-# Language page header. Margine overlays a path-based symbolic 'm'
-# glyph. GTK4 symbolic icons reject embedded raster <image> payloads,
+# Language page header. The image overlays Lucciola's symbolic firefly
+# (two circles). GTK4 symbolic icons reject embedded raster <image> payloads,
 # so validate the SVG shape rather than using a file-size heuristic.
 START_HERE=/usr/share/icons/Adwaita/symbolic/places/start-here-symbolic.svg
 if [[ -f "$START_HERE" ]]; then
@@ -432,9 +437,9 @@ else
   bad "fastfetch broken — alias likely still resolves to a removed ublue-fastfetch / ublue-motd"
 fi
 
-# The Margine logo PNG must exist where os-release's LOGO key
-# resolves it (i.e. /usr/share/pixmaps/<LOGO>.png).
-RESOLVED_LOGO="/usr/share/pixmaps/${LOGO_KEY:-margine-logo}.png"
+# The logo PNG must exist where os-release's LOGO key resolves it outside
+# the icon theme (i.e. /usr/share/pixmaps/<LOGO>.png).
+RESOLVED_LOGO="/usr/share/pixmaps/${LOGO_KEY:-lucciola-logo}.png"
 [[ -f "$RESOLVED_LOGO" ]] \
   && ok "LOGO=$LOGO_KEY resolves to $RESOLVED_LOGO" \
   || bad "$RESOLVED_LOGO missing — GNOME About panel will fall back to a generic logo"
@@ -464,9 +469,9 @@ gdm_bg_path="${GDM_BG#file://}"
 gdm_bg_real=$(readlink -f "$gdm_bg_path" 2>/dev/null || echo "$gdm_bg_path")
 if [[ "$gdm_bg_real" == "$exp_real" ]]; then
   if [[ "$GDM_BG" == "$EXPECTED_WALLPAPER" ]]; then
-    ok "GDM background uses Margine wallpaper"
+    ok "GDM background uses the Lucciola wallpaper"
   else
-    ok "GDM background resolves to Margine wallpaper via symlink (dconf still references the old path)"
+    ok "GDM background resolves to the Lucciola wallpaper via symlink (dconf still references the old path)"
   fi
 else
   bad "GDM background resolves to '$gdm_bg_real' (expected '$exp_real')"
@@ -560,11 +565,11 @@ fi
 hdr "7. Margine launchers"
 # ---------------------------------------------------------------------------
 # Margine-branded replacements for the Bluefin app-menu entries we
-# stripped (system-update, documentation): the launcher should offer
-# Margine's own versions in their place rather than leaving holes.
+# stripped: the launcher should offer Margine's own version in their place
+# rather than leaving holes. (Documentation has none since 2026-10-18: the
+# offline docs left, and Lucciola's guide is online.)
 declare -A MARGINE_DESKTOP_REPLACEMENTS=(
-  ['Margine System Update']='/usr/share/applications/margine-system-update.desktop'
-  ['Margine Documentation']='/usr/share/applications/margine-documentation.desktop'
+  ['Lucciola system update']='/usr/share/applications/margine-system-update.desktop'
 )
 for label in "${!MARGINE_DESKTOP_REPLACEMENTS[@]}"; do
   p=${MARGINE_DESKTOP_REPLACEMENTS[$label]}
@@ -653,29 +658,36 @@ for bin in "${EXPECTED_MARGINE_HELPERS[@]}"; do
 done
 
 if command -v ujust >/dev/null; then
-  UJUST_MARGINE=$(ujust --list 2>/dev/null | grep -c '^[[:space:]]*margine-' || true)
-  if (( UJUST_MARGINE > 0 )); then
-    ok "ujust has $UJUST_MARGINE margine-* recipe(s)"
+  # lucciola-* since 2026-10-18; ujust --list shows each old margine-*
+  # name as "[alias: ...]" on its recipe's line.
+  UJUST_RECIPES=$(ujust --list 2>/dev/null | grep -c '^[[:space:]]*lucciola-' || true)
+  UJUST_ALIASES=$(ujust --list 2>/dev/null | grep -c '\[alias: margine-' || true)
+  if (( UJUST_RECIPES > 0 )); then
+    ok "ujust has $UJUST_RECIPES lucciola-* recipe(s), $UJUST_ALIASES with their margine-* alias"
   else
-    warn "ujust has no margine-* recipes — check /usr/share/ublue-os/just/60-custom.just (must use this name; 00-entry.just only \`import?\`s 60-custom.just)"
+    warn "ujust has no lucciola-* recipes: check /usr/share/ublue-os/just/60-custom.just (must use this name; 00-entry.just only \`import?\`s 60-custom.just)"
   fi
 fi
 
 hdr "9c. Gaming layer (opt-in — checks only run if the layer was installed)"
 # ---------------------------------------------------------------------------
-# Margine gaming layer = `ujust margine-gaming` (Margine Gaming OCI
+# Margine gaming layer = `ujust lucciola-gaming` (Margine Gaming OCI
 # variant + ISO retired 2026-06-06 in favour of this single opt-in
-# path). Installs ~2 layered RPMs (gamescope + vkBasalt, the only
-# strictly gaming-only ones — everything else like mangohud/goverlay/
-# steam-devices/gamemode is already in base) + 7 Flatpaks. Detection
-# via "any gaming-specific RPM layered on top of base" — the heuristic
-# is reliable now that none of those RPMs ship in base.
+# path). Layers gamescope, vkBasalt, mangohud and goverlay (steam-devices
+# and gamemode are in the image) + 7 Flatpaks. Detection via "any
+# gaming-specific RPM layered on top of base": reliable because none of
+# gamescope and vkBasalt ship in the image (vkBasalt did until 2026-10-18,
+# a leftover of the gaming closure, which made every system without the
+# layer report "gaming remnants").
 # Two installation paths exist (60-custom.just):
-#   ujust margine-gaming         → RPMs gamescope+vkBasalt, 7 Flatpaks
-#                                  (incl. Steam/Lutris/RetroArch as Flatpak)
-#   ujust margine-gaming-native  → RPMs steam+lutris+retroarch+gamescope+
-#                                  vkBasalt, 4 Flatpaks (the launchers
-#                                  without an official RPM)
+#   ujust lucciola-gaming         → RPMs gamescope+vkBasalt+mangohud+
+#                                  goverlay, 7 Flatpaks (incl. Steam/
+#                                  Lutris/RetroArch as Flatpak)
+#   ujust lucciola-gaming-native  → the RPMs of gaming-native-packages.txt
+#                                  (steam with its 32-bit chain, lutris,
+#                                  RetroArch, gamescope, vkBasalt,
+#                                  mangohud, goverlay), 4 Flatpaks (the
+#                                  launchers without an official RPM)
 # Until 2026-06-12 only the Flatpak path was modeled, so native users got
 # 3 false FAILs and partial states got 8 misleading ones.
 GAMING_CORE_RPMS=(gamescope vkBasalt)
@@ -722,23 +734,23 @@ if rpm -q steam >/dev/null 2>&1; then
     native_rpms=(steam lutris RetroArch "${GAMING_CORE_RPMS[@]}")
   fi
   for r in "${native_rpms[@]}"; do
-    check_gaming_rpm "$r" "ujust margine-gaming-native"
+    check_gaming_rpm "$r" "ujust lucciola-gaming-native"
   done
   for fp in "${GAMING_FLATPAKS_COMMON[@]}"; do
-    check_gaming_flatpak "$fp" "ujust margine-gaming-native"
+    check_gaming_flatpak "$fp" "ujust lucciola-gaming-native"
   done
 elif flatpak info --system com.valvesoftware.Steam >/dev/null 2>&1 || (( core_present == 2 )); then
   info "Gaming layer detected (Flatpak variant) — validating full set"
   for r in "${GAMING_CORE_RPMS[@]}"; do
-    check_gaming_rpm "$r" "ujust margine-gaming"
+    check_gaming_rpm "$r" "ujust lucciola-gaming"
   done
   for fp in "${GAMING_FLATPAKS_FPPATH[@]}" "${GAMING_FLATPAKS_COMMON[@]}"; do
-    check_gaming_flatpak "$fp" "ujust margine-gaming"
+    check_gaming_flatpak "$fp" "ujust lucciola-gaming"
   done
 elif (( core_present == 1 )); then
-  warn "gaming remnants: ${core_found[*]} is present without the rest of the layer. Converge with 'ujust margine-gaming' or clean up with 'ujust margine-gaming-remove'"
+  warn "gaming remnants: ${core_found[*]} is present without the rest of the layer. Converge with 'ujust lucciola-gaming' or clean up with 'ujust lucciola-gaming-remove'"
 else
-  info "Gaming layer not installed — skipping (run 'ujust margine-gaming' to install)"
+  info "Gaming layer not installed: skipping (run 'ujust lucciola-gaming' to install)"
 fi
 
 if rpm -q steam >/dev/null 2>&1 || flatpak info --system com.valvesoftware.Steam >/dev/null 2>&1 || (( core_present == 2 )); then
@@ -749,7 +761,7 @@ if rpm -q steam >/dev/null 2>&1 || flatpak info --system com.valvesoftware.Steam
     if command -v "$bin" >/dev/null 2>&1; then
       ok "$bin on PATH"
     else
-      warn "$bin not on PATH — did you reboot after 'ujust margine-gaming'?"
+      warn "$bin not on PATH: reboot after 'ujust lucciola-gaming', or re-run it (mangohud and goverlay left the image on 2026-10-18 and are layered by the recipe since)"
     fi
   done
   # tuned daemon present + a profile is active

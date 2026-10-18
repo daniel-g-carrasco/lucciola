@@ -1,5 +1,5 @@
 [Unit]
-Description=Margine: upgrade Homebrew CLI packages
+Description=Lucciola: upgrade Homebrew CLI packages
 Documentation=https://margine.dev/docs/updates-and-rollback
 ConditionPathIsDirectory=/home/linuxbrew/.linuxbrew
 
