@@ -56,6 +56,7 @@ on:
       # lucciola/ is NOT in this list any more: since 2026-10 it is part of
       # this build (the last step of the Containerfile).
       - '.github/workflows/base-watch.yml'
+      - '.github/workflows/build-fedora-kernel.yml'
       - '.github/workflows/build-retry.yml'
       - '.github/workflows/check-upstreams.yml'
       - '.github/workflows/ghcr-cleanup.yml'
@@ -75,7 +76,7 @@ on:
       - 'CHANGELOG.md'
       - 'docs/**'
       - 'tools/**'
-      - 'site/**'
+      - 'site/README.md'
   pull_request:
     # Opt-in per-PR build: only PRs explicitly labeled `vm-test` build
     # the image and publish a `:pr-N` tag, so daniel can rebase the
@@ -93,6 +94,7 @@ on:
       # lucciola/ is NOT in this list any more: since 2026-10 it is part of
       # this build (the last step of the Containerfile).
       - '.github/workflows/base-watch.yml'
+      - '.github/workflows/build-fedora-kernel.yml'
       - '.github/workflows/build-retry.yml'
       - '.github/workflows/check-upstreams.yml'
       - '.github/workflows/ghcr-cleanup.yml'
@@ -112,7 +114,7 @@ on:
       - 'CHANGELOG.md'
       - 'docs/**'
       - 'tools/**'
-      - 'site/**'
+      - 'site/README.md'
   schedule:
     # Weekly nightly: Sunday 04:00 UTC = 06:00 CEST. Picks up upstream
     # base image changes even if there are no commits to this repo.
@@ -139,7 +141,7 @@ on:
 env:
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
   IMAGE_NAME: lucciola
-  IMAGE_DESC: "Lucciola: niri with the Noctalia shell on Fedora Silverblue (Universal Blue main), CachyOS signed kernel, Margine OS underneath"
+  IMAGE_DESC: "Lucciola: Fedora Silverblue (Universal Blue main) with niri, the Noctalia shell and a signed CachyOS kernel"
   IMAGE_KEYWORDS: "bootc,ublue,silverblue,cachyos,niri,noctalia,lucciola"
   CANDIDATE_TAG: "candidate"
 
@@ -534,6 +536,29 @@ jobs:
             0) ;;
             2) echo "::warning::gaming-native resolve check gave no verdict (repositories unreachable?); smoke-boot's dry run still gates promotion" ;;
             *) echo "::error::the gaming-native layer does not resolve against this image: ujust lucciola-gaming-native, and updates of machines that have it, would fail"; exit 1 ;;
+          esac
+
+      # Developer layer (2026-10-18), the same check for `ujust
+      # lucciola-devmode`: VS Code from Microsoft's repository (added with
+      # the image's own `devmode repo`, signing key pinned, so a rotated key
+      # fails here), gcc, flatpak-builder. gcc must match the image's glibc
+      # and libgcc exactly, as steam's i686 chain must for gaming. Same
+      # verdicts: a depsolve failure or a refused key stops the build before
+      # the push, "no verdict" is a warning (smoke-boot's dry run checks
+      # again). A step of this job, not a job: no `needs:` chain changes,
+      # so signing and pushing on main run exactly as before.
+      - name: Developer layer resolves against the image
+        env:
+          IMG: localhost/${{ env.IMAGE_NAME }}:${{ steps.metadata.outputs.version }}
+        run: |
+          set -uo pipefail
+          rc=0
+          sudo .github/scripts/layer-resolve.sh "$IMG" developer | tee developer-resolve.log || rc=$?
+          { echo "### Developer layer"; echo '```'; grep -E 'MARGINE-DEVELOPER-RESOLVE|layer-repo' developer-resolve.log | head -n 20 || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          case "$rc" in
+            0) ;;
+            2) echo "::warning::developer layer resolve check gave no verdict (repositories unreachable?); smoke-boot's dry run still gates promotion" ;;
+            *) echo "::error::the developer layer does not resolve against this image: ujust lucciola-devmode, and updates of machines that have it, would fail"; exit 1 ;;
           esac
 
       # Security scan (2026-10-07). The image is compared with the reviewed
@@ -1008,7 +1033,7 @@ jobs:
       # Here we just download it, attach it to the pushed manifest as
       # an OCI 1.1 referrer, and cosign-sign the SBOM artifact's digest
       # so consumers can `oras discover` → `oras pull` → `cosign verify`
-      # against the same public key as the image. See docs/
+      # against the same public key as the image. See docs/history/margine/
       # sbom-revisit-plan.md for why this lives split across two jobs.
       - name: Download SBOM artifact (from build_push)
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2

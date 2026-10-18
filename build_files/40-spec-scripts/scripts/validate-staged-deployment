@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Pre-reboot validation for a Margine deployment staged by `bootc switch`
+# Pre-reboot validation for a Lucciola deployment staged by `bootc switch`
 # or `rpm-ostree rebase`.
 #
-# Run this from the current (Bluefin DX) GNOME terminal AFTER the
+# Run this from the current system's terminal AFTER the
 # rebase command and BEFORE rebooting. Inspects the staged deployment
 # from outside, so any defect that would later land you in a dracut
 # emergency shell is caught here where copy-paste actually works.
@@ -95,7 +95,7 @@ fi
 ok "deployment directory exists"
 
 # ---------------------------------------------------------------------------
-hdr "2. OS identity (Margine, not still Bluefin)"
+hdr "2. OS identity (Lucciola, not still the old system)"
 # ---------------------------------------------------------------------------
 
 OSREL="$DEPLOY_PATH/usr/lib/os-release"
@@ -107,10 +107,10 @@ check "/etc/os-release exists in staged deployment"     "test -e '$ETC_OSREL'"
 if [[ -f "$OSREL" ]]; then
   NAME=$(grep -E '^NAME=' "$OSREL" | head -1 | cut -d= -f2- | tr -d '"')
   info "os-release NAME=$NAME"
-  if [[ "$NAME" == "Margine" ]]; then
-    ok "NAME=\"Margine\" (rebase landed)"
-  elif [[ "$NAME" =~ [Bb]luefin ]]; then
-    bad "NAME still says Bluefin — bootc switch did not pivot to Margine"
+  if [[ "$NAME" == "Lucciola" ]]; then
+    ok "NAME=\"Lucciola\" (rebase landed)"
+  elif [[ "$NAME" =~ [Bb]luefin|Silverblue|Fedora ]]; then
+    bad "NAME still says $NAME: the rebase did not pivot to Lucciola"
   else
     warn "NAME=\"$NAME\" — unexpected; verify manually"
   fi
@@ -185,16 +185,30 @@ if [[ -f "$INITRD" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-hdr "4. CachyOS kernel + Secure Boot signature"
+hdr "4. Kernel (CachyOS, or Fedora's on the kernel reserve) + Secure Boot signature"
 # ---------------------------------------------------------------------------
 
-if [[ "$KVER" =~ cachy ]]; then
+# The kernel reserve image (:fedora-kernel) says so in its own tree.
+STAGED_FLAVOR="$(head -n1 "$DEPLOY_PATH/usr/share/margine/kernel-flavor" 2>/dev/null || true)"
+if [[ "$STAGED_FLAVOR" == fedora ]]; then
+  if [[ "$KVER" =~ \.fc[0-9]+\. && "$KVER" != *cachy* ]]; then
+    ok "kernel reserve: Fedora's kernel ($KVER)"
+  else
+    bad "kernel reserve image, but its kernel is not Fedora's ($KVER)"
+  fi
+elif [[ "$KVER" =~ cachy ]]; then
   ok "kernel version contains 'cachy' (cachyos1 default or cachylts1 LTS variant)"
 else
-  warn "kernel does not contain 'cachy'; Margine swaps to a CachyOS kernel, this is unexpected"
+  warn "kernel does not contain 'cachy'; Lucciola ships a CachyOS kernel, this is unexpected"
 fi
 
-if [[ -f "$VMLINUZ" ]] && command -v sbverify >/dev/null; then
+if [[ "$STAGED_FLAVOR" == fedora && -f "$VMLINUZ" ]] && command -v sbverify >/dev/null; then
+  if sbverify --list "$VMLINUZ" 2>&1 | grep -q 'Fedora'; then
+    ok "vmlinuz carries Fedora's signature (shim trusts it without the Margine key)"
+  else
+    bad "vmlinuz has no Fedora signature: Secure Boot would refuse it"
+  fi
+elif [[ -f "$VMLINUZ" ]] && command -v sbverify >/dev/null; then
   if sbverify --list "$VMLINUZ" 2>&1 | grep -qiE 'margine|daniel'; then
     ok "vmlinuz is signed (Margine MOK present in signature)"
   elif sbverify --list "$VMLINUZ" 2>&1 | grep -q 'No signature table'; then

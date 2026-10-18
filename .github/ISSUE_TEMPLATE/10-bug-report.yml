@@ -1,11 +1,11 @@
 name: Bug report
-description: Something in Margine does not work as expected
+description: Something in Lucciola does not work as expected
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time. Tip: on an installed Margine, run
+        Thanks for taking the time. Tip: on Lucciola, run
         `ujust lucciola-report` in a terminal. It collects the info below
         into one file you can paste here.
   - type: textarea
@@ -18,19 +18,19 @@ body:
   - type: input
     id: iso
     attributes:
-      label: ISO or image version
-      description: ISO file name/date, or the output of `rpm-ostree status -b | head -3`
-      placeholder: margine-20260705.iso
+      label: Image version
+      description: The output of `rpm-ostree status -b | head -3`
+      placeholder: ghcr.io/daniel-g-carrasco/lucciola:stable
     validations:
       required: true
   - type: dropdown
     id: how
     attributes:
-      label: How did you get Margine on this machine
+      label: How did you get Lucciola on this machine
       options:
-        - Fresh install from the ISO
-        - Rebase from Bluefin or another bootc image
-        - Update of an existing Margine install
+        - Switched from Fedora Silverblue or another Fedora Atomic system
+        - Moved from Margine OS
+        - Update of an existing Lucciola install
     validations:
       required: true
   - type: dropdown
@@ -38,7 +38,7 @@ body:
     attributes:
       label: Secure Boot
       options:
-        - Enabled, Margine key enrolled
+        - Enabled, key enrolled
         - Enabled, key NOT enrolled (or not sure)
         - Disabled
         - Not sure

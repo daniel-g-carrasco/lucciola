@@ -290,7 +290,9 @@ footer p { margin: 0; max-width: 62ch; }
    others. One page, because transitions between two documents work in few
    browsers and not inside every frame. */
 .view { display: grid; gap: clamp(56px, 8vw, 88px); }
-.view[hidden] { display: none; }
+/* Anything marked hidden stays hidden, whatever its display (the content
+   editor hides a block this way). */
+[hidden] { display: none !important; }
 /* A view that opens mid-page ("download" from the guide), or a name off screen: no
    flying wordmark, and the links slide with the page instead of flying off the top. */
 html[data-plain] .hero h1, html[data-plain] .ghero .word, html[data-plain] .top { view-transition-name: none; }
@@ -548,7 +550,7 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
     <h2 id="h-ready">day one</h2>
     <p>Lucciola starts with apps such as Zen Browser, Thunderbird, LibreOffice, GIMP, Inkscape, darktable and OBS Studio already installed. Bazaar, the app store, lets you easily install more from Flathub’s collection.</p>
     <p>Audio and video codecs such as H.264, H.265 (HEVC) and AAC come preinstalled, so common audio and video formats play right away.</p>
-    <p>For developers: Distrobox and Toolbox run tools in separate environments without changing the system.</p>
+    <p>For developers: Distrobox and Toolbox run tools in separate environments without changing the system, and one command adds VS Code and Homebrew.</p>
   </section>
 
   <section aria-labelledby="h-base">
@@ -615,6 +617,7 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
       <li><a href="#g-apps">apps</a></li>
       <li><a href="#g-updates">updates</a></li>
       <li><a href="#g-back">going back</a></li>
+      <li><a href="#g-kernel">fedora’s kernel</a></li>
       <li><a href="#g-unlock">disk unlock</a></li>
       <li><a href="#g-help">help</a></li>
     </ul>
@@ -625,7 +628,7 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
     <p>Lucciola is experimental and made by one person, so keep a copy of your files before you switch.</p>
     <p>It needs a processor with x86-64-v3 support. To check yours, run:</p>
     <div class="cmd"><pre>/lib64/ld-linux-x86-64.so.2 --help | grep x86-64-v3</pre><button type="button">Copy</button></div>
-    <p>If the command prints a line with “supported”, you are ready. If it prints nothing, Lucciola will not start on this PC.</p>
+    <p>If the command prints a line with “supported”, you are ready. If it prints nothing, Lucciola’s usual kernel will not start on this PC: take the version with Fedora’s kernel instead (see <a href="#g-kernel">fedora’s kernel</a>).</p>
     <p>AMD and Intel graphics work out of the box. Lucciola does not yet ship NVIDIA’s own driver.</p>
     <p>You switch to Lucciola from a Fedora Atomic system, such as Silverblue, Kinoite, or Bluefin. Lucciola has no installer image yet, so on an empty disk you install Fedora Silverblue first.</p>
   </section>
@@ -705,6 +708,9 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
     <div class="cmd"><pre>toolbox create</pre><button type="button">Copy</button></div>
     <div class="cmd"><pre>toolbox enter</pre><button type="button">Copy</button></div>
     <p>Distrobox does the same with other distributions, such as Ubuntu or Arch.</p>
+    <p>One command adds the developer tools: VS Code, a C compiler, and Homebrew for command-line tools. It lists what it installs and asks first. Restart when it is done.</p>
+    <div class="cmd"><pre>ujust lucciola-devmode</pre><button type="button">Copy</button></div>
+    <p>Add <code>status</code> to see what is in place, or <code>remove</code> to take it away.</p>
   </section>
 
   <section id="g-updates" aria-labelledby="g-h-updates">
@@ -724,6 +730,17 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
     <p>To leave Lucciola, switch back to the system you had. For Fedora Silverblue, run:</p>
     <div class="cmd"><pre>sudo rpm-ostree rebase ostree-unverified-registry:quay.io/fedora/fedora-silverblue:44</pre><button type="button">Copy</button></div>
     <p>Your files, settings, and Flatpak apps stay. If your disk unlocks through the TPM, the PC asks for the passphrase once.</p>
+  </section>
+
+  <section id="g-kernel" aria-labelledby="g-h-kernel">
+    <h2 id="g-h-kernel">fedora’s kernel</h2>
+    <p>Lucciola runs the CachyOS kernel. A second version, the same in everything else, runs Fedora’s own kernel: it starts on processors without x86-64-v3, and it is the way out if a CachyOS kernel update misbehaves on your PC. It is rebuilt with every update of the usual version.</p>
+    <p>To switch to it, run this command and restart:</p>
+    <div class="cmd"><pre>ujust lucciola-kernel fedora</pre><button type="button">Copy</button></div>
+    <div class="cmd"><pre>systemctl reboot</pre><button type="button">Copy</button></div>
+    <p><code>ujust lucciola-kernel</code> shows which kernel you run, and <code>ujust lucciola-kernel cachyos</code> brings the CachyOS kernel back. Your files, settings, and apps stay either way.</p>
+    <p class="note">If your disk unlocks through the TPM, the first start after a switch asks for the passphrase. Once it has started, run <code>ujust lucciola-tpm-unlock enable</code> and the TPM unlocks it again.</p>
+    <p>On a processor without x86-64-v3, switch to Lucciola straight onto Fedora’s kernel: in step 2 of <a href="#g-install">switch to lucciola</a>, write <code>lucciola:fedora-kernel</code> in place of <code>lucciola:stable</code>. Fedora signs its own kernel, so it starts with Secure Boot on, and you can skip step 1.</p>
   </section>
 
   <section id="g-unlock" aria-labelledby="g-h-unlock">

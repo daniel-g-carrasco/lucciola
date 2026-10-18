@@ -1,6 +1,6 @@
 [Unit]
 Description=Lucciola: seed /etc/passwd + /etc/group from /usr/lib if stripped
-Documentation=https://github.com/daniel-g-carrasco/margine-image/blob/main/docs/spec/lessons-learned/2026-05-28-initramfs-and-bootc-labels.md
+Documentation=https://github.com/daniel-g-carrasco/lucciola/blob/main/docs/history/margine/spec/lessons-learned/2026-05-28-initramfs-and-bootc-labels.md
 DefaultDependencies=no
 # Run exactly where systemd-sysusers would, one step earlier: after the
 # same two units sysusers orders itself after, and before sysusers, so it

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Margine security smoke probe: runs INSIDE the smoke-boot VM as a root
+# Lucciola's security smoke probe (written for Margine): runs INSIDE the smoke-boot VM as a root
 # oneshot (margine-security-smoke.service), injected into the qcow2 by
 # .github/scripts/inject-gui-probe.sh. GATING: qemu-boot-wait.sh refuses
 # to pass the boot without "MARGINE-SEC-SMOKE: PASS" (2026-10-07).
@@ -67,17 +67,21 @@ b="$(matchpathcon /var/home/probe 2>/dev/null)"
 case "$a" in *:ssh_home_t:*) res selinux-ssh-home PASS "${a##* }" ;; *) res selinux-ssh-home FAIL "${a:-no answer}" ;; esac
 case "$b" in *:user_home_dir_t:*) res selinux-home-dir PASS "${b##* }" ;; *) res selinux-home-dir FAIL "${b:-no answer}" ;; esac
 
-# 5. The device verifies Margine images: a sigstoreSigned scope for the
-#    Margine repository, with its key present. Without it every "signed"
+# 5. The device verifies Lucciola images: a sigstoreSigned scope, with its
+#    key present, for the lucciola repository it updates from and for the
+#    margine one it shares the key with. Without it every "signed"
 #    transport falls through to insecureAcceptAnything and checks nothing.
 if python3 - <<'PY' 2>/dev/null
 import json, os, sys
 p = json.load(open("/etc/containers/policy.json"))
-r = p["transports"]["docker"]["ghcr.io/daniel-g-carrasco/margine"][0]
-sys.exit(0 if r["type"] == "sigstoreSigned" and os.path.isfile(r["keyPath"]) else 1)
+ok = True
+for repo in ("ghcr.io/daniel-g-carrasco/lucciola", "ghcr.io/daniel-g-carrasco/margine"):
+    r = p["transports"]["docker"][repo][0]
+    ok = ok and r["type"] == "sigstoreSigned" and os.path.isfile(r["keyPath"])
+sys.exit(0 if ok else 1)
 PY
 then
-  res trust-policy PASS "policy.json requires the Margine signature"
+  res trust-policy PASS "policy.json requires the signature for lucciola and margine"
 
   # 6. ...and that check passes for the very image under test, through the
   #    device's own stack (containers/image as rpm-ostree uses it): the
@@ -98,7 +102,7 @@ then
     res image-signature WARN "image reference not injected"
   fi
 else
-  res trust-policy FAIL "no sigstoreSigned scope for ghcr.io/daniel-g-carrasco/margine (or its key is missing)"
+  res trust-policy FAIL "no sigstoreSigned scope for ghcr.io/daniel-g-carrasco/lucciola or .../margine (or its key is missing)"
 fi
 
 # 7. No unexpected network listeners on non-loopback addresses.

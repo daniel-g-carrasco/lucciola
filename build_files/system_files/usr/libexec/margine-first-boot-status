@@ -77,10 +77,10 @@ sleep 10
 
 initial="$(svc_state)"
 # The name the image declares for itself (product-name: Lucciola), as the
-# other notifiers do; os-release NAME, then "Margine OS", as fallbacks.
+# other notifiers do; os-release NAME, then "Lucciola", as fallbacks.
 product="$(head -n1 /usr/share/margine/product-name 2>/dev/null || true)"
 [[ -n "$product" ]] || product="$(sed -n 's/^NAME=//p' /usr/lib/os-release 2>/dev/null | tr -d "\"'" || true)"
-product="${product:-Margine OS}"
+product="${product:-Lucciola}"
 log "initial flatpak-preinstall.service state = $initial"
 
 case "$initial" in

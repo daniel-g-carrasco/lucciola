@@ -5,9 +5,9 @@
 #
 # This Containerfile composes the Lucciola image as:
 #
-#   FROM ghcr.io/ublue-os/silverblue-main:44  (Universal Blue main: Fedora Silverblue 44)
+#   FROM ghcr.io/ublue-os/silverblue-main:45  (Universal Blue main: Fedora Silverblue 45)
 #   + custom kernel from CachyOS COPR (signed with our MOK)
-#   + the Margine OS layer (build_files/: update flow, Secure Boot and TPM
+#   + the layer inherited from Margine OS (build_files/: update flow, Secure Boot and TPM
 #     tooling, branding, the GTK defaults, Flatpaks)
 #   + the Lucciola layer (lucciola/: niri, Noctalia, the Lucciola session;
 #     GNOME stays as a stock fallback session)
@@ -127,13 +127,20 @@ FROM ${BASE_IMAGE}
 # would also work and is what proved the diagnosis, but the runner's
 # buildah drops --mount=type=secret in that mode, and the kernel layer
 # is the one place we need the MOK key.)
+# Kernel flavour (2026-10-18). cachyos = kernel-cachyos from COPR, built
+# for x86-64-v3, MOK-signed: every published tag but one. fedora = the
+# kernel reserve: the base's own Fedora kernel stays, signed by Fedora and
+# built for any x86-64 CPU; everything else is the same build.
+# build-fedora-kernel.yml passes --build-arg KERNEL_FLAVOR=fedora and
+# publishes :fedora-kernel (custom-kernel/install.sh says what differs).
+ARG KERNEL_FLAVOR=cachyos
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache \
     --mount=type=cache,dst=/var/log \
     --mount=type=tmpfs,dst=/tmp \
     --mount=type=secret,id=mok-key,target=/run/margine-certs/MOK.key \
     --mount=type=secret,id=mok-cert,target=/run/margine-certs/MOK.pem \
-    /ctx/custom-kernel/install.sh \
+    env KERNEL_FLAVOR="${KERNEL_FLAVOR}" /ctx/custom-kernel/install.sh \
  && /ctx/build.sh
 
 # ----- Lucciola: niri + Noctalia, GNOME kept stock as the fallback session -----
@@ -149,6 +156,9 @@ ARG NOCTALIA_VR=5.3.0-1
 # the version that stage built (the ARG at the top).
 ARG NOCTALIA_GREETER_VERSION
 COPY lucciola/system_files/ /
+# The website's single page carries the guide; a copy ships so the Lucciola
+# Guide launcher opens it without a network (/usr/libexec/margine/guide-open).
+COPY site/index.html /usr/share/lucciola/guide/index.html
 RUN --mount=type=bind,from=lucciola-ctx,source=/build.sh,target=/ctx/lucciola/build.sh \
     --mount=type=bind,from=greeter-rpm,source=/out,target=/ctx/greeter-rpm \
     --mount=type=cache,dst=/var/cache \

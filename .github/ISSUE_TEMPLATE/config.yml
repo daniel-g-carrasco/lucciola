@@ -1,11 +1,10 @@
-# Funnel: bug reports live HERE as issues (one searchable place instead of
-# forum threads, Bluefin discussions and Lemmy comments scattered around).
-# Questions and chat stay on the community channels below.
-blank_issues_enabled: false
+# Bug reports use the form. Questions and suggestions are welcome as plain
+# issues too: the website's "Write to me" link points here.
+blank_issues_enabled: true
 contact_links:
-  - name: Questions and general discussion
-    url: https://universal-blue.discourse.group/t/12247
-    about: Not a bug? Ask on the Universal Blue forum thread.
-  - name: Documentation and handbook
-    url: https://margine.dev/docs/
-    about: Install guide, Secure Boot / MOK enrollment, troubleshooting.
+  - name: Install guide
+    url: https://github.com/daniel-g-carrasco/lucciola#install
+    about: Switching to Lucciola, Secure Boot and the key, the first boot.
+  - name: Security problem
+    url: https://github.com/daniel-g-carrasco/lucciola/blob/main/SECURITY.md
+    about: Please report vulnerabilities privately, not as an issue.

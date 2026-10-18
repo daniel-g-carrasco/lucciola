@@ -1,84 +1,47 @@
-# Lucciola
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="lucciola/assets/lucciola-wordmark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="lucciola/assets/lucciola-wordmark-light.svg">
+    <img src="lucciola/assets/lucciola-wordmark-light.svg" alt="Lucciola" width="320">
+  </picture>
+</p>
 
-A rock-solid, ready-to-use PC operating system built on Fedora Atomic.
+<p align="center">A rock-solid, ready-to-use PC operating system built on Fedora Atomic.</p>
 
-Lucciola builds on Fedora Silverblue and Universal Blue, and adds a desktop made of niri and Noctalia, the CachyOS kernel and a set of everyday and creative apps. You install it as your system; the whole system ships as one signed image and updates as a whole.
+Lucciola builds on Fedora Silverblue and adds a desktop made of niri and Noctalia, the speed-tuned CachyOS kernel and a set of everyday and creative apps. Lucciola is Italian for firefly.
 
-> Lucciola is experimental, and I maintain it alone. This repository is its new home, and its first image is not published yet. Until it is, Lucciola ships from the Margine repository as `ghcr.io/daniel-g-carrasco/margine:lucciola`; installs that follow it will move to the new image by themselves.
+- **Your workspace.** niri places windows in columns on a strip wider than the screen. Noctalia draws the bar, the launcher, notifications and the lock screen. GNOME ships too, as a backup session on the login screen.
+- **Updates.** The whole system ships as one signed image. Updates download in the background and apply at your next restart; if one goes wrong, choose the previous version in the boot menu.
+- **Foundations.** The CachyOS kernel is signed with Lucciola's own key, so Secure Boot keeps working. The TPM can unlock the encrypted disk at boot, and your device checks every update's signature before installing it.
+- **Day one.** Zen Browser, Thunderbird, LibreOffice, GIMP, Inkscape, darktable and OBS Studio come installed, and Bazaar installs more from Flathub. For developers, `ujust lucciola-devmode` adds VS Code and Homebrew.
 
-## What you get
-
-- niri places windows in columns on a strip wider than the screen; Noctalia draws the bar, the dock, the launcher, notifications and the lock screen. The login screen is Noctalia Greeter, with the same look, and GNOME stays there as a backup session.
-- The CachyOS kernel, signed with the project's own key, so Secure Boot stays on. The TPM can unlock the encrypted disk at boot.
-- Updates download in the background and apply at the next restart. The previous version stays in the boot menu, and your device checks every image's signature before installing it.
-- Zen Browser, Thunderbird, LibreOffice, GIMP, Inkscape, darktable and OBS Studio, with Bazaar to install more from Flathub. Common audio and video formats play out of the box. Distrobox and Toolbox run developer tools without changing the system.
-- What only some people need comes with one command instead of sitting in every install: Steam and the other game launchers (`ujust lucciola-gaming`, or `ujust lucciola-gaming-native` for the native Steam), virtual machines with virt-manager (`ujust lucciola-vm`).
-
-## Requirements
-
-A 64-bit x86 processor with x86-64-v3 support, which most made since about 2015 have. To check yours:
-
-```sh
-/lib64/ld-linux-x86-64.so.2 --help | grep x86-64-v3
-```
-
-A line that says "supported" means you are ready; no output means Lucciola will not start on that PC. AMD and Intel graphics work out of the box; there is no build with NVIDIA's own driver.
+Lucciola is experimental, and I maintain it alone.
 
 ## Install
 
-Lucciola has no installer image yet: you switch to it from a Fedora Atomic system such as Silverblue, Kinoite or Bluefin. On an empty disk, install Fedora Silverblue first.
+You need a 64-bit x86 processor with x86-64-v3 support (most made since about 2015) and AMD or Intel graphics. There is no installer image yet: you switch to Lucciola from a Fedora Atomic system such as Silverblue, Kinoite or Bluefin.
 
-1. If Secure Boot is on, turn it off for now (`systemctl reboot --firmware-setup`). The kernel is signed with Lucciola's key, which your PC does not know yet.
-2. Switch, then restart:
-   ```sh
-   sudo rpm-ostree rebase ostree-unverified-registry:ghcr.io/daniel-g-carrasco/lucciola:stable
-   systemctl reboot
-   ```
-   The first download is unverified on purpose: a stock Fedora system has no signature policy for Lucciola, and rpm-ostree refuses the signed transport under its default policy. The policy comes with the image, and at the first boot Lucciola moves itself to the signed transport, so every update after that is checked.
-3. The login screen opens on Lucciola: enter your password. GNOME is in the session list too.
-4. Restart once more. A blue screen asks you to register the key: press a key within 10 seconds, then choose Enroll MOK, Continue and Yes, type `margine` and choose Reboot. `ujust lucciola-secureboot enroll` makes that screen wait for you.
-5. Turn Secure Boot back on when `ujust lucciola-secureboot` says the key is in place.
-
-The commands begin with `lucciola-`: `ujust lucciola-update`, `ujust lucciola-status`, and `ujust --list` for the rest. Their old `margine-` names, from Margine OS, the project Lucciola grew from, still work.
-
-## Verify the image signature
-
-Every image is signed with [cosign](https://github.com/sigstore/cosign) by digest:
+If Secure Boot is on, turn it off first (`systemctl reboot --firmware-setup`). Then run:
 
 ```sh
-cosign verify \
-  --key https://raw.githubusercontent.com/daniel-g-carrasco/lucciola/main/secrets/cosign.pub \
-  ghcr.io/daniel-g-carrasco/lucciola:stable
+sudo rpm-ostree rebase ostree-unverified-registry:ghcr.io/daniel-g-carrasco/lucciola:stable
+systemctl reboot
 ```
 
-A valid signature prints the verified payload and exits 0. The public key is [`secrets/cosign.pub`](secrets/cosign.pub); the private half only exists in CI.
+This first download is unverified because a stock Fedora system has no signature policy for Lucciola yet. The policy comes with the image, and at the first boot Lucciola moves itself to the signed transport, so every update after that is checked.
 
-## This repository
+The guide in [`site/`](site/index.html) walks through every step, including how to register Lucciola's key and turn Secure Boot back on.
 
-- `Containerfile` and `build_files/`: the build, as numbered steps on top of `ghcr.io/ublue-os/silverblue-main:45`.
-- `lucciola/`: the desktop, with niri's and Noctalia's defaults and the session; `lucciola/assets/` holds the logo, the wallpaper and the boot splash ([`docs/BRANDING.md`](docs/BRANDING.md) maps where each appears).
-- `.github/workflows/`: every change builds a candidate image, boots it in a virtual machine with Secure Boot and a TPM, and only then promotes it to `:stable`; another test updates a machine from the previous image to the new one.
+No x86-64-v3, or a CachyOS kernel update misbehaving on your PC? `ghcr.io/daniel-g-carrasco/lucciola:fedora-kernel` is the same system with Fedora's own kernel, and `ujust lucciola-kernel fedora` switches an installed system to it.
 
-To build locally you need a MOK key and certificate to sign the kernel with (an image signed with your own key starts with Secure Boot on only after you enroll that key):
+## More
 
-```sh
-podman build \
-  --secret id=mok-key,src=MOK.key \
-  --secret id=mok-cert,src=MOK.pem \
-  -t localhost/lucciola .
-```
+- [`lucciola/README.md`](lucciola/README.md): how the desktop layer is put together, and how to build the image.
+- [`SECURITY.md`](SECURITY.md): reporting a vulnerability, and verifying the image signature.
+- [`CHANGELOG.md`](CHANGELOG.md): what changed.
 
-Lucciola grew out of Margine OS, and this repository keeps Margine's history. Margine's changelog is in [`docs/margine/CHANGELOG.md`](docs/margine/CHANGELOG.md).
+Lucciola grew out of Margine OS, my earlier GNOME image. Its documents are kept in [`docs/history/margine/`](docs/history/margine/README.md).
 
-## Credits
-
-- [Fedora](https://fedoraproject.org/), for Silverblue and the official niri and Noctalia packages.
-- [Universal Blue](https://universal-blue.org/), for the `silverblue-main` base image, `uupd` and the automation patterns.
-- [niri](https://github.com/YaLTeR/niri) and [Noctalia](https://github.com/noctalia-dev/noctalia), the desktop; [Noctalia Greeter](https://github.com/noctalia-dev/noctalia-greeter) and [greetd](https://git.sr.ht/~kennylevinsen/greetd), the login screen.
-- [CachyOS](https://cachyos.org/), for the kernel.
-- [Bluefin](https://projectbluefin.io/), Margine's base for its first months and the source of many ideas.
-- [Origami Linux](https://gitlab.com/origami-linux/images), the reference for the kernel signing script; [MorrOS](https://github.com/morrolinux/morros), for CI patterns; [coreos/chunkah](https://github.com/coreos/chunkah), for content-based image layers.
-
-## License
+With thanks to [Fedora](https://fedoraproject.org/), [Universal Blue](https://universal-blue.org/), [niri](https://github.com/YaLTeR/niri), [Noctalia](https://github.com/noctalia-dev/noctalia), [Noctalia Greeter](https://github.com/noctalia-dev/noctalia-greeter), [greetd](https://git.sr.ht/~kennylevinsen/greetd) and [CachyOS](https://cachyos.org/); to [Bluefin](https://projectbluefin.io/), Margine's first base and the source of many ideas; to [Origami Linux](https://gitlab.com/origami-linux/images) for the kernel signing script, [MorrOS](https://github.com/morrolinux/morros) for CI patterns, and [coreos/chunkah](https://github.com/coreos/chunkah) for content-based image layers.
 
 Apache-2.0.

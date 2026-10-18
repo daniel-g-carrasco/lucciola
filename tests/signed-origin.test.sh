@@ -32,6 +32,7 @@ run_case() {  # name ref expected-rebase-target(or -) expected-rc [policy] [fail
 R=ghcr.io/daniel-g-carrasco/lucciola
 run_case "ISO install (unverified-registry, :stable) -> signed"   "ostree-unverified-registry:$R:stable"       "ostree-image-signed:docker://$R:stable" 0
 run_case "unverified-image form, :candidate tag kept"             "ostree-unverified-image:docker://$R:candidate" "ostree-image-signed:docker://$R:candidate" 0
+run_case "kernel reserve install keeps :fedora-kernel"            "ostree-unverified-registry:$R:fedora-kernel" "ostree-image-signed:docker://$R:fedora-kernel" 0
 run_case "already signed: nothing"                                "ostree-image-signed:docker://$R:stable"     -  0
 run_case "rebased to another image: nothing"                      "ostree-unverified-registry:ghcr.io/ublue-os/bluefin-dx:stable" - 0
 run_case "Margine's repository (no migration yet): nothing"       "ostree-unverified-registry:ghcr.io/daniel-g-carrasco/margine:lucciola" - 0

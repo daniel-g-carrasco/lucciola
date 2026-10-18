@@ -103,7 +103,7 @@ build $target_image=image_name $tag=default_tag:
         echo "ERROR: secrets/MOK.key + secrets/MOK.pem are required (kernel signing)." >&2
         echo "For a local dev build, generate throwaway keys:" >&2
         echo "  openssl req -new -x509 -newkey rsa:2048 -nodes -days 3650 \\" >&2
-        echo "    -subj '/CN=Margine local dev MOK/' \\" >&2
+        echo "    -subj '/CN=Lucciola local dev MOK/' \\" >&2
         echo "    -keyout secrets/MOK.key -out secrets/MOK.pem" >&2
         exit 1
     fi
@@ -408,3 +408,8 @@ format:
     fi
     mapfile -t SH < <(git ls-files '*.sh' | grep -v '^live-env/references/')
     shfmt --write "${SH[@]}"
+
+# Edit the website and welcome window texts in the browser (tools/content-editor)
+[group('Content')]
+edit *args:
+    python3 tools/content-editor/serve.py {{ args }}

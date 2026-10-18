@@ -50,7 +50,10 @@ jobs:
           # (stable.YYYYMMDD + the plain YYYYMMDD alias, all start with 2),
           # and the transient candidate.* / pr-*. To also age those out
           # later, move 'candidate.*,pr-*' to delete-tags + set keep-n-tagged.
-          exclude-tags: "stable,latest,candidate,stable.*,candidate.*,pr-*,2*"
+          # fedora-kernel*: the kernel reserve (build-fedora-kernel.yml) and
+          # its dated, -candidate and -test tags; follows line 1 of
+          # build_files/system_files/usr/share/margine/kernel-reserve-tag.
+          exclude-tags: "stable,latest,candidate,stable.*,candidate.*,pr-*,2*,fedora-kernel*"
           # The win: drop the untagged orphans left by the daily tag-moves.
           # keep-n-untagged keeps the N most recent untagged and prunes the
           # rest — a small recent buffer. delete-untagged is mutually

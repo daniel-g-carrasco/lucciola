@@ -1,25 +1,31 @@
-# Lucciola
+# How Lucciola is built
 
-Lucciola is niri with the Noctalia shell on top of Margine OS, built as one
-image from Universal Blue's silverblue-main by this repository (until 2026-10
-it was a second build FROM the published Margine image). Experimental.
+Lucciola is one image, built by this repository from Universal Blue's
+`silverblue-main:45`. The `Containerfile` runs two layers on top of it:
 
-Everything below the desktop comes from Margine unchanged: the CachyOS kernel
-signed with the Margine key, Secure Boot, TPM2 disk unlock, image signatures
-verified by the device, rollback, and every Margine fix. This layer adds:
+- `build_files/`, inherited from Margine OS, the GNOME image Lucciola grew
+  from: the CachyOS kernel signed with the MOK, Secure Boot and TPM2 disk
+  unlock, signed images that devices verify, the update services, the
+  Flatpaks, the GTK defaults and the `lucciola-*` commands. Its paths and
+  unit names still say `margine` (`/usr/libexec/margine`, `margine-*.service`),
+  so installed machines keep working across updates;
+- this directory, the desktop: `lucciola/system_files/` copied in, then
+  `lucciola/build.sh`.
+
+This layer adds:
 
 - `niri` and `xwayland-satellite` from Fedora, and `noctalia` from Fedora at a
   pinned version (`NOCTALIA_VR` in the Containerfile, the Fedora tag comes
   from the base: bump it only together with a test boot, since upstream
   supports only its latest release);
 - the niri defaults in `/usr/share/lucciola/niri/config.kdl`, loaded through
-  `/etc/niri/config.kdl`, with Margine's keybindings; personal settings go in
+  `/etc/niri/config.kdl`, with the keybindings carried over from Margine; personal settings go in
   `~/.config/niri/lucciola.kdl`;
 - Noctalia defaults in `/usr/share/lucciola/noctalia/`, seeded once per user
   by `/usr/libexec/lucciola/session-start`: idle lock on, polkit agent on, and
-  the look of the first Margine (dark floating bar, monospace, windows rounded
-  like libadwaita; palette `palettes/Margine.json`, linked into the user's
-  `palettes/` folder at login);
+  a dark floating bar, monospace, windows rounded like libadwaita, and the
+  palette `palettes/Margine.json` (named after Margine, where it was born;
+  linked into the user's `palettes/` folder at login);
 - niri's border colours follow the Noctalia palette through Lucciola's own
   Noctalia template (`noctalia/25-niri-colors.toml`, rendered to
   `~/.config/niri/lucciola-colors.kdl`, which the system niri config
@@ -64,6 +70,15 @@ verified by the device, rollback, and every Margine fix. This layer adds:
 - `ddcutil`, so Noctalia's brightness slider also drives external monitors
   over DDC/CI (the package's udev rule opens the i2c devices to the
   logged-in user, its modules-load entry loads i2c-dev);
+- a welcome window at a new user's first Lucciola session
+  (`/usr/libexec/margine/welcome`, GTK 4 and libadwaita in gjs, in the
+  website's look): the keys first, then updates and Lucciola System,
+  Homebrew, apps, and the guide. Its texts and their order are data,
+  `/usr/share/lucciola/welcome/content.json`, edited with `just edit`
+  (`tools/content-editor`). session-start opens it until it has been
+  closed once (`~/.local/state/lucciola/welcome-due`, `welcome-seen`);
+  accounts with Lucciola sessions from before it never see it unasked, and
+  "Lucciola Welcome" in the launcher opens it any time;
 - the login screen: Noctalia Greeter on greetd, in place of GDM. Noctalia
   Greeter is built from its pinned tag (`NOCTALIA_GREETER_VERSION` and its
   sha256 in the Containerfile, spec in `greeter/`) with two Lucciola
@@ -72,8 +87,8 @@ verified by the device, rollback, and every Margine fix. This layer adds:
   of `pam_authenticate: AUTH_ERR`); greetd comes from Fedora. `/etc/greetd/config.toml` (reference copy in
   `/usr/share/lucciola/greetd/`) runs the greeter as the `greetd` account;
   its fixed settings are `/usr/share/lucciola/greeter/greeter.toml` (linked
-  into `/var/lib/noctalia-greeter/`), its starting look (dark, the Margine
-  palette, JetBrains Mono, Lucciola's wallpaper, Lucciola preselected) is
+  into `/var/lib/noctalia-greeter/`), its starting look (dark, the
+  `Margine.json` palette, JetBrains Mono, Lucciola's wallpaper, Lucciola preselected) is
   `sync.toml`, copied once and then replaced by Noctalia's "Sync with
   Noctalia". greetd uses Fedora's PAM file with pam_oo7 added to the
   password stack and the Wayland session type set for autologin
@@ -93,38 +108,48 @@ verified by the device, rollback, and every Margine fix. This layer adds:
   no wayland-scroll-factor. The defaults that also serve GTK applications
   under niri (accent colour, wallpaper, virt-manager connections) stay.
 
-Images: `ghcr.io/daniel-g-carrasco/lucciola`, built by `.github/workflows/build.yml`
-as `:candidate` and promoted to `:stable` by `.github/workflows/smoke-boot.yml`,
-signed with the same key as Margine. The layer is the last step of the main
-`Containerfile`: `lucciola/system_files/` copied in, then `lucciola/build.sh`.
-Until 2026-10 the images were `ghcr.io/daniel-g-carrasco/margine:lucciola`,
-which is still what the switch below points to.
+## Images
 
-Switch a Margine install to it (and back with the previous boot entry, or by
-rebasing to `:stable`):
+`ghcr.io/daniel-g-carrasco/lucciola`, built by `.github/workflows/build.yml`
+as `:candidate` and promoted to `:stable` by
+`.github/workflows/smoke-boot.yml` once it boots in a VM with Secure Boot
+and a TPM. Signed with the same key as Margine.
+
+Until 2026-10 Lucciola was published as
+`ghcr.io/daniel-g-carrasco/margine:lucciola`. Installs that follow that
+tag move to this repository's image through a step on Margine's side, and
+`.github/workflows/upgrade-smoke.yml` tests that move. To move by hand:
 
 ```sh
-sudo rpm-ostree rebase ostree-image-signed:docker://ghcr.io/daniel-g-carrasco/margine:lucciola
+sudo rpm-ostree rebase ostree-unverified-registry:ghcr.io/daniel-g-carrasco/lucciola:stable
 systemctl reboot
 ```
 
-From another Fedora Atomic system (Silverblue, Bluefin, Aurora, Bazzite),
-rebase on the unverified transport: Margine's signature policy arrives with
-the image, and at the first boot `margine-signed-origin.service` stages the
-same tag on the signed transport (it applies at the next restart):
+The transport is unverified because the policy on a `margine:lucciola`
+install knows only the Margine repository; the new deployment brings the
+scope for this one, and `margine-signed-origin.service` moves it to the
+signed transport at the first boot. The [README](../README.md#install) has the install from
+another Fedora Atomic system.
+
+The kernel is signed with the key Margine used, whose certificate is named
+"Margine MOK Signing Key"; its enrollment password is `margine`. A Margine
+install already has it enrolled. Anyone else turns Secure Boot off before
+the switch; after the first boot `mok-enroll.service` stages the key,
+`ujust lucciola-secureboot enroll` makes the blue MOK Manager screen at
+the next restart wait (Enroll MOK, Continue, Yes, password `margine`), and
+Secure Boot goes back on when `ujust lucciola-secureboot` says so.
+
+## Build locally
+
+Signing the kernel needs a MOK key and certificate (an image signed with
+your own key starts with Secure Boot on only after you enroll that key):
 
 ```sh
-sudo rpm-ostree rebase ostree-unverified-registry:ghcr.io/daniel-g-carrasco/margine:lucciola
-systemctl reboot
+podman build \
+  --secret id=mok-key,src=MOK.key \
+  --secret id=mok-cert,src=MOK.pem \
+  -t localhost/lucciola .
 ```
-
-Coming from another system with Secure Boot on, turn it off before rebasing
-(a Margine install already has the key): the kernel is signed with the
-Margine key, and until that key is enrolled Secure Boot refuses to start it.
-After the first boot `mok-enroll.service` stages the key;
-`ujust lucciola-secureboot enroll` makes the blue MOK Manager screen at the
-next restart wait for you (Enroll MOK, Continue, Yes, password `margine`).
-Turn Secure Boot back on when `ujust lucciola-secureboot` says so.
 
 ## Brand
 

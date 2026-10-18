@@ -1,5 +1,5 @@
 # Optional Artifact Hub indexing metadata (https://artifacthub.io/).
-# To list the Margine image on Artifact Hub, register this repository there
+# To list the Lucciola image on Artifact Hub, register this repository there
 # and paste the generated Repository ID into the line below. Until then this
 # file just records ownership and is otherwise inert.
 # Examples: https://artifacthub.io/packages/search?ts_query_web=ublue&sort=relevance&page=1

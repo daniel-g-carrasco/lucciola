@@ -415,7 +415,10 @@ class SystemWindow(Adw.ApplicationWindow):
 
         self._flatpak_row.set_subtitle(phrase(flat_list, "apps"))
         self._flatpak_row.set_activatable(bool(flat_list))
-        self._brew_row.set_subtitle(phrase(brew_list, "tools"))
+        if os.path.exists(BREW):
+            self._brew_row.set_subtitle(phrase(brew_list, "tools"))
+        else:
+            self._brew_row.set_subtitle("Homebrew is not installed (ujust lucciola-devmode)")
         self._brew_row.set_activatable(bool(brew_list))
         self._brew_button.set_visible(bool(brew_list))
         return False

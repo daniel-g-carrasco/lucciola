@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Lucciola Welcome
+GenericName=First steps
+Comment=The first steps in Lucciola: the keys, updates, apps and where the guide is
+Exec=/usr/libexec/margine/welcome
+Icon=lucciola-logo
+Terminal=false
+Categories=System;Documentation;GTK;
+Keywords=welcome;first steps;keys;shortcuts;help;lucciola;
+StartupNotify=true

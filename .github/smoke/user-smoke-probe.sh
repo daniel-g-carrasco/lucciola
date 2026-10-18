@@ -85,8 +85,13 @@ done
 out "MARGINE-USER-SMOKE: BEGIN"
 
 # 1. CachyOS/BORE kernel is the one that actually booted (CORE identity).
+#    On the kernel reserve (:fedora-kernel, the image says so in
+#    kernel-flavor) Fedora's kernel is the expected one.
 KREL="$(uname -r 2>/dev/null || echo '?')"
-if [[ "$KREL" == *cachyos* ]]; then check KERNEL 0 "uname=$KREL"
+if [[ "$(head -n1 /usr/share/margine/kernel-flavor 2>/dev/null)" == fedora ]]; then
+  if [[ "$KREL" =~ \.fc[0-9]+\. && "$KREL" != *cachy* ]]; then check KERNEL 0 "kernel reserve, uname=$KREL"
+  else check KERNEL 1 "kernel reserve expects Fedora's kernel, got uname=$KREL"; fi
+elif [[ "$KREL" == *cachyos* ]]; then check KERNEL 0 "uname=$KREL"
 else check KERNEL 1 "expected *cachyos*, got uname=$KREL"; fi
 
 # 2. The user-facing "did I get the desktop": greetd is the login screen

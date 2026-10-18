@@ -43,7 +43,7 @@ base:
   bluefin_pivot:
     note: >
       Margine deploys as Bluefin DX rebased + a small Margine delta
-      (see docs/adr/0005-base-on-bluefin-dx.md). The stock-silverblue
+      (see docs/history/margine/spec/adr/0005-base-on-bluefin-dx.md). The stock-silverblue
       apply-host-layer path is preserved for audit/learning but is no
       longer the recommended install path.
     rebase_target: "ostree-unverified-registry:ghcr.io/ublue-os/bluefin-dx:stable"

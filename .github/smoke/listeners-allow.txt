@@ -1,10 +1,9 @@
-# Non-loopback listeners a fresh Margine install is expected to have,
+# Non-loopback listeners a fresh Lucciola install is expected to have,
 # "proto port", one per line. Anything else listening on a non-loopback
 # address fails the security smoke probe. Each line needs a reason.
 #
-# systemd-resolved LLMNR (Fedora default; see docs/SECURITY.md register)
+# systemd-resolved LLMNR (Fedora default; decision D3 in docs/SECURITY-CLAIMS.md)
 tcp 5355
 udp 5355
 # avahi-daemon mDNS (printer and device discovery)
 udp 5353
-# tailscaled, enabled by default by the base. Pending decision D4.

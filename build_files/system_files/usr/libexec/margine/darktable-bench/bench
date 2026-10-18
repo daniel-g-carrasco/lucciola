@@ -18,7 +18,7 @@
 #
 # Configurations: cpu, or gpuNNN[aX] = GPU with NNN/100 of the RAM as its
 # share (darktable's unified_fraction) and advantage X. Measurements and the
-# reasoning behind gpu005a4: docs/notes/2026-10-09-darktable-gpu-rocm.md.
+# reasoning behind gpu005a4: docs/history/margine/notes/2026-10-09-darktable-gpu-rocm.md.
 set -uo pipefail
 
 # Keep the machine awake (and, where logind allows, the lid closed) for the

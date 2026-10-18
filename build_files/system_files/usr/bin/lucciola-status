@@ -110,7 +110,11 @@ printf '  %-15s %s   %s(applies at next boot)%s\n' "Staged"        "$staged_ver"
 printf '  %-15s %s   %s\n'                          "Latest :${TAG}" "$latest_ver" "$verdict"
 printf '  %-15s Fedora %s → %s %s → Lucciola\n' "Chain"         "$fedora_ver" "$base_name" "$base_ver"
 kdef=EEVDF; grep -q '^CONFIG_SCHED_BORE=y' "/usr/lib/modules/$(uname -r)/config" 2>/dev/null && kdef=BORE
-printf '  %-15s %s  %s(CachyOS / %s)%s\n'         "Kernel"         "$kernel" "$c_dim" "$kdef" "$c_reset"
+# The kernel reserve (:fedora-kernel) runs Fedora's kernel: name the one
+# that is running, not the one most installs have.
+kname=CachyOS
+[[ "$kernel" == *cachy* ]] || kname=Fedora
+printf '  %-15s %s  %s(%s / %s)%s\n'         "Kernel"         "$kernel" "$c_dim" "$kname" "$kdef" "$c_reset"
 if [ "$uupd_result" = "timeout" ]; then
   printf '  %-15s %slast unattended run hung and was killed; retries daily at 04:00%s\n' "Updates" "$c_ylw" "$c_reset"
 fi
@@ -121,7 +125,7 @@ printf '\n'
 case "$state" in
   current)  printf "  You're current — nothing to do.\n" ;;
   staged)   printf "  The latest is already staged: reboot when it suits you to finish updating.\n" ;;
-  behind)   printf "  Run %sujust margine-update%s to stage the latest for next boot.\n" "$c_ember" "$c_reset" ;;
+  behind)   printf "  Run %sujust lucciola-update%s to stage the latest for next boot.\n" "$c_ember" "$c_reset" ;;
   noremote) printf "  Couldn't reach the registry to compare — check your network.\n" ;;
   nolocal)  printf "  Couldn't read the booted image digest locally — compare skipped (deployment is fine).\n" ;;
   *)        printf "  Couldn't compare deployment vs latest.\n" ;;

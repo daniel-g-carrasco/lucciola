@@ -209,7 +209,7 @@ inline logic). All actual work lives in scripts under
 ### 3.2 `custom-kernel/install.sh` (421 lines) 🟩
 
 Derived from Origami Linux per
-[`docs/upstream-inspirations.md`](../upstream-inspirations.md) with
+[`docs/upstream-inspirations.md`](../../../../upstream-inspirations.md) with
 license attribution. Margine's version is *more* defensive than the
 upstream:
 

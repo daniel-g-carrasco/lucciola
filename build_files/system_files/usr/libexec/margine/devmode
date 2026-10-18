@@ -1,0 +1,209 @@
+#!/usr/bin/bash
+# The developer layer, `ujust lucciola-devmode`: VS Code from Microsoft's
+# repository, a host C/C++ toolchain and the few other RPMs listed in
+# /usr/share/margine/developer-packages.txt (layered with rpm-ostree), and
+# Homebrew in /home/linuxbrew/.linuxbrew (installed in place, no image
+# change). The recipe talks to the user; this helper does the work, so the
+# CI checks (.github/scripts/layer-resolve.sh, .github/smoke/gui-probe.sh)
+# set up the repository exactly as the recipe does.
+#
+#   devmode packages      the RPMs of the layer, one per line
+#   devmode layered       those the newest deployment requests (what remove drops)
+#   devmode pending       exit 0 when a deployment waits for the next restart
+#   devmode repo          (root) add Microsoft's VS Code repository, key pinned
+#   devmode repo-remove   (root) drop it, unless `code` is still requested
+#   devmode brew-install  install Homebrew, owned by the calling user
+#   devmode brew-count    how many formulae and casks Homebrew holds
+#   devmode brew-remove   delete Homebrew (the recipe asks first)
+#   devmode status        what is in place
+#
+# Homebrew is not in the image (2026-10-18): Universal Blue's brew payload
+# is about 158 MB compressed and rebuilt often, and every rebuild would be
+# a download for every install, Homebrew users or not. Homebrew's own
+# installer (the one Universal Blue's brew image runs at build time) puts
+# the same thing in the same place, on demand. /home is a link to
+# /var/home on Lucciola, so the prefix is writable and survives updates.
+#
+# The environment variables below exist for tests/devmode.test.sh.
+set -euo pipefail
+
+LIST="${MARGINE_DEVMODE_LIST:-/usr/share/margine/developer-packages.txt}"
+LAYER_REPO="${MARGINE_LAYER_REPO:-/usr/libexec/margine/layer-repo}"
+REPO_DIR="${MARGINE_REPO_DIR:-/etc/yum.repos.d}"
+KEY_DIR="${MARGINE_KEY_DIR:-/etc/pki/rpm-gpg}"
+BREW_ROOT="${MARGINE_BREW_ROOT:-/home/linuxbrew}"
+BREW_PREFIX="$BREW_ROOT/.linuxbrew"
+BREW="$BREW_PREFIX/bin/brew"
+BREW_INSTALLER="${MARGINE_BREW_INSTALLER:-https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh}"
+# shellcheck disable=SC2206  # word splitting wanted: "" means no sudo (tests)
+SUDO=(${MARGINE_SUDO-sudo})
+
+# Microsoft's signing key for packages.microsoft.com, the same one Bluefin
+# DX trusted (build_files/dx/00-dx.sh there). Verified 2026-10-18 against
+# https://packages.microsoft.com/keys/microsoft.asc; a rotation makes the
+# recipe and the build's resolve check refuse, which is the point.
+VSCODE_KEY_URL=https://packages.microsoft.com/keys/microsoft.asc
+VSCODE_FPR=BC528686B50D79E339D3721CEB3E94ADBE1229CF
+
+die() { echo "devmode: $*" >&2; exit 1; }
+
+packages() {
+  [[ -r "$LIST" ]] || die "$LIST is missing: bad image?"
+  local out
+  out="$(grep -vE '^[[:space:]]*(#|$)' "$LIST" | sed -E 's/[[:space:]]+$//' || true)"
+  [[ -n "$out" ]] || die "$LIST lists no package"
+  printf '%s\n' "$out"
+}
+
+# requested-packages of the newest deployment: the staged one when there
+# is one, so a remove right after an install sees what the install asked.
+requested() {
+  rpm-ostree status --json | python3 -c '
+import json, sys
+d = json.load(sys.stdin)["deployments"]
+print("\n".join(d[0].get("requested-packages", []) if d else []))'
+}
+
+layered() {
+  local -A want=()
+  local p pkgs req
+  # Both read first: a missing list or an unreadable rpm-ostree status is
+  # an error, not "nothing is layered".
+  pkgs="$(packages)"
+  req="$(requested)"
+  while read -r p; do want["$p"]=1; done <<<"$pkgs"
+  while read -r p; do
+    [[ -n "$p" && -n "${want[$p]:-}" ]] && echo "$p"
+  done <<<"$req"
+  return 0
+}
+
+pending() {
+  rpm-ostree status --json | python3 -c '
+import json, sys
+d = json.load(sys.stdin)["deployments"]
+sys.exit(0 if d and not d[0].get("booted", False) else 1)'
+}
+
+repo() {
+  [[ $EUID -eq 0 ]] || die "repo: run as root"
+  local tmp rc=0
+  tmp="$(mktemp)"
+  printf '%s\n' '[code]' 'name=Visual Studio Code' \
+    'baseurl=https://packages.microsoft.com/yumrepos/vscode' \
+    'enabled=1' 'gpgcheck=1' "gpgkey=$VSCODE_KEY_URL" > "$tmp"
+  "$LAYER_REPO" vscode "file://$tmp" "$VSCODE_KEY_URL" "$VSCODE_FPR" || rc=$?
+  rm -f "$tmp"
+  return "$rc"
+}
+
+repo_remove() {
+  [[ $EUID -eq 0 ]] || die "repo-remove: run as root"
+  local req
+  # Without the repository an update of a system that still layers code
+  # stops depsolving: when the state cannot be read, keep it.
+  req="$(requested)" || die "repo-remove: cannot read rpm-ostree status, the repository stays"
+  if grep -qx code <<<"$req"; then
+    echo "devmode: VS Code is still requested, its repository stays"
+    return 0
+  fi
+  rm -f "$REPO_DIR/vscode.repo" "$KEY_DIR/RPM-GPG-KEY-vscode"
+}
+
+brew_install() {
+  if [[ -x "$BREW" ]]; then
+    echo "Homebrew is already installed: $("$BREW" --version 2>/dev/null | head -n1)"
+    return 0
+  fi
+  [[ $EUID -ne 0 ]] || die "brew-install: run as the user who will own Homebrew, not as root"
+  local user group tmp rc=0
+  user="$(id -un)" group="$(id -gn)"
+  # The installer needs the prefix and its parent writable, or it calls
+  # sudo itself, in the middle of its run. Prepare both for the user, as
+  # Universal Blue's brew-setup.service does with its tarball.
+  if [[ ! -w "$BREW_ROOT" || ! -w "$BREW_PREFIX" ]]; then
+    "${SUDO[@]}" install -d -o "$user" -g "$group" -m 0755 "$BREW_ROOT" "$BREW_PREFIX"
+  fi
+  tmp="$(mktemp -d)"
+  if curl -fsSL --retry 3 -o "$tmp/install.sh" "$BREW_INSTALLER"; then
+    # NONINTERACTIVE: no prompt. HOMEBREW_NO_SUDO: the prefix is the user's,
+    # nothing in the run needs root.
+    NONINTERACTIVE=1 HOMEBREW_NO_SUDO=1 bash "$tmp/install.sh" || rc=$?
+  else
+    rc=$?
+    echo "devmode: could not download Homebrew's installer ($BREW_INSTALLER)" >&2
+  fi
+  rm -rf "$tmp"
+  (( rc == 0 )) || return "$rc"
+  [[ -x "$BREW" ]] || die "the installer finished but $BREW is missing"
+  echo "Homebrew installed: $("$BREW" --version | head -n1)"
+  # The installer ends with "add brew shellenv to ~/.bashrc": not needed,
+  # /etc/profile.d/margine-brew.sh and margine-brew.fish do it for every
+  # shell, and only while Homebrew is there.
+  echo "Lucciola sets up the shell for Homebrew already: no need to edit ~/.bashrc as the installer suggests."
+}
+
+brew_count() {
+  [[ -x "$BREW" ]] || { echo 0; return 0; }
+  local f c
+  f="$(HOMEBREW_NO_AUTO_UPDATE=1 "$BREW" list --formula -1 2>/dev/null | grep -c . || true)"
+  c="$(HOMEBREW_NO_AUTO_UPDATE=1 "$BREW" list --cask -1 2>/dev/null | grep -c . || true)"
+  echo $(( f + c ))
+}
+
+brew_remove() {
+  # rm -rf on a path from the environment: only ever a directory named
+  # linuxbrew, never / or an empty string.
+  [[ "${BREW_ROOT##*/}" == linuxbrew && "$BREW_ROOT" == /* ]] \
+    || die "refusing to delete '$BREW_ROOT'"
+  if [[ ! -e "$BREW_ROOT" ]]; then
+    echo "Homebrew is not installed, nothing to remove."
+    return 0
+  fi
+  "${SUDO[@]}" rm -rf --one-file-system "$BREW_ROOT"
+  # Downloads and logs brew kept in the calling user's home.
+  rm -rf "${XDG_CACHE_HOME:-$HOME/.cache}/Homebrew"
+  echo "Homebrew removed ($BREW_ROOT)."
+}
+
+status() {
+  local -A req=()
+  local p state
+  while read -r p; do [[ -n "$p" ]] && req["$p"]=1; done < <(requested 2>/dev/null || true)
+  echo "Developer layer (ujust lucciola-devmode)"
+  echo "RPMs:"
+  while read -r p; do
+    if rpm -q "$p" >/dev/null 2>&1; then
+      state="installed ($(rpm -q --qf '%{VERSION}' "$p" 2>/dev/null))"
+      [[ -n "${req[$p]:-}" ]] || state+=", part of the image"
+    elif [[ -n "${req[$p]:-}" ]]; then
+      state="layered, active after a restart"
+    else
+      state="-"
+    fi
+    printf '  %-26s %s\n' "$p" "$state"
+  done < <(packages)
+  if [[ -f "$REPO_DIR/vscode.repo" ]]; then
+    echo "VS Code repository: configured ($REPO_DIR/vscode.repo)"
+  else
+    echo "VS Code repository: not configured"
+  fi
+  if [[ -x "$BREW" ]]; then
+    echo "Homebrew: $("$BREW" --version 2>/dev/null | head -n1), owned by $(stat -c %U "$BREW_PREFIX"), $(brew_count) packages"
+  else
+    echo "Homebrew: not installed"
+  fi
+}
+
+case "${1:-}" in
+  packages) packages ;;
+  layered) layered ;;
+  pending) pending ;;
+  repo) repo ;;
+  repo-remove) repo_remove ;;
+  brew-install) brew_install ;;
+  brew-count) brew_count ;;
+  brew-remove) brew_remove ;;
+  status) status ;;
+  *) echo "usage: devmode packages|layered|pending|repo|repo-remove|brew-install|brew-count|brew-remove|status" >&2; exit 2 ;;
+esac

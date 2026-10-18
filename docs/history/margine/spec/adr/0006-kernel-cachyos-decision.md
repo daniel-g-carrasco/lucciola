@@ -194,7 +194,7 @@ Re-open this ADR when any of the following occur:
 - [`docs/03-cachyos-kernel.md`](../03-cachyos-kernel.md) — operational guide
   for the CachyOS kernel choice (pre-bootc-image era; still relevant for
   the *why CachyOS at all* argument)
-- [`docs/upstream-inspirations.md`](../upstream-inspirations.md) —
+- [`docs/upstream-inspirations.md`](../../../../upstream-inspirations.md) —
   Origami Linux entry covers our derivation of the `custom-kernel/install.sh`
   script
 - [`docs/audits/2026-06-05-margine-stack-audit.md`](../audits/2026-06-05-margine-stack-audit.md)

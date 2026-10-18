@@ -155,6 +155,7 @@ BOOT_OK=""
 SEC_RESULT=""
 GUI_RESULT=""
 GAMING_RESULT=""
+DEV_RESULT=""
 GUI_DEADLINE=0
 for (( i = 1; i <= TIMEOUT; i++ )); do
   if [[ -z "$BOOT_OK" && -f "$LOG" ]] && grep -qE "$OK_REGEX" "$LOG"; then
@@ -183,24 +184,29 @@ for (( i = 1; i <= TIMEOUT; i++ )); do
     exit 1
   fi
   if [[ -n "$BOOT_OK" ]] && (( GUI_WATCH )); then
-    # Two independent verdicts share one window: the Layer C
-    # GUI probe and the gaming-native dry-run. Break only once BOTH are
-    # decided (or the deadline passes) so neither masks the other.
+    # Independent verdicts share one window: the Layer C GUI probe, the
+    # gaming-native dry run, the developer-layer dry run (after the gaming
+    # one, same background job) and the security probe. Break only once
+    # ALL are decided (or the deadline passes) so none masks another.
     [[ -z "$GUI_RESULT" ]] && grep -q "MARGINE-GUI-SMOKE: PASS" "$LOG" && GUI_RESULT=pass
     [[ -z "$GUI_RESULT" ]] && grep -q "MARGINE-GUI-SMOKE: FAIL" "$LOG" && GUI_RESULT=fail
     [[ -z "$GAMING_RESULT" ]] && grep -q "MARGINE-GAMING-NATIVE: PASS" "$LOG" && GAMING_RESULT=pass
     [[ -z "$GAMING_RESULT" ]] && grep -q "MARGINE-GAMING-NATIVE: FAIL" "$LOG" && GAMING_RESULT=fail
     [[ -z "$GAMING_RESULT" ]] && grep -q "MARGINE-GAMING-NATIVE: SKIP" "$LOG" && GAMING_RESULT=skip
+    [[ -z "$DEV_RESULT" ]] && grep -q "MARGINE-DEVELOPER-LAYER: PASS" "$LOG" && DEV_RESULT=pass
+    [[ -z "$DEV_RESULT" ]] && grep -q "MARGINE-DEVELOPER-LAYER: FAIL" "$LOG" && DEV_RESULT=fail
+    [[ -z "$DEV_RESULT" ]] && grep -q "MARGINE-DEVELOPER-LAYER: SKIP" "$LOG" && DEV_RESULT=skip
     if (( SEC_WATCH )); then
       [[ -z "$SEC_RESULT" ]] && grep -q "MARGINE-SEC-SMOKE: PASS" "$LOG" && SEC_RESULT=pass
       [[ -z "$SEC_RESULT" ]] && grep -q "MARGINE-SEC-SMOKE: FAIL" "$LOG" && SEC_RESULT=fail
     else
       SEC_RESULT=off
     fi
-    if [[ -n "$GUI_RESULT" && -n "$GAMING_RESULT" && -n "$SEC_RESULT" ]]; then break; fi
+    if [[ -n "$GUI_RESULT" && -n "$GAMING_RESULT" && -n "$DEV_RESULT" && -n "$SEC_RESULT" ]]; then break; fi
     if (( i > GUI_DEADLINE )); then
       [[ -z "$GUI_RESULT" ]] && GUI_RESULT=timeout
       [[ -z "$GAMING_RESULT" ]] && GAMING_RESULT=timeout
+      [[ -z "$DEV_RESULT" ]] && DEV_RESULT=timeout
       [[ -z "$SEC_RESULT" ]] && SEC_RESULT=timeout
       break
     fi
@@ -256,6 +262,24 @@ if [[ -n "$BOOT_OK" ]]; then
         exit 1 ;;
       skip) echo "::warning::Gaming-native check skipped (rpm-ostreed not ready or dry run timed out); build.yml's resolve check still ran." ;;
       *)    echo "::warning::Gaming-native check gave no verdict (probe skipped or stuck) — see inject step + serial log." ;;
+    esac
+
+    # ---- Developer-layer dry-run verdict: GATING on FAIL, like gaming ----
+    # (2026-10-18) `ujust lucciola-devmode` layers VS Code from Microsoft's
+    # repository and gcc from Fedora's: a FAIL means the recipe, and every
+    # update of a machine that has the layer, would stop depsolving (or the
+    # VS Code key was refused). Skip and timeout stay warnings, and
+    # build.yml's resolve check ran before the push.
+    grep -E "MARGINE-DEVELOPER-LAYER" "$LOG" || true
+    emit "developer=${DEV_RESULT:-none}"
+    case "$DEV_RESULT" in
+      pass) echo "✓ Developer layer resolves (rpm-ostree dry-run)" ;;
+      fail)
+        echo "::error::Developer layer does NOT resolve: ujust lucciola-devmode, and rpm-ostree upgrades of machines that have it, would fail. GATING: not promoting. See serial log artifact."
+        emit "passed=false"
+        exit 1 ;;
+      skip) echo "::warning::Developer-layer check skipped (rpm-ostreed not ready, VS Code repository unreachable or dry run timed out); build.yml's resolve check still ran." ;;
+      *)    echo "::warning::Developer-layer check gave no verdict (probe skipped or stuck); see inject step + serial log." ;;
     esac
   fi
   exit 0

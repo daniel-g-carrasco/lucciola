@@ -31,8 +31,8 @@ set -euo pipefail
 # 2026-06-01 the workaround is no longer needed — restored the symlink
 # to the canonical Fedora layout.
 #
-# See docs/lessons-learned/2026-05-28-initramfs-and-bootc-labels.md
-# for the full investigation, and docs/lessons-learned/2026-06-03-
+# See docs/history/margine/spec/lessons-learned/2026-05-28-initramfs-and-bootc-labels.md
+# for the full investigation, and docs/history/margine/spec/lessons-learned/2026-06-03-
 # rechunk-and-fixb.md for the wind-down.
 log "Stamping os-release as Lucciola (canonical Fedora layout: /etc → /usr/lib symlink)"
 

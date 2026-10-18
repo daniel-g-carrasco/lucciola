@@ -7,6 +7,74 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Added (the kernel reserve: Lucciola with Fedora's kernel)
+- **A second image, `:fedora-kernel`, the same Lucciola with Fedora's own
+  kernel instead of the CachyOS one.** A bootc image carries one kernel,
+  so the fallback is an image: built from the same commit and the same
+  base as the current `:stable`, right after each promotion, signed the
+  same way (with its SBOM) and published only after the same QEMU boot
+  test with Secure Boot and a TPM. Fedora's kernel is generic x86-64 and
+  signed by Fedora: it starts on processors without x86-64-v3, and it is
+  the way out when a CachyOS kernel update misbehaves.
+  - **Switching:** `ujust lucciola-kernel fedora`, `ujust lucciola-kernel
+    cachyos`, and `ujust lucciola-kernel` to see which kernel runs. It
+    moves the install to the other image at the next restart, keeps the
+    signature-checked transport and layered packages, and leaves the
+    previous system in the boot menu. It refuses the CachyOS kernel on a
+    processor without x86-64-v3, or with Secure Boot on and the Margine key
+    not enrolled.
+  - **TPM disk unlock:** with Secure Boot on, PCR 7 records which key
+    signed the kernel, so the first boot after a switch asks for the disk
+    passphrase. The command says so before it switches, and what to run
+    after that boot: `ujust lucciola-tpm-unlock enable`.
+  - **The same everywhere else:** the phone camera's v4l2loopback is built
+    against Fedora's kernel and signed with the Margine key, the CPU
+    scheduler picker works (Fedora's kernel has sched_ext; its default is
+    EEVDF instead of BORE), same firmware, same apps. Fedora's kernel and
+    its modules keep Fedora's signature.
+  - Under the hood: `--build-arg KERNEL_FLAVOR=fedora` (default `cachyos`,
+    so `:stable` is built as before), `build-fedora-kernel.yml` (after each
+    promotion, and a manual run that publishes only `:fedora-kernel-test`),
+    `/usr/share/margine/kernel-flavor` in both images, and the validators,
+    `lucciola-status` and the boot probes accept Fedora's kernel on the
+    reserve only. The tag name lives in
+    `/usr/share/margine/kernel-reserve-tag`.
+
+### Added
+- **A welcome window at the first login.** New users of the Lucciola
+  session get one short page in the website's look: the keys first, then
+  how updates work (what Lucciola System does and does not do, where
+  Homebrew fits), apps arriving in the background, and a button for the
+  guide. It comes back at each login until it is closed once, and
+  "Lucciola Welcome" in the launcher reopens it. Not in the GNOME session.
+- **The developer layer: `ujust lucciola-devmode`.** One command, in the
+  spirit of Universal Blue's `ujust devmode`, brings what Bluefin DX gave
+  developers and the image no longer carries: VS Code from Microsoft's
+  repository (signing key pinned, repository kept so VS Code updates with
+  the system), gcc, g++ and make, flatpak-builder and
+  git-credential-libsecret, layered with rpm-ostree, plus Homebrew in
+  /home/linuxbrew/.linuxbrew from Homebrew's own installer. Homebrew stays
+  out of the image: its payload would add to every update of every
+  install. `status` shows what is in place, `remove` takes the packages
+  away and asks separately before deleting Homebrew. The shells pick
+  Homebrew up by themselves (bash, zsh, fish), after the system's own
+  commands. Like the gaming layer, the build resolves the package list
+  against each new image before pushing it, and the smoke test dry-runs it
+  on the booted image.
+- **A content editor for the website and the welcome window.** `just edit`
+  opens a local page in the browser: on the website, click a text to change
+  it and use the small bar on a section, paragraph, command or key to move,
+  hide, copy or delete it; the welcome window is a form with a live preview.
+  Save checks first and changes only what was edited; "Propose changes"
+  puts the saved changes in a pull request, never on main. See
+  `tools/content-editor/README.md`.
+
+### Changed
+- **The welcome window's texts are data.** Its sections, their order and
+  every text now live in `/usr/share/lucciola/welcome/content.json`; the
+  window looks exactly as before. A check in CI and on the built image
+  stops a broken file.
+
 ### Changed (Lucciola's own identity)
 - **Lucciola looks like Lucciola from the boot to the desktop.** Until now
   the boot splash, the About page, notifications and the commands still
@@ -44,6 +112,21 @@ stable release is cut.
   - Under the hood, unchanged on purpose: paths, unit names and
     `VARIANT_ID` keep `margine`, and Secure Boot still asks for the
     "Margine key" with the password `margine`.
+
+### Changed (Margine's name, where Lucciola's belongs)
+- **The texts that still said Margine now say Lucciola.** The README,
+  with the wordmark as its title, the security policy and the security
+  claims register are written for Lucciola; the bug report form asks how
+  you got Lucciola. A few messages the rename had missed are fixed:
+  `lucciola-status` and `lucciola-tpm-unlock` pointed at the old
+  `ujust margine-*` names, the validator called itself "Margine", and
+  some notices could fall back to "Margine OS". Margine's design
+  documents (the handbook, ADRs, notes and changelog) moved to
+  `docs/history/margine/`. The Secure Boot key keeps its name, "Margine
+  MOK Signing Key", with the password `margine`: Lucciola signs with the
+  key Margine used, and MOK Manager shows that name.
+- The smoke boot's security probe now checks that the device verifies
+  signatures for Lucciola's own repository, not only Margine's.
 
 ### Removed (lighter image: on demand instead of in every install)
 - **What only some people use is installed when they ask for it.** Measured
@@ -225,4 +308,4 @@ stable release is cut.
   scope for the new repository; the Margine scope stays.
 - No NVIDIA or LTS variant, and no ISO yet.
 - Margine's history up to this point is kept in
-  [docs/margine/CHANGELOG.md](docs/margine/CHANGELOG.md).
+  [docs/history/margine/CHANGELOG.md](docs/history/margine/CHANGELOG.md).

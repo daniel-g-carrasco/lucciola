@@ -62,6 +62,10 @@ WORD_W = 5675;
 WORD_H = 1304;
 FLY_X  = 4600;
 FLY_W  = 1075;
+// The letters run from about x = 425 to x = 4800 of the canvas (measured on
+// the rendered PNGs): the splash centres them, not the whole canvas, so the
+// firefly hangs to the right of a centred word.
+TEXT_CX = 2612;
 word_ladder[0] = 320;
 word_ladder[1] = 480;
 word_ladder[2] = 720;
@@ -117,7 +121,7 @@ fun layout ()
       }
     logo.word_image = logo.word_orig.Scale(cw, ch);
     logo.fly_image  = logo.fly_orig.Scale(Math.Int(cw * FLY_W / WORD_W), ch);
-    logo.x = Math.Int(sw / 2 - cw / 2);
+    logo.x = Math.Int(sw / 2 - cw * TEXT_CX / WORD_W);
     logo.y = Math.Int(sh / 2 - ch / 2);
     logo.w = cw;
     logo.h = ch;

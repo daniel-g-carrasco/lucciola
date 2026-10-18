@@ -124,8 +124,7 @@ lucciola-gaming:
         when upstream relocates a
         file in a layered RPM.
     This recipe is THE supported way to get the gaming layer on
-    Margine — the separate Margine Gaming image + ISO were retired
-    2026-06-06 to cut maintenance. The Flatpak clients above
+    Lucciola. The Flatpak clients above
     (Steam/Lutris/Heroic/Bottles/Protontricks/ProtonPlus/RetroArch)
     DO NOT layer — they're proper Flatpaks.
 
@@ -348,7 +347,7 @@ lucciola-gaming-native-remove:
 #
 #   ujust lucciola-scheduler          # show current state
 #   ujust lucciola-scheduler lavd     # start/switch to a shipped scheduler
-#   ujust lucciola-scheduler off      # stop scx_loader, return to BORE
+#   ujust lucciola-scheduler off      # stop scx_loader, back to the kernel default (BORE, EEVDF on Fedora's kernel)
 # Switch the CPU scheduler (sched_ext/BPF): status, off, or a scxctl name.
 [group('Performance')]
 lucciola-scheduler $MODE="status":
@@ -418,7 +417,9 @@ lucciola-scheduler $MODE="status":
         ;;
 
       default|stop|off)
-        echo "Stopping scx_loader.service; kernel default (BORE on Lucciola) takes over."
+        kdef=EEVDF
+        grep -q '^CONFIG_SCHED_BORE=y' "/usr/lib/modules/$(uname -r)/config" 2>/dev/null && kdef=BORE
+        echo "Stopping scx_loader.service; the kernel default ($kdef) takes over."
         stop_loader
         echo "ok - scx_loader.service is stopped and disabled."
         ;;
@@ -707,18 +708,18 @@ lucciola-printers-repair:
     set -uo pipefail
     echo "== Repair duplicated printer queues =="
     echo
-    echo "Until 2026-08-22 Margine enabled cups-browsed, which created its own"
-    echo "local queue for every network printer CUPS had already discovered by"
-    echo "itself. The result was the same printer listed twice, and the extra"
-    echo "one stops printing the moment cups-browsed loses track of where the"
-    echo "printer is:"
+    echo "Until 2026-08-22 Margine OS, the system Lucciola grew from, enabled"
+    echo "cups-browsed, which created its own local queue for every network"
+    echo "printer CUPS had already discovered by itself. The result was the same"
+    echo "printer listed twice, and the extra one stops printing the moment"
+    echo "cups-browsed loses track of where the printer is:"
     echo
     echo "  No destination host name supplied by cups-browsed"
     echo
-    echo "Margine no longer enables that service. This removes the queues it"
-    echo "made. Your printer does NOT disappear: CUPS discovers it on its own"
-    echo "and creates a queue the moment you print. Queues you added yourself"
-    echo "are left alone: only the implicitclass:// ones are touched."
+    echo "Neither Margine nor Lucciola enables that service now. This removes"
+    echo "the queues it made. Your printer does NOT disappear: CUPS discovers it"
+    echo "on its own and creates a queue the moment you print. Queues you added"
+    echo "yourself are left alone: only the implicitclass:// ones are touched."
     echo
 
     mapfile -t STALE < <(lpstat -v 2>/dev/null \
@@ -891,6 +892,24 @@ lucciola-update FORCE="":
     # layered systems must go through rpm-ostree.)
     sudo /usr/libexec/margine/system-update
 
+# Kernel: which one runs, or switch between the CachyOS kernel (:stable) and
+# Fedora's (the kernel reserve, :fedora-kernel): status / cachyos / fedora.
+# A bootc image carries one kernel, so this moves the install to the other
+# image (same commit, same base) at the next restart; the logic, the TPM
+# notice and the refusals live in /usr/libexec/margine/kernel-switch.
+[doc("Kernel: status, or switch between the CachyOS kernel (:stable) and Fedora's (:fedora-kernel).")]
+[group('Lucciola')]
+lucciola-kernel $ACTION="status":
+    #!/usr/bin/bash
+    set -uo pipefail
+    # ACTION arrives as an exported env var ($ on the param): a hostile
+    # argument stays inert data.
+    case "$ACTION" in
+      status|"")      exec /usr/libexec/margine/kernel-switch status ;;
+      cachyos|fedora) exec sudo /usr/libexec/margine/kernel-switch "$ACTION" ;;
+      *) echo "usage: ujust lucciola-kernel [status|cachyos|fedora]"; exit 1 ;;
+    esac
+
 # Enable/disable/inspect autologin on the login screen (greetd; default: status, read-only).
 [group('Lucciola')]
 lucciola-autologin ACTION="status" USER="":
@@ -907,7 +926,7 @@ lucciola-secureboot ACTION="status":
     # ships product-name); "Margine key" stays: it is the key's own name.
     product="$(head -n1 /usr/share/margine/product-name 2>/dev/null)"
     [ -n "$product" ] || product="$(sed -n 's/^NAME=//p' /usr/lib/os-release 2>/dev/null | tr -d "\"'")"
-    product="${product:-Margine OS}"
+    product="${product:-Lucciola}"
     sb="$(mokutil --sb-state 2>/dev/null | head -n1)"
     key="$("$HELPER" status 2>/dev/null || echo unknown)"
     case "{{ ACTION }}" in
@@ -1289,7 +1308,7 @@ lucciola-update-unblock APP="":
 # ROCm libraries on its library path, and an OpenCL ICD list holding ROCm
 # alone. Then darktable's settings are tuned for integrated GPUs (5% of RAM,
 # advantage 4: the X-Trans demosaic goes to the CPU, the rest stays on the
-# GPU). Measurements: docs/notes/2026-10-09-darktable-gpu-rocm.md;
+# GPU). Measurements: docs/history/margine/notes/2026-10-09-darktable-gpu-rocm.md;
 # `ujust lucciola-darktable-bench` repeats them on your own photos.
 # GPU (OpenCL) for darktable via ROCm on AMD: status / enable (default) / disable.
 [group('Apps')]
@@ -1473,7 +1492,8 @@ lucciola-tailscale ACTION="install":
 # (the Flatpak com.visualstudio.code is in Bazaar); extensions that run
 # host tools (a terminal on the host, gh, podman, rpm-ostree) need the
 # native build. Layers it from Microsoft's repository, signing key pinned
-# by fingerprint.
+# by fingerprint in /usr/libexec/margine/devmode, which lucciola-devmode
+# uses too. VS Code alone; lucciola-devmode adds it with the rest.
 # VS Code native RPM from Microsoft's repository: install (default) / remove / status.
 [group('Developer')]
 lucciola-vscode ACTION="install":
@@ -1484,15 +1504,10 @@ lucciola-vscode ACTION="install":
         rpm -q code >/dev/null 2>&1 && echo "VS Code RPM: installed ($(rpm -q --qf '%{VERSION}' code))" || echo "VS Code RPM: not installed (the Flatpak com.visualstudio.code is in Bazaar)" ;;
       remove)
         sudo rpm-ostree uninstall code
-        sudo rm -f /etc/yum.repos.d/vscode.repo
+        sudo /usr/libexec/margine/devmode repo-remove
         echo "VS Code RPM removed (a Flatpak VS Code, if installed, stays). Reboot to apply." ;;
       install)
-        tmp="$(mktemp)"
-        printf '%s\n' '[code]' 'name=Visual Studio Code' 'baseurl=https://packages.microsoft.com/yumrepos/vscode' \
-          'enabled=1' 'gpgcheck=1' 'gpgkey=https://packages.microsoft.com/keys/microsoft.asc' > "$tmp"
-        sudo /usr/libexec/margine/layer-repo vscode "file://$tmp" \
-          https://packages.microsoft.com/keys/microsoft.asc BC528686B50D79E339D3721CEB3E94ADBE1229CF
-        rm -f "$tmp"
+        sudo /usr/libexec/margine/devmode repo
         sudo rpm-ostree install --idempotent code
         echo "VS Code RPM layered. Reboot to use it." ;;
       *) echo "usage: ujust lucciola-vscode [install|remove|status]"; exit 2 ;;
@@ -1580,6 +1595,140 @@ lucciola-vm ACTION="install":
         echo "VM tools layered. Reboot: lucciola-dev-groups then adds wheel users to the"
         echo "libvirt group. Rootless VMs (qemu:///session, ujust lucciola-test-vm) need no group." ;;
       *) echo "usage: ujust lucciola-vm [install|remove|status]"; exit 2 ;;
+    esac
+
+# The developer layer, Lucciola's answer to Bluefin DX and Universal Blue's
+# `ujust devmode` (2026-10-18): VS Code from Microsoft's repository, a host
+# C/C++ toolchain, flatpak-builder and git-credential-libsecret, layered
+# with rpm-ostree from /usr/share/margine/developer-packages.txt (the list
+# the build's resolve check and the smoke-boot dry run read too), and
+# Homebrew in /home/linuxbrew/.linuxbrew, not baked in the image: its
+# payload would weigh on every update of every install. The work is in
+# /usr/libexec/margine/devmode; margine-brew-upgrade.timer upgrades Homebrew
+# weekly once it is there. Docker CE, VMs and the eBPF tools keep their own
+# recipes.
+# Developer layer (VS Code, gcc, flatpak-builder, Homebrew): install (default) / status / remove.
+[group('Developer')]
+lucciola-devmode ACTION="install":
+    #!/usr/bin/bash
+    set -euo pipefail
+    DEV=/usr/libexec/margine/devmode
+    [ -x "$DEV" ] || { echo "Missing $DEV: bad image?" >&2; exit 1; }
+    restart_note() {
+      if "$DEV" pending; then
+        echo "Restart to use the new system packages: systemctl reboot"
+      else
+        echo "No system change is waiting: nothing to restart."
+      fi
+    }
+    case "{{ ACTION }}" in
+      status)
+        "$DEV" status ;;
+      install)
+        mapfile -t PKGS < <("$DEV" packages)
+        cat <<'EOF'
+    == Lucciola developer layer ==
+
+    System packages (layered with rpm-ostree, active after a restart):
+      - code              VS Code, from Microsoft's repository. Its signing
+                          key is checked against a known fingerprint, and
+                          the repository stays so that VS Code updates come
+                          with system updates.
+      - gcc, gcc-c++, make
+                          a C and C++ compiler on the system, for Homebrew
+                          and for editor extensions that build code
+      - flatpak-builder   builds Flatpak apps
+      - git-credential-libsecret
+                          git keeps HTTPS passwords in the login keyring
+
+    In /home/linuxbrew, no restart needed:
+      - Homebrew, from Homebrew's own installer, owned by you. Lucciola
+        upgrades its packages once a week, and Lucciola System lists the
+        ones waiting.
+
+    Already in Lucciola: Podman (podman-compose, and `docker` through
+    podman-docker), Toolbox, Distrobox, git, just, adb and fastboot.
+    Separate recipes: lucciola-docker (Docker CE), lucciola-vm (virtual
+    machines), lucciola-devtools (eBPF tracing, sysprof).
+
+    Layered packages are reapplied on every system update, which takes a
+    little longer. ujust lucciola-update handles it; `bootc upgrade`
+    refuses a system with layered packages.
+
+    Safe to run again. To undo: ujust lucciola-devmode remove
+
+    EOF
+        read -rp "Continue? [y/N] " ans
+        case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
+
+        echo
+        echo "== VS Code repository =="
+        sudo "$DEV" repo
+
+        echo
+        echo "== Layering the system packages (rpm-ostree) =="
+        # --idempotent: a re-run must not fail on what is already layered.
+        # --allow-inactive: a package the image itself ships one day stays
+        # requested, and comes back as a layer if the image drops it.
+        sudo rpm-ostree install --idempotent --allow-inactive "${PKGS[@]}"
+
+        echo
+        echo "== Homebrew =="
+        brew_rc=0
+        "$DEV" brew-install || brew_rc=$?
+
+        echo
+        echo "== Done =="
+        restart_note
+        if (( brew_rc != 0 )); then
+          echo "Homebrew did not install (exit $brew_rc): run ujust lucciola-devmode again to retry." >&2
+          exit "$brew_rc"
+        fi
+        echo "Homebrew works in new terminals: brew install <name>." ;;
+      remove)
+        if ! layered="$("$DEV" layered)"; then
+          echo "Could not read what the system has layered (rpm-ostree status)." >&2
+          exit 1
+        fi
+        DROP=()
+        [ -n "$layered" ] && mapfile -t DROP <<<"$layered"
+        HAS_BREW=0
+        [ -x /home/linuxbrew/.linuxbrew/bin/brew ] && HAS_BREW=1
+        if (( ${#DROP[@]} == 0 && HAS_BREW == 0 )); then
+          echo "The developer layer is not installed: nothing to remove."
+          [ -f /etc/yum.repos.d/vscode.repo ] && sudo "$DEV" repo-remove
+          exit 0
+        fi
+        echo "This will:"
+        if (( ${#DROP[@]} )); then
+          echo "  - rpm-ostree uninstall ${DROP[*]}"
+          echo "  - remove the VS Code repository"
+        fi
+        (( HAS_BREW )) && echo "  - ask, separately, whether to delete Homebrew"
+        echo
+        echo "  NOT touched: the Flatpak VS Code if you have it, your VS Code"
+        echo "  settings in ~/.config/Code, and the other developer recipes."
+        echo
+        read -rp "Continue? [y/N] " ans
+        case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
+
+        if (( ${#DROP[@]} )); then
+          sudo rpm-ostree uninstall "${DROP[@]}"
+        fi
+        sudo "$DEV" repo-remove
+
+        if (( HAS_BREW )); then
+          n="$("$DEV" brew-count)"
+          echo
+          read -rp "Delete Homebrew and the $n packages installed with it? [y/N] " ans
+          case "$ans" in
+            [yY]|[yY][eE][sS]) "$DEV" brew-remove ;;
+            *) echo "Homebrew stays in /home/linuxbrew/.linuxbrew." ;;
+          esac
+        fi
+        echo
+        restart_note ;;
+      *) echo "usage: ujust lucciola-devmode [install|status|remove]"; exit 2 ;;
     esac
 
 # Install/reinstall Koofr Desktop (native, rootless, autostart hidden).
@@ -2046,6 +2195,7 @@ alias margine-bootstrap := lucciola-bootstrap
 alias margine-darktable-bench := lucciola-darktable-bench
 alias margine-darktable-opencl := lucciola-darktable-opencl
 alias margine-darktable-scroll := lucciola-darktable-scroll
+alias margine-devmode := lucciola-devmode
 alias margine-devtools := lucciola-devtools
 alias margine-dock-rescue := lucciola-dock-rescue
 alias margine-dock-wake := lucciola-dock-wake
@@ -2058,6 +2208,7 @@ alias margine-gaming-remove := lucciola-gaming-remove
 alias margine-grub-hidpi := lucciola-grub-hidpi
 alias margine-grub-lock := lucciola-grub-lock
 alias margine-home-stock := lucciola-home-stock
+alias margine-kernel := lucciola-kernel
 alias margine-keyring := lucciola-keyring
 alias margine-naked := lucciola-naked
 alias margine-netflix-1080p := lucciola-netflix-1080p
