@@ -86,17 +86,21 @@ fi
 # 2026-10-18 the image carried all three: custom-kernel installed mangohud
 # and goverlay, and vkBasalt came as goverlay's weak dependency (with
 # mesa-demos and vulkan-tools).
+# Left on 2026-10-18 because nothing in the image calls them: mesa-demos
+# (glxinfo and eglinfo, which the diagnostics run only when present),
+# glow, podman-tui, python3-pip (toolbox packages in the declaration, not
+# host ones). vulkan-tools stays: validate-gaming-runtime needs vulkaninfo
+# once Steam is installed. tmux is the base's own.
 DECLARED_PKGS=(
-  mesa-demos vulkan-tools                  # media_diagnostics
+  vulkan-tools                             # media_diagnostics; vulkaninfo for validate-gaming-runtime
   rocminfo rocm-opencl                     # amd_gpu_extras
   lm_sensors powertop powerstat smartmontools  # hardware_diagnostics
   nautilus-python                          # gnome_tools: Files extensions (Spola's sync emblems)
   # libappindicator-gtk3 left on 2026-10-18 with the Koofr tray shim: only
   # Koofr Desktop's GUI used it, and Spola replaced Koofr Desktop.
   jetbrains-mono-fonts cascadia-code-fonts # fonts
-  tmux glow                                # core_cli
-  podman-tui                               # container_tooling
-  python3-pip                              # build_essentials
+  tmux                                     # core_cli (the base ships it)
+  btop                                     # Lucciola's system monitor: Mod+Ctrl+T in the niri config
   # Bluefin shipped it; Universal Blue's main images do not (silverblue-main
   # trial, 2026-10-10). fastfetch is what 50-branding configures.
   fastfetch
