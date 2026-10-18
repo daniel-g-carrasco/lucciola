@@ -301,8 +301,13 @@ test -L "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants/margine-signed-o
 check_exec "usr/libexec/margine/signed-origin" "A.4.trust"
 
 # A.4.bis: desktop launchers have high-res icons. The offline docs, their
-# launcher and their refresh timer left on 2026-10-18 (Lucciola's guide is
-# online): none of them may come back by accident.
+# launcher and their refresh timer left on 2026-10-18: none of them may come
+# back by accident. The Lucciola Guide launcher opens the copy of the site's
+# page that ships in the image instead.
+check_nonempty "usr/share/icons/hicolor/scalable/apps/lucciola-guide.svg" "A.4.bis"
+check_nonempty "usr/share/lucciola/guide/index.html" "A.4.bis"
+check_exec "usr/libexec/margine/guide-open" "A.4.bis"
+grep -q 'id="guide"' "$ROOTFS/usr/share/lucciola/guide/index.html" 2>/dev/null || { echo "::error::A.4.bis the shipped guide page has no guide view"; fail=1; }
 check_nonempty "usr/share/icons/hicolor/scalable/apps/margine-scheduler.svg" "A.4.bis"
 grep -qxF 'Icon=margine-scheduler' "$ROOTFS/usr/share/applications/margine-scheduler.desktop" || { echo "::error::A.4.bis scheduler launcher does not use margine-scheduler icon"; fail=1; }
 for f in usr/share/margine/offline-docs usr/share/applications/margine-documentation.desktop \

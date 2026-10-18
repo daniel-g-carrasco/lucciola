@@ -19,9 +19,24 @@ floating_offset = 6
 list_item_background = true
 
 # A dock, as Margine's GNOME has one: on the active monitor only, small
-# icons, a little off the bottom edge. What is pinned to it is personal.
+# icons, a little off the bottom edge. The launcher button first, then the
+# everyday apps (browser, mail, files, terminal, the app store), then
+# Lucciola's own tools (updates, CPU scheduler, the guide). Pins of an app
+# that is not installed are skipped. Pinning or unpinning from the dock
+# writes the user's own list, which wins over this one.
 [dock]
 enabled = true
+launcher_position = "start"
+pinned = [
+  "app.zen_browser.zen.desktop",
+  "org.mozilla.thunderbird_esr.desktop",
+  "org.gnome.Nautilus.desktop",
+  "org.gnome.Ptyxis.desktop",
+  "io.github.kolunmi.Bazaar.desktop",
+  "dev.margine.System.desktop",
+  "margine-scheduler.desktop",
+  "lucciola-guide.desktop",
+]
 active_monitor_only = true
 icon_size = 34
 item_spacing = 12

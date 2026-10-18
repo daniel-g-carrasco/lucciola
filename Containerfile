@@ -149,6 +149,9 @@ ARG NOCTALIA_VR=5.3.0-1
 # the version that stage built (the ARG at the top).
 ARG NOCTALIA_GREETER_VERSION
 COPY lucciola/system_files/ /
+# The website's single page carries the guide; a copy ships so the Lucciola
+# Guide launcher opens it without a network (/usr/libexec/margine/guide-open).
+COPY site/index.html /usr/share/lucciola/guide/index.html
 RUN --mount=type=bind,from=lucciola-ctx,source=/build.sh,target=/ctx/lucciola/build.sh \
     --mount=type=bind,from=greeter-rpm,source=/out,target=/ctx/greeter-rpm \
     --mount=type=cache,dst=/var/cache \

@@ -1,0 +1,11 @@
+#!/usr/bin/bash
+# Open the copy of the Lucciola guide that ships in the image (the website's
+# single page, built from site/index.html) in the default browser, on its
+# guide view.
+set -euo pipefail
+GUIDE=/usr/share/lucciola/guide/index.html
+if [[ ! -r "$GUIDE" ]]; then
+  echo "guide-open: $GUIDE is missing from this image" >&2
+  exit 1
+fi
+exec xdg-open "file://${GUIDE}#guide"

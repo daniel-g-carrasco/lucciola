@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="cover" x1="24" y1="16" x2="104" y2="116" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3a342d"/>
+      <stop offset="1" stop-color="#1c1a17"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="42" y1="22" x2="92" y2="110" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f4ebdf"/>
+      <stop offset="1" stop-color="#d9c8b2"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="78" cy="94" r="14" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e6d5bf" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#e6d5bf" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="24" y="14" width="80" height="104" rx="10" fill="url(#cover)"/>
+  <path d="M42 22h50a6 6 0 0 1 6 6v92H42a12 12 0 0 1-12-12V34a12 12 0 0 1 12-12Z" fill="url(#paper)"/>
+  <path d="M42 22h8v98h-8a12 12 0 0 1-12-12V34a12 12 0 0 1 12-12Z" fill="#e8dccb"/>
+  <path d="M45 34h6v88h-6z" fill="#8a7a66" opacity=".45"/>
+  <path d="M60 44h22M60 58h26M60 72h18" fill="none" stroke="#3a342d" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="78" cy="94" r="14" fill="url(#glow)"/>
+  <circle cx="78" cy="94" r="5" fill="#c9a777"/>
+</svg>

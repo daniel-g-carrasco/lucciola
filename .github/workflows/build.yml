@@ -75,7 +75,7 @@ on:
       - 'CHANGELOG.md'
       - 'docs/**'
       - 'tools/**'
-      - 'site/**'
+      - 'site/README.md'
   pull_request:
     # Opt-in per-PR build: only PRs explicitly labeled `vm-test` build
     # the image and publish a `:pr-N` tag, so daniel can rebase the
@@ -112,7 +112,7 @@ on:
       - 'CHANGELOG.md'
       - 'docs/**'
       - 'tools/**'
-      - 'site/**'
+      - 'site/README.md'
   schedule:
     # Weekly nightly: Sunday 04:00 UTC = 06:00 CEST. Picks up upstream
     # base image changes even if there are no commits to this repo.
