@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-darktable defaults for Margine: import from the RAW folder, scroll the module
+darktable defaults for Lucciola: import from the RAW folder, scroll the module
 panel, and the GPU settings that suit integrated AMD graphics.
 
 Import (2026-08-17). The home layout gives photos a proper place
@@ -17,7 +17,7 @@ Module panel scrolling (2026-10-09). By default the mouse wheel and the
 two-finger touchpad scroll change the control under the pointer, so
 scrolling down the darkroom's right panel silently edits sliders and combo
 boxes on the way. darkroom/ui/sidebar_scroll_default=TRUE makes scrolling move
-the panel instead; Ctrl+Alt+scroll still adjusts a control. Margine sets it
+the panel instead; Ctrl+Alt+scroll still adjusts a control. Lucciola sets it
 in a profile darktable has not created yet (the welcome screen still asks,
 with this choice preselected) and on request with --scroll; an existing
 profile keeps whatever its owner chose.

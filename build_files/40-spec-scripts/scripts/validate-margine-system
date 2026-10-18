@@ -37,7 +37,7 @@ set -u
 case "${1:-}" in
   -h|--help)
     sed -n '2,40p' "${BASH_SOURCE[0]:-/usr/bin/lucciola-validate-margine-system}" 2>/dev/null \
-      || echo "Margine acceptance test. See script header for MARGINE_VALIDATE_CONTEXT values."
+      || echo "Lucciola acceptance test. See script header for MARGINE_VALIDATE_CONTEXT values."
     exit 0
     ;;
 esac
@@ -69,7 +69,7 @@ fi
 
 # Expected values — canonical Margine state.
 # Keep in sync with declarations/margine-atomic.yaml and build.sh.
-EXPECTED_OS_NAME="Margine OS"
+EXPECTED_OS_NAME="Lucciola"
 # Products built on top of the Margine image (Lucciola) ship their public
 # name here; everything else (ID, VARIANT_ID, kernel) stays Margine's.
 if [[ -s /usr/share/margine/product-name ]]; then
@@ -162,7 +162,7 @@ fi
 for p in firefox gnome-software; do
   if rpm -q "$p" >/dev/null 2>&1; then
     if (( IS_LIVE )); then
-      warn "$p is installed: a user layer? Margine's image does not ship it"
+      warn "$p is installed: a user layer? The image does not ship it"
     else
       bad "$p is in the image: 12-base-trim did not remove it"
     fi
@@ -323,7 +323,7 @@ LOGO_KEY=$(grep -E '^LOGO=' /etc/os-release | cut -d= -f2- | tr -d '"')
 # (commit f40d793 margine-image). lucciola-fetch wrapper still works
 # regardless because it explicitly passes --config.
 [[ -f /etc/fastfetch/config.jsonc ]] \
-  && ok "/etc/fastfetch/config.jsonc present (vanilla fastfetch → Margine config)" \
+  && ok "/etc/fastfetch/config.jsonc present (vanilla fastfetch → Lucciola config)" \
   || warn "/etc/fastfetch/config.jsonc missing — vanilla fastfetch will show Fedora default (cosmetic)"
 
 # Plymouth: the theme sizes itself in device pixels and needs Plymouth's
@@ -562,7 +562,7 @@ PY
 fi
 
 # ---------------------------------------------------------------------------
-hdr "7. Margine launchers"
+hdr "7. Launchers"
 # ---------------------------------------------------------------------------
 # Margine-branded replacements for the Bluefin app-menu entries we
 # stripped: the launcher should offer Margine's own version in their place
@@ -576,7 +576,7 @@ for label in "${!MARGINE_DESKTOP_REPLACEMENTS[@]}"; do
   if [[ -f "$p" ]]; then
     ok "$label present at $p"
   else
-    warn "$label missing ($p): the stripped Bluefin entry has no Margine replacement in the app menu"
+    warn "$label missing ($p): the stripped Bluefin entry has no replacement in the app menu"
   fi
 done
 
@@ -647,7 +647,7 @@ case "$CONTEXT" in
 esac
 
 # ---------------------------------------------------------------------------
-hdr "9. Margine helpers and ujust recipes"
+hdr "9. Helpers and ujust recipes"
 # ---------------------------------------------------------------------------
 for bin in "${EXPECTED_MARGINE_HELPERS[@]}"; do
   if [[ -x "/usr/bin/$bin" ]]; then
@@ -865,12 +865,12 @@ fi
 hdr "11. Verdict"
 # ---------------------------------------------------------------------------
 if (( FAIL == 0 )); then
-  printf "\n\033[1;32m✓✓✓ Margine acceptance test PASSED (%d warnings).\033[0m\n" "$WARN"
+  printf "\n\033[1;32m✓✓✓ Lucciola acceptance test PASSED (%d warnings).\033[0m\n" "$WARN"
   exit 0
 else
   printf "\n\033[1;31m✗✗✗ %d CHECK(S) FAILED (%d warnings).\033[0m\n" "$FAIL" "$WARN"
-  printf "    Investigate the FAIL lines above. If a fix exists in the\n"
-  printf "    margine-image build, try 'sudo bootc upgrade && systemctl reboot'\n"
-  printf "    to pull a newer image and re-validate.\n"
+  printf "    Investigate the FAIL lines above. If a fix exists in a newer\n"
+  printf "    image, try 'ujust lucciola-update && systemctl reboot'\n"
+  printf "    to pull it and re-validate.\n"
   exit 1
 fi

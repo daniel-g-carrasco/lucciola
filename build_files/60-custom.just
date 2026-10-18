@@ -124,8 +124,7 @@ lucciola-gaming:
         when upstream relocates a
         file in a layered RPM.
     This recipe is THE supported way to get the gaming layer on
-    Margine — the separate Margine Gaming image + ISO were retired
-    2026-06-06 to cut maintenance. The Flatpak clients above
+    Lucciola. The Flatpak clients above
     (Steam/Lutris/Heroic/Bottles/Protontricks/ProtonPlus/RetroArch)
     DO NOT layer — they're proper Flatpaks.
 
@@ -707,18 +706,18 @@ lucciola-printers-repair:
     set -uo pipefail
     echo "== Repair duplicated printer queues =="
     echo
-    echo "Until 2026-08-22 Margine enabled cups-browsed, which created its own"
-    echo "local queue for every network printer CUPS had already discovered by"
-    echo "itself. The result was the same printer listed twice, and the extra"
-    echo "one stops printing the moment cups-browsed loses track of where the"
-    echo "printer is:"
+    echo "Until 2026-08-22 Margine OS, the system Lucciola grew from, enabled"
+    echo "cups-browsed, which created its own local queue for every network"
+    echo "printer CUPS had already discovered by itself. The result was the same"
+    echo "printer listed twice, and the extra one stops printing the moment"
+    echo "cups-browsed loses track of where the printer is:"
     echo
     echo "  No destination host name supplied by cups-browsed"
     echo
-    echo "Margine no longer enables that service. This removes the queues it"
-    echo "made. Your printer does NOT disappear: CUPS discovers it on its own"
-    echo "and creates a queue the moment you print. Queues you added yourself"
-    echo "are left alone: only the implicitclass:// ones are touched."
+    echo "Neither Margine nor Lucciola enables that service now. This removes"
+    echo "the queues it made. Your printer does NOT disappear: CUPS discovers it"
+    echo "on its own and creates a queue the moment you print. Queues you added"
+    echo "yourself are left alone: only the implicitclass:// ones are touched."
     echo
 
     mapfile -t STALE < <(lpstat -v 2>/dev/null \
@@ -907,7 +906,7 @@ lucciola-secureboot ACTION="status":
     # ships product-name); "Margine key" stays: it is the key's own name.
     product="$(head -n1 /usr/share/margine/product-name 2>/dev/null)"
     [ -n "$product" ] || product="$(sed -n 's/^NAME=//p' /usr/lib/os-release 2>/dev/null | tr -d "\"'")"
-    product="${product:-Margine OS}"
+    product="${product:-Lucciola}"
     sb="$(mokutil --sb-state 2>/dev/null | head -n1)"
     key="$("$HELPER" status 2>/dev/null || echo unknown)"
     case "{{ ACTION }}" in

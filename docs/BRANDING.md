@@ -3,9 +3,9 @@
 **Purpose.** Every place the image overrides Fedora/Universal Blue identity (logos,
 names, boot splash, login screen, installer, notifications, CLI) lives here, so
 changing one thing later doesn't silently break another. Since 2026-10-18 the
-identity is Lucciola's: its sources are in `lucciola/assets/`, installed by the
-Margine machinery in `build_files/50-branding`; the Margine OS names that stay
-are internal (paths, units, `VARIANT_ID`) or kept as aliases. Each entry says **where** it is,
+identity is Lucciola's: its sources are in `lucciola/assets/`, installed by
+`build_files/50-branding` (inherited from Margine OS); the Margine names that stay
+are internal (paths, units, `VARIANT_ID`) or kept as aliases (see section 11). Each entry says **where** it is,
 **what** it sets, **how** (the mechanism), and the **gotchas** that bite.
 
 > **Anchors, not line numbers.** This doc points at files and *grep-able strings*
@@ -19,6 +19,11 @@ are internal (paths, units, `VARIANT_ID`) or kept as aliases. Each entry says **
 > A change in `live-env/` is visible **only in the ISO**, never on an installed
 > system, and vice-versa. Mixing these up is the #1 source of "I changed it but it
 > didn't change."
+>
+> Lucciola has no ISO yet: no workflow builds `live-env/`, which is still
+> Margine's live image and says "Margine" throughout (sections 3, 6, 7 and 8,
+> and the rows marked "Margine's ISO" below). It becomes Lucciola's when the
+> ISO comes.
 
 ---
 
@@ -57,14 +62,14 @@ These five cut across almost every touchpoint below:
 | GNOME **About** logo | `build_files/50-branding/install.sh` | `lucciola-logo`, `LOGO=` in os-release |
 | GNOME About distributor wordmark | `build_files/50-branding/install.sh` | `fedora_logo_med`, `fedora_whitelogo_med` |
 | Boot splash (Plymouth) | `lucciola/assets/plymouth/`, `build_files/50-branding/install.sh` + `…/kargs.d/10-margine-plymouth.toml` | `plymouth-set-default-theme`, `DeviceScale`, `rhgb` |
-| GRUB menu text + HiDPI font | `live-env/src/iso.yaml` + `…/grub2-static/configs.d/05_margine-gfxmode.cfg` | `Install Margine`, `grub2-mkfont`, `margine.pf2` |
+| GRUB menu text (Margine's ISO) + HiDPI font | `live-env/src/iso.yaml` + `…/grub2-static/configs.d/05_margine-gfxmode.cfg` | `Install Margine`, `grub2-mkfont`, `margine.pf2` |
 | GDM background / logo (Lucciola's fallback login screen) | `build_files/50-branding/install.sh` | `gdm.d/01-margine-background`, `login-screen` |
 | **Lucciola** login screen (Noctalia Greeter on greetd): look, logo, preselected session, failed-login text | `lucciola/system_files/usr/share/lucciola/greeter/{sync,greeter}.toml`, `lucciola/greeter/` (spec, patch), `lucciola/build.sh` (step 5) | `hide_logo`, `Source1`, `authErrorText`, `[appearance.palette]`, `last = "Lucciola"` |
 | Desktop wallpaper (GNOME, GDM, Noctalia, the greeter) / accent colour (GTK; GNOME itself stock) | `build_files/50-branding/install.sh`, `lucciola/system_files/usr/share/lucciola/noctalia/15-wallpaper.toml`, `build_files/30-gnome-defaults/install.sh` | `picture-uri`, `wallpaper.default`, `accent-color` |
-| Live ISO "Welcome to Margine" | `live-env/src/build.sh` | `Welcome to Fedora` (the sed targets) |
-| Anaconda installer **window icon** | `live-env/src/build.sh` | `AnacondaInstaller`, `_wmid in`, `StartupWMClass` |
-| Installer product/storage config | `live-env/src/anaconda/profile.d/margine.conf` | `variant_id`, `default_partitioning` |
-| "Secure Boot is disabled" notice | `live-env/src/build.sh` | `margine-live-sb-notice` |
+| Live ISO "Welcome to Margine" (Margine's ISO) | `live-env/src/build.sh` | `Welcome to Fedora` (the sed targets) |
+| Anaconda installer **window icon** (Margine's ISO) | `live-env/src/build.sh` | `AnacondaInstaller`, `_wmid in`, `StartupWMClass` |
+| Installer product/storage config (Margine's ISO) | `live-env/src/anaconda/profile.d/margine.conf` | `variant_id`, `default_partitioning` |
+| "Secure Boot is disabled" notice (Margine's ISO) | `live-env/src/build.sh` | `margine-live-sb-notice` |
 | MOK passphrase / enrollment | `build_files/custom-kernel/install.sh` | `margine`, `mok-enroll` |
 | First-login bootstrap + notification (no autostart in Lucciola: `ujust lucciola-bootstrap` by hand) | `build_files/system_files/usr/libexec/margine/first-boot-bootstrap`, `…/usr/libexec/margine-first-boot-status` | `first-boot-bootstrap`, `first-boot-status` |
 | Update notifications | `build_files/system_files/usr/libexec/margine*` (units in `…/usr/lib/systemd/user/`) | `margine-notify` |
@@ -74,8 +79,8 @@ These five cut across almost every touchpoint below:
 | Phone Camera app (name/icon/id), virtual webcam label | `…/applications/dev.margine.PhoneCam.desktop` + `…/icons/hicolor/scalable/apps/dev.margine.PhoneCam.svg` + `…/libexec/margine/phone-cam-gui` + `…/modprobe.d/margine-phone-cam.conf` | `dev.margine.PhoneCam`, `Lucciola Phone Cam` |
 | fastfetch / MOTD / `/etc/issue` | `build_files/50-branding/install.sh`, `lucciola/assets/fastfetch-logo.txt`, `…/fastfetch/margine.jsonc`, `build_files/60-ujust-services/install.sh` | `ascii-logo.txt`, `no-show-user-motd`, `/etc/issue` |
 | Command names: `lucciola-*` in /usr/bin and ujust, `margine-*` kept as links and aliases | `build_files/system_files/usr/bin/`, `build_files/40-spec-scripts/install.sh`, `build_files/60-custom.just` | `lucciola-status`, `alias margine-` |
-| **Lucciola** (niri + Noctalia product on top of Margine): public name, login session, validator name | `lucciola/build.sh`, `lucciola/system_files/usr/share/margine/product-name` | `NAME="Lucciola"`, `lucciola.desktop`, `product-name` |
-| Product name in messages (`lucciola-status`, Secure Boot notice and `ujust lucciola-secureboot`, the System app's "Built from"): `product-name`, else os-release `NAME`, else "Margine OS"; "Margine key" stays, it is the MOK's own name | `…/usr/bin/lucciola-status`, `…/libexec/margine/mok-notify`, `build_files/60-custom.just`, `…/libexec/margine/system-gui` | `product-name` |
+| **Lucciola**: public name, login session, validator name | `lucciola/build.sh`, `lucciola/system_files/usr/share/margine/product-name` | `NAME="Lucciola"`, `lucciola.desktop`, `product-name` |
+| Product name in messages (`lucciola-status`, Secure Boot notice and `ujust lucciola-secureboot`, the System app's "Built from"): `product-name`, else os-release `NAME`, else "Lucciola"; "Margine key" stays, it is the MOK's own name ("Margine MOK Signing Key") | `…/usr/bin/lucciola-status`, `…/libexec/margine/mok-notify`, `build_files/60-custom.just`, `…/libexec/margine/system-gui` | `product-name` |
 
 ---
 
@@ -132,15 +137,15 @@ identity (`NAME`, `VERSION`, `PRETTY_NAME`, `VARIANT`, `LOGO`, `ANSI_COLOR`,
 `HOME_URL`, `DEFAULT_HOSTNAME`) from the first step, so the initramfs
 50-branding writes (which carries os-release: the initrd's "Welcome to ..."
 line) has it too; `lucciola/build.sh` step 3 re-asserts it. The values below
-are the image's. Margine's policy, for the identifiers that stay:
+are the image's.
 
-**Naming policy (2026-07-11, fixed with the DistroWatch submission):** the
-public product name is **"Margine OS"**: titles, first mentions, About panel,
-directories and stores all use it. **"Margine"** alone is the accepted short
-form in running text after the first mention. Technical identifiers never
-carry the suffix and never change: `VARIANT_ID=margine` (countme keys on it),
-`margine-*` unit/script/icon names, `margine-live-iso-*` Archive identifiers,
-the `margine.dev` domain, the ghcr.io/`margine` image name.
+**Naming policy (2026-10-18):** the public name is **"Lucciola"**:
+os-release, the login session, notifications, commands, documentation. The
+technical identifiers inherited from Margine OS keep `margine` and never
+change, because installed machines depend on them: `VARIANT_ID=margine`
+(countme keys on it), `margine-*` unit, script and icon names, paths such as
+`/usr/libexec/margine` and `/etc/margine`, and the signing key's own name
+(section 9). The full list is in section 11.
 
 | Key | Value | Consumed by |
 |---|---|---|
@@ -167,16 +172,17 @@ the `margine.dev` domain, the ghcr.io/`margine` image name.
   foundation).
 
 **Gotchas**
-- `ID` stays `fedora` on purpose. Detect Margine via `VARIANT_ID=margine`.
+- `ID` stays `fedora` on purpose. Detect Lucciola (and Margine) via `VARIANT_ID=margine`.
 - Identity (section `10-`) must run **before** branding (section `50-`); the logo
-  aliasing and About config assume os-release is already Margine.
+  aliasing and About config assume os-release is already Lucciola's.
 - About reads only `NAME`, `PRETTY_NAME`, `VARIANT`, `LOGO` from os-release; other
   fields come from elsewhere.
 - **`NAME` feeds Fedora countme's `os_name`.** Renaming it splits the public
   device-count series: the 2026-07-11 "Margine" → "Margine OS" rebrand moved
-  updated devices to a new `os_name` and the site's user chart silently
-  undercounted until `publish-countme-json.sh` learned to accept **both**
-  names. If `NAME` ever changes again, teach that script the new name too.
+  updated devices to a new `os_name` and Margine's site chart silently
+  undercounted until its counting script learned to accept **both** names.
+  That script stayed with Margine (it left this repository with the
+  status-page workflows), so nothing here charts Lucciola's devices yet.
 
 ---
 
@@ -250,7 +256,7 @@ headless and skipping the splash.
 
 ## 3. GRUB / boot menu
 
-**Menu text** (`live-env/src/iso.yaml`): entries explicitly read **"Install
+**Menu text** (`live-env/src/iso.yaml`, Margine's ISO): entries explicitly read **"Install
 Margine"** (+ *Basic Graphics Mode*, + *verbose, no splash, no serial*, +
 *Enroll Secure Boot key (MokManager)*). The ISO volume label must stay
 `Margine-Live` (the CDLABEL the boot config references).
@@ -375,7 +381,7 @@ is online and nothing replaces the entry.
 
 ---
 
-## 6. Live ISO — "Welcome to Margine"
+## 6. Live ISO: "Welcome to Margine" (Margine's ISO)
 
 **File:** `live-env/src/build.sh` (live image only). anaconda-live ships a GJS
 welcome app + an autostart `.desktop`, both saying "Welcome to Fedora":
@@ -396,7 +402,7 @@ welcome app + an autostart `.desktop`, both saying "Welcome to Fedora":
 
 ---
 
-## 7. Anaconda installer — window icon (the hard one)
+## 7. Anaconda installer: window icon (Margine's ISO, the hard one)
 
 > This one has bitten us repeatedly. Read the whole thing before touching it.
 
@@ -465,7 +471,7 @@ handles them). The `%include` post-scripts are wired from
 
 ---
 
-## 8. Live ISO — "Secure Boot is disabled" notice
+## 8. Live ISO: "Secure Boot is disabled" notice (Margine's ISO)
 
 **File:** `live-env/src/build.sh` (anchor `margine-live-sb-notice`).
 A one-shot autostart (`/etc/xdg/autostart/margine-live-sb-notice.desktop` →
@@ -489,16 +495,19 @@ passphrase `margine`), and links the docs. Idempotent via a marker in
 ## 9. Secure Boot / MOK (installed system)
 
 **File:** `build_files/custom-kernel/install.sh`.
-- **Passphrase:** `margine` — **public by design** (printed on the ISO + docs;
-  users type it into MokManager). Only the *signing key* is secret.
-- Kernel + all modules (incl. NVIDIA) signed with the Margine MOK at build; a
+- **Passphrase:** `margine`: **public by design** (printed in the guide,
+  `SECURITY.md` and `lucciola/README.md`; users type it into MokManager). Only the *signing key* is secret.
+  The key is the one Margine OS signs with, so its certificate is named
+  "Margine MOK Signing Key" and the password stays `margine`: an install that
+  came from Margine already has it enrolled.
+- Kernel + all modules signed with the MOK at build; a
   sha256 check fails the build if the kernel changes after signing. One key → one
   enrollment.
 - Installed cert: `/usr/share/cert/MOK.der`. `mok-enroll.service` imports it on
   every boot until shim has it, **with Secure Boot on or off** (the key must be
   in shim before SB is turned on); a login notification explains the MOK Manager
   screen; `ujust lucciola-secureboot` shows the state (2026-10-04).
-- ISO offers `Enroll Secure Boot key (MokManager)` (chainloads `mmx64.efi`) so the
+- Margine's ISO offers `Enroll Secure Boot key (MokManager)` (chainloads `mmx64.efi`) so the
   key can be enrolled from the boot menu before install.
 
 **Gotcha:** keep the passphrase LETTERS ONLY. MokManager runs in the
@@ -507,10 +516,10 @@ different key for Italian/German/French users, who are typing it blind
 (issue #353). It protects nothing, so there is nothing to trade against
 typability.
 
-**Gotcha:** the installer stages its own MOK cert via
+**Gotcha:** Margine's installer stages its own MOK cert via
 `…/anaconda/post-scripts/secureboot-enroll-key.ks`; the installed-system path
 (`/usr/share/cert/MOK.der` + `mok-enroll.service`) is separate. See the handbook
-for the user-facing provenance/SB docs ([[handbook-sync-mechanism]]).
+for the user-facing provenance/SB docs (now in `docs/history/margine/spec/`).
 
 ---
 
@@ -527,12 +536,12 @@ All under `build_files/system_files/`. All autostart entries follow Golden Rules
   it (2026-10-18), so in Lucciola it runs only by hand.
 - **First-boot status** (`usr/libexec/margine-first-boot-status`): notifies if
   `flatpak-preinstall.service` is still installing the deferred heavy apps
-  ("installing extra apps… ~5–15 min"), and "Margine is ready" when done. Marker
+  ("installing extra apps… ~5–15 min"), and "Lucciola is ready" when done (the name from `product-name`). Marker
   `~/.cache/margine/first-boot-notified`. Same as the bootstrap: no autostart in
   Lucciola.
 - **Upgrade notify** (`usr/lib/systemd/user/margine-upgrade-notify.service`):
   post-reboot **confirmation** — at login, if the booted deployment digest
-  differs from the recorded one, toasts "Margine updated / Now running: …".
+  differs from the recorded one, toasts "Lucciola updated / Now running: …".
   The "reboot to apply" role belongs to staged-update notify, not here. State
   advances only after the notification succeeds, so a missed toast retries at
   the next login.
@@ -617,7 +626,7 @@ icons:
 calls `Notify` over D-Bus (gdbus) with **both** `app_icon` and `image-path`
 set. Defaults (2026-10-18): the icon is os-release `LOGO` (`lucciola-logo`),
 the sender name `/usr/share/margine/product-name` (Lucciola), with os-release
-`NAME` and "Margine OS" as fallbacks; `-i` and `-a APP_NAME` override them. All Margine notifiers (staged-update, upgrade, staleness, first-boot
+`NAME` and "Lucciola" as fallbacks; `-i` and `-a APP_NAME` override them. All the notifiers (staged-update, upgrade, staleness, first-boot
 status) go through it. Matrix-tested on the lock screen 2026-07-15: themed
 name, absolute path and Adwaita icons via notify-send all fail; the same
 themed name via `app_icon` shows the logo.
