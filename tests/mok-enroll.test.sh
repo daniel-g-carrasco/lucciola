@@ -8,7 +8,8 @@ HELPER="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/build_files/system_file
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 fails=0
 
-mkdir -p "$T/bin" "$T/efi"
+mkdir -p "$T/bin" "$T/efi/efivars" "$T/efi-nosb/efivars"
+: > "$T/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c"
 : > "$T/MOK.der"
 # Fake mokutil: state in $MOK_STATE (enrolled|pending|absent), imports
 # logged with the password they were given, $MOK_IMPORT_FAILS makes the
@@ -58,6 +59,8 @@ run_case "request already pending: not staged twice"          pending "" 0 0
 run_case "absent but switched off: left alone at boot"        absent "" 0 0 off
 run_case "absent, switched off, explicit enroll: staged"      absent enroll 1 0 off
 run_case "status never stages anything"                       absent status 0 0
+run_case "firmware without Secure Boot: nothing staged, no failure" absent "" 0 0 "" "$T/efi-nosb"
+run_case "firmware without Secure Boot, explicit enroll: nothing"   absent enroll 0 0 "" "$T/efi-nosb"
 run_case "legacy BIOS boot (no efi dir): nothing to do"       absent "" 0 0 "" "$T/no-efi"
 run_case "image without the certificate: nothing to do"       absent "" 0 0 "" "$T/efi" "$T/missing.der"
 run_case "import fails: reported as a failure"                absent "" 1 1 "" "$T/efi" "$T/MOK.der" yes
