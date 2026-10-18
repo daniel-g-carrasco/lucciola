@@ -7,6 +7,46 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Removed (GNOME customisation)
+- **The build no longer adds Margine's GNOME customisation only to delete
+  it.** GNOME has been a stock fallback session since 2026-10-11, but the
+  image still built and installed Margine's GNOME layer and then
+  `lucciola/build.sh` took it apart. These left the build:
+  - the GNOME Shell extensions step and its script
+    (`build-margine-extensions.sh`: o-tiling with its patches, hide-cursor,
+    the Smile, Gradia and Bazaar companions, Caffeine from EGO, the icon
+    shims for o-tiling), the AppIndicator, Dash to Dock, Caffeine and
+    GSConnect packages, and the weekly EGO pin watcher
+    (`check-upstream-pins.yml`);
+  - the Shell, mutter and window-manager sections of the zz1 gschema
+    override and the five dconf keyfiles (extension settings, the tiling
+    keybindings, the Smile shortcut);
+  - wayland-scroll-factor (45-wsf, `ujust wsf-preload`), which only loads
+    into gnome-shell; niri sets the scroll speed itself;
+  - Smile and Extension Manager from the preinstalled and baked Flatpaks
+    (an install that has them keeps them);
+  - the GNOME first-login helpers (`margine-configure-gnome-*`,
+    `margine-install-user-extensions`) and the two first-login autostart
+    entries. `ujust margine-bootstrap` keeps its other steps (home layout,
+    default applications, Zen, darktable) and runs only by hand.
+
+  `lucciola/build.sh` now checks instead that GNOME arrives stock and fails
+  the build otherwise. What stays for GTK applications: the accent colour,
+  the wallpaper and the virt-manager connections. GSConnect's port 1716 is
+  gone from the reviewed listeners (decision D5 closed).
+  libappindicator-gtk3, which came in as an extension dependency, is now
+  installed on its own: Koofr's tray needs it.
+  Measured on two local builds of the same base (before, and after without
+  the libappindicator fix): the same files and packages except the ones
+  above (four packages, 68 paths); installed tree 1.5 MiB smaller (under
+  1 MiB with libappindicator kept); 98 MiB less in the image's layers,
+  nearly all of it the extensions step's own layer, which the published,
+  re-chunked image did not carry as such; build time unchanged within
+  noise (1125 s against about 1117 s), since the kernel and package steps
+  dominate. The gain is a shorter build with seven fewer downloads (six
+  extensions, the WSF package) and no extension patches to rework at every
+  GNOME release.
+
 ### Changed (login screen)
 - **The login screen is Noctalia Greeter on greetd**, in place of GDM: the
   same look as the desktop (dark, the Lucciola palette, JetBrains Mono, the
