@@ -7,6 +7,9 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-18, from Margine)
+- **The fixes Margine got on 2026-10-17 (margine-image #517), brought over.** The system app compares the machine with the tag it follows instead of always `:stable`; the Secure Boot notice and `ujust margine-secureboot` say "Lucciola" (from `product-name`); `margine-collect-diagnostics` writes under `~/.local/state/margine/diagnostics/` instead of the read-only `/usr`; `lucciola-keep-awake` is on the PATH; Extension Manager is no longer preinstalled; `bar-widths` speaks of two workspaces.
+
 ### Fixed (2026-10-18)
 - **No Secure Boot warning on firmware that has no Secure Boot.** On a machine whose firmware does not implement Secure Boot at all (a virtual machine with plain OVMF, for one), `mok-enroll.service` failed at every boot, because mokutil refuses to import a key there, and the login notice asked the user to fix something that cannot be fixed. The helper now recognises that firmware (no `SecureBoot` EFI variable), reports `unsupported` and stays quiet. A missing opt-out file no longer logs a "No such file" error either.
 
