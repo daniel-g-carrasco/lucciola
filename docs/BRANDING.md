@@ -277,6 +277,13 @@ Shell default of Margine's (Margine OS keeps them in its own tree).
 **Gotcha:** after editing any `.gschema.override`, `glib-compile-schemas
 /usr/share/glib-2.0/schemas` must run (the build does this).
 
+**App menu entries** (`build_files/50-branding/install.sh`): Bluefin's
+`discourse.desktop` and `documentation.desktop` are removed, `system-update.desktop`
+gives way to `margine-system-update.desktop`. The **Margine Documentation**
+launcher (`margine-documentation.desktop`, icon `margine-documentation`,
+`margine-docs-open`) left on 2026-10-18 with the offline docs: Lucciola's guide
+is online and nothing replaces the entry.
+
 ---
 
 ## 6. Live ISO — "Welcome to Margine"

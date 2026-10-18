@@ -488,7 +488,7 @@ jobs:
             GAMING="${{ steps.boot.outputs.gaming }}"
             case "$GAMING" in
               pass) MSG="${MSG} Gaming-native: resolves." ;;
-              fail) MSG="${MSG} Gaming-native: WON'T resolve — ujust margine-gaming-native would break." ; PRIO="high"; TAGS="warning" ;;
+              fail) MSG="${MSG} Gaming-native: WON'T resolve, ujust margine-gaming-native would break." ; PRIO="high"; TAGS="warning" ;;
               skip) : ;;
               *)    MSG="${MSG} Gaming-native: no verdict." ;;
             esac

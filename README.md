@@ -12,6 +12,7 @@ Lucciola builds on Fedora Silverblue and Universal Blue, and adds a desktop made
 - The CachyOS kernel, signed with the project's own key, so Secure Boot stays on. The TPM can unlock the encrypted disk at boot.
 - Updates download in the background and apply at the next restart. The previous version stays in the boot menu, and your device checks every image's signature before installing it.
 - Zen Browser, Thunderbird, LibreOffice, GIMP, Inkscape, darktable and OBS Studio, with Bazaar to install more from Flathub. Common audio and video formats play out of the box. Distrobox and Toolbox run developer tools without changing the system.
+- What only some people need comes with one command instead of sitting in every install: Steam and the other game launchers (`ujust margine-gaming`, or `ujust margine-gaming-native` for the native Steam), virtual machines with virt-manager (`ujust margine-vm`).
 
 ## Requirements
 

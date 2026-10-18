@@ -294,7 +294,7 @@ test -L "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants/margine-signed-o
   || { echo "::error::margine-signed-origin.service is not enabled (A.4.trust)"; fail=1; }
 check_exec "usr/libexec/margine/signed-origin" "A.4.trust"
 
-# A.4.bis — desktop launchers have high-res icons. The offline docs, their
+# A.4.bis: desktop launchers have high-res icons. The offline docs, their
 # launcher and their refresh timer left on 2026-10-18 (Lucciola's guide is
 # online): none of them may come back by accident.
 check_nonempty "usr/share/icons/hicolor/scalable/apps/margine-scheduler.svg" "A.4.bis"
