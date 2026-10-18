@@ -363,12 +363,12 @@ class Calibrator:
         state = "on" if self.enabled else "off"
         log(f"calibration switched {state} on {len(calibrated)} screen(s)")
         if not calibrated:
-            notify("Calibrazione colore", "Nessuno schermo calibrato in questo momento.")
+            notify("Colour calibration", "No screen is calibrated right now.")
         elif self.enabled:
-            notify("Calibrazione colore accesa", "\n".join(
+            notify("Colour calibration on", "\n".join(
                 f"{out['name']}: {out['profile']['desc']}" for out in calibrated))
         else:
-            notify("Calibrazione colore spenta", "Colori del pannello senza correzione.")
+            notify("Colour calibration off", "Panel colours without correction.")
 
     def drop_gamma(self, out):
         """Destroy the gamma control once; later events for it are ignored."""
@@ -442,7 +442,7 @@ def toggle_running():
         pid = 0
     if not pid:
         log("not running in this session, nothing to switch")
-        notify("Calibrazione colore", "Il programma di calibrazione non è in esecuzione.")
+        notify("Colour calibration", "The calibration service is not running.")
         return 1
     os.kill(pid, signal.SIGUSR1)
     return 0

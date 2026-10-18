@@ -176,47 +176,47 @@ debug {
 binds {
     // Super+Shift+H: on Italian keyboards "/" is Shift+7, so the upstream
     // Super+Shift+/ is awkward; both work.
-    Mod+Shift+H hotkey-overlay-title="Elenco delle scorciatoie" { show-hotkey-overlay; }
-    Mod+Shift+C hotkey-overlay-title="Calibrazione colore: accendi/spegni" { spawn "/usr/libexec/lucciola/color-calibration" "--toggle"; }
+    Mod+Shift+H hotkey-overlay-title="Keyboard shortcuts" { show-hotkey-overlay; }
+    Mod+Shift+C hotkey-overlay-title="Colour calibration on/off" { spawn "/usr/libexec/lucciola/color-calibration" "--toggle"; }
     Mod+Shift+Slash hotkey-overlay-title=null { show-hotkey-overlay; }
 
     // Applications (same keys as Margine)
     // --new-window: without it Ptyxis only raises the window it already has.
-    Mod+Return hotkey-overlay-title="Terminale" { spawn "ptyxis" "--new-window"; }
+    Mod+Return hotkey-overlay-title="Terminal" { spawn "ptyxis" "--new-window"; }
     Mod+Shift+Return hotkey-overlay-title="Browser" { spawn "flatpak" "run" "app.zen_browser.zen"; }
-    Mod+E hotkey-overlay-title="File" { spawn "nautilus" "--new-window"; }
-    Mod+Ctrl+T hotkey-overlay-title="Monitor di sistema" { spawn "ptyxis" "--" "btop"; }
+    Mod+E hotkey-overlay-title="Files" { spawn "nautilus" "--new-window"; }
+    Mod+Ctrl+T hotkey-overlay-title="System monitor" { spawn "ptyxis" "--" "btop"; }
     // Noctalia's launcher has an emoji picker: Smile (Margine's, for GNOME) is not shipped here.
     Mod+Period hotkey-overlay-title="Emoji" { spawn-sh "noctalia msg panel-toggle launcher /emo"; }
 
     // Shell (Noctalia)
-    Mod+Space hotkey-overlay-title="Applicazioni" { spawn-sh "noctalia msg panel-toggle launcher"; }
+    Mod+Space hotkey-overlay-title="Apps" { spawn-sh "noctalia msg panel-toggle launcher"; }
     Mod+R hotkey-overlay-title=null { spawn-sh "noctalia msg panel-toggle launcher"; }
-    Mod+N hotkey-overlay-title="Centro di controllo e notifiche" { spawn-sh "noctalia msg panel-toggle control-center"; }
-    Mod+V hotkey-overlay-title="Cronologia appunti" { spawn-sh "noctalia msg panel-toggle clipboard"; }
-    Mod+Comma hotkey-overlay-title="Impostazioni della shell" { spawn-sh "noctalia msg settings-toggle"; }
-    Mod+Escape hotkey-overlay-title="Esci, riavvia, spegni" { spawn-sh "noctalia msg panel-toggle session"; }
-    Alt+Tab hotkey-overlay-title="Cambia finestra" { spawn-sh "noctalia msg window-switcher hold"; }
+    Mod+N hotkey-overlay-title="Control centre and notifications" { spawn-sh "noctalia msg panel-toggle control-center"; }
+    Mod+V hotkey-overlay-title="Clipboard history" { spawn-sh "noctalia msg panel-toggle clipboard"; }
+    Mod+Comma hotkey-overlay-title="Shell settings" { spawn-sh "noctalia msg settings-toggle"; }
+    Mod+Escape hotkey-overlay-title="Log out, restart, power off" { spawn-sh "noctalia msg panel-toggle session"; }
+    Alt+Tab hotkey-overlay-title="Switch windows" { spawn-sh "noctalia msg window-switcher hold"; }
 
     // Lock. Allowed while locked on purpose: if the lock screen ever dies,
     // niri keeps the session locked on a red screen, and this key brings a
     // fresh lock screen back (see /usr/libexec/lucciola/lock).
-    Mod+Ctrl+L allow-when-locked=true hotkey-overlay-title="Blocca lo schermo" { spawn "/usr/libexec/lucciola/lock"; }
+    Mod+Ctrl+L allow-when-locked=true hotkey-overlay-title="Lock the screen" { spawn "/usr/libexec/lucciola/lock"; }
 
-    Mod+Shift+Space repeat=false hotkey-overlay-title="Panoramica" { toggle-overview; }
+    Mod+Shift+Space repeat=false hotkey-overlay-title="Overview" { toggle-overview; }
 
     // Windows
-    Mod+W repeat=false hotkey-overlay-title="Chiudi la finestra" { close-window; }
+    Mod+W repeat=false hotkey-overlay-title="Close the window" { close-window; }
     // Super+F maximizes as GNOME does: edge to edge, bar and dock stay. A
     // real fullscreen window covers the top layer (bar, dock) only while the
     // view is still: during scrolls, gestures and workspace switches niri
     // draws them on top, then they vanish at once (hardcoded in niri 26.04,
     // render_above_top_layer). Fine for videos and games, ugly as everyday
     // maximize; so it moves to Super+Ctrl+F.
-    Mod+F hotkey-overlay-title="Massimizza" { maximize-window-to-edges; }
-    Mod+Ctrl+F hotkey-overlay-title="Schermo intero" { fullscreen-window; }
-    Mod+M hotkey-overlay-title="Massimizza la colonna" { maximize-column; }
-    Mod+Shift+F hotkey-overlay-title="Finestra fluttuante" { toggle-window-floating; }
+    Mod+F hotkey-overlay-title="Maximize" { maximize-window-to-edges; }
+    Mod+Ctrl+F hotkey-overlay-title="Full screen" { fullscreen-window; }
+    Mod+M hotkey-overlay-title="Maximize the column" { maximize-column; }
+    Mod+Shift+F hotkey-overlay-title="Floating window" { toggle-window-floating; }
     Mod+Shift+S { toggle-column-tabbed-display; }
     Mod+C { center-column; }
 
@@ -284,7 +284,7 @@ binds {
 
     // Session
     Mod+Shift+Escape allow-inhibiting=false { toggle-keyboard-shortcuts-inhibit; }
-    Mod+Shift+E hotkey-overlay-title="Esci da Lucciola" { quit; }
+    Mod+Shift+E hotkey-overlay-title="Quit Lucciola" { quit; }
     Ctrl+Alt+Delete { quit; }
 }
 
