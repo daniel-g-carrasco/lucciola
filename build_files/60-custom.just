@@ -985,11 +985,12 @@ margine-keyring ACTION="status":
 # LUKS TPM2 auto-unlock). Runs rootless on qemu:///session, so it reads ISOs
 # straight from your home — no sudo, no copying multi-GB files.
 #
-#   ujust margine-test-vm ~/scratch/downloads/margine-<date>.iso     # create + boot a VM from that ISO (recommended)
-#   ujust margine-test-vm ~/scratch/downloads/x.iso mytest 100         # custom name + 100 GiB disk
+#   ujust margine-test-vm ~/Downloads/lucciola-<date>.iso        # create + boot a VM from that ISO (recommended)
+#   ujust margine-test-vm ~/Downloads/x.iso mytest 100           # custom name + 100 GiB disk
 #   ujust margine-test-vm                                       # no ISO: define a TEMPLATE to clone in virt-manager
 #
-# Tear a test VM down with `ujust margine-test-vm-remove [name]`.
+# Tear a test VM down with `ujust margine-test-vm-remove [name]`. The VM
+# tools are not in the image: `ujust margine-vm` layers them.
 
 # Collect a diagnostic bundle and open the GitHub bug-report page.
 # One command to give testers: it gathers what every bug report needs
@@ -1047,7 +1048,7 @@ margine-test-vm ISO="" NAME="" DISK="80":
     TEMPLATE="margine-test-template"
 
     for b in virt-install virsh; do
-      command -v "$b" >/dev/null 2>&1 || { echo "Missing '$b': the image's virt stack (build_files/15-devstack) should provide it."; exit 1; }
+      command -v "$b" >/dev/null 2>&1 || { echo "Missing '$b': the VM tools are not installed. Install them with 'ujust margine-vm', reboot, then run this again."; exit 1; }
     done
     virsh -c "$CONN" version >/dev/null 2>&1 || { echo "Cannot reach libvirt at $CONN."; exit 1; }
 
@@ -1112,8 +1113,8 @@ margine-test-vm ISO="" NAME="" DISK="80":
       echo "  1. Open virt-manager. If it isn't listed: File -> Add Connection ->"
       echo "     'QEMU/KVM user session' -> Connect."
       echo "  2. Right-click '$TEMPLATE' -> Clone... (one clone per test)."
-      echo "  3. On the clone, point the CD-ROM at your ISO (~/scratch/downloads/*.iso), boot."
-      echo "  Or skip the clicking:  ujust margine-test-vm ~/scratch/downloads/<your>.iso"
+      echo "  3. On the clone, point the CD-ROM at your ISO (~/Downloads/*.iso), boot."
+      echo "  Or skip the clicking:  ujust margine-test-vm ~/Downloads/<your>.iso"
       print_walkthrough
       exit 0
     fi
@@ -1174,6 +1175,7 @@ margine-test-vm-remove NAME="margine-test-template":
     set -uo pipefail
     CONN="qemu:///session"
     NAME="{{ NAME }}"
+    command -v virsh >/dev/null 2>&1 || { echo "virsh is missing: the VM tools are not installed (ujust margine-vm)."; exit 1; }
     if ! virsh -c "$CONN" dominfo "$NAME" >/dev/null 2>&1; then
       echo "No such VM on $CONN: $NAME"
       echo "List test VMs:  virsh -c $CONN list --all"
@@ -1201,6 +1203,7 @@ margine-test-vm-clean $ALL="false":
     set -uo pipefail
     CONN="qemu:///session"
     KEEP="margine-test-template"
+    command -v virsh >/dev/null 2>&1 || { echo "virsh is missing: the VM tools are not installed (ujust margine-vm)."; exit 1; }
     if ! virsh -c "$CONN" version >/dev/null 2>&1; then echo "Cannot reach libvirt at $CONN."; exit 1; fi
     mapfile -t all < <(virsh -c "$CONN" list --all --name 2>/dev/null | grep '^margine-test-' || true)
     cleaned=()
@@ -1496,6 +1499,73 @@ margine-devtools ACTION="install":
       remove) sudo rpm-ostree uninstall "${PKGS[@]}"; echo "Removed. Reboot to apply." ;;
       install) sudo rpm-ostree install --idempotent "${PKGS[@]}"; echo "Layered. Reboot to use them." ;;
       *) echo "usage: ujust margine-devtools [install|remove|status]"; exit 2 ;;
+    esac
+
+# Virtual machines on demand: libvirt, QEMU/KVM, virt-manager, UEFI firmware
+# (edk2-ovmf) and the software TPM (swtpm), plus podman-machine, which runs
+# on the same QEMU. Not in the image since 2026-10-18 (about 290 MiB most
+# installs never open). Layers them; the libvirt sockets are enabled for
+# the next boot, when margine-dev-groups also puts wheel users in the
+# libvirt group (virt-manager on qemu:///system without a password).
+# Run it again after the reboot to start the sockets and join the group at
+# once. `ujust margine-test-vm` needs it.
+# VMs (libvirt, QEMU/KVM, virt-manager, OVMF, swtpm): install (default) / remove / status.
+[group('Developer')]
+margine-vm ACTION="install":
+    #!/usr/bin/bash
+    set -euo pipefail
+    PKGS=(libvirt libvirt-nss qemu-kvm virt-manager virt-viewer virt-install edk2-ovmf swtpm dnsmasq
+          qemu-img qemu-device-display-virtio-gpu qemu-device-display-virtio-vga
+          qemu-device-usb-redirect qemu-char-spice podman-machine)
+    # Fedora's presets enable these when libvirt is installed (90-default.preset):
+    # the modular daemons, socket activated.
+    SOCKETS=()
+    for d in virtqemud virtnetworkd virtstoraged virtnodedevd virtsecretd virtinterfaced virtnwfilterd virtproxyd; do
+      SOCKETS+=("$d.socket" "$d-ro.socket" "$d-admin.socket")
+    done
+    SOCKETS+=(virtlogd.socket virtlogd-admin.socket virtlockd.socket virtlockd-admin.socket)
+    installed() { rpm -q libvirt-daemon qemu-kvm virt-manager >/dev/null 2>&1; }
+    case "{{ ACTION }}" in
+      status)
+        if installed; then
+          echo "VM tools: installed (libvirt $(rpm -q --qf '%{VERSION}' libvirt-daemon), QEMU $(rpm -q --qf '%{VERSION}' qemu-kvm))"
+          echo "virtqemud.socket: $(systemctl is-active virtqemud.socket 2>/dev/null || true)"
+          if [[ " $(id -nG) " == *" libvirt "* ]]; then echo "group libvirt: yes"; else echo "group libvirt: not yet (reboot, or run: ujust margine-vm)"; fi
+        elif rpm-ostree status --json | python3 -c 'import json,sys; sys.exit(0 if "libvirt" in json.load(sys.stdin)["deployments"][0].get("requested-packages", []) else 1)'; then
+          echo "VM tools: layered, active after a reboot."
+        else
+          echo "VM tools: not installed. Install: ujust margine-vm"
+        fi ;;
+      remove)
+        mapfile -t LAYERED < <(rpm-ostree status --json | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)["deployments"][0].get("requested-packages", [])))')
+        declare -A IS_LAYERED=()
+        for p in "${LAYERED[@]}"; do IS_LAYERED["$p"]=1; done
+        DROP=()
+        for p in "${PKGS[@]}"; do [[ -n "${IS_LAYERED[$p]:-}" ]] && DROP+=("$p"); done
+        if (( ${#DROP[@]} == 0 )); then echo "No VM package is layered: nothing to remove."; exit 0; fi
+        sudo rpm-ostree uninstall "${DROP[@]}"
+        for s in "${SOCKETS[@]}"; do sudo rm -f "/etc/systemd/system/sockets.target.wants/$s"; done
+        echo "VM tools removed. Reboot to apply. Your VMs' disks stay in /var/lib/libvirt/images"
+        echo "and ~/.local/share/libvirt/images." ;;
+      install)
+        if installed; then
+          # Booted into the layer: start what the next boot would start.
+          sudo systemctl enable --now "${SOCKETS[@]}" 2>/dev/null || sudo systemctl start virtqemud.socket virtnetworkd.socket virtstoraged.socket || true
+          sudo /usr/bin/margine-dev-groups
+          echo "VM tools ready. virt-manager works now; log out and back in once so the"
+          echo "libvirt group applies (qemu:///system without a password)."
+          exit 0
+        fi
+        echo "Layering the VM tools (about 290 MiB): ${PKGS[*]}"
+        sudo rpm-ostree install --idempotent "${PKGS[@]}"
+        # The units only exist in the new deployment: enable them by hand.
+        sudo mkdir -p /etc/systemd/system/sockets.target.wants
+        for s in "${SOCKETS[@]}"; do
+          sudo ln -sf "/usr/lib/systemd/system/$s" "/etc/systemd/system/sockets.target.wants/$s"
+        done
+        echo "VM tools layered. Reboot: margine-dev-groups then adds wheel users to the"
+        echo "libvirt group. Rootless VMs (qemu:///session, ujust margine-test-vm) need no group." ;;
+      *) echo "usage: ujust margine-vm [install|remove|status]"; exit 2 ;;
     esac
 
 # Install/reinstall Koofr Desktop (native, rootless, autostart hidden).

@@ -25,6 +25,10 @@
 # qemu for a dozen foreign architectures and others that Margine never
 # asked for, and this is not the place to start.
 #
+# Since 2026-10-18 the virtualisation stack is not part of it: libvirt,
+# QEMU/KVM, virt-manager, OVMF, swtpm and podman-machine are layered on
+# demand with `ujust margine-vm`.
+#
 # Third-party repos are handled the way custom-kernel handles RPMFusion
 # and NVIDIA (#363): fetch the key, verify its fingerprint, only then let
 # dnf use the repo, and remove the repo file afterwards so the image ships
@@ -46,19 +50,20 @@ missing() {
   for p in "$@"; do rpm -q "$p" >/dev/null 2>&1 || echo "$p"; done
 }
 
-# --- 1. Virtualisation + container tooling from Fedora's own repos -------
-# The list is margine-atomic.yaml host_packages.virtualization plus the
-# podman extras DX carried. podman-docker answers to `docker` for scripts:
-# Margine ships Podman only (2026-10-10), Docker CE is `ujust margine-docker`.
+# --- 1. Container tooling from Fedora's own repos --------------------------
+# The podman extras DX carried. podman-docker answers to `docker` for
+# scripts: Margine ships Podman only (2026-10-10), Docker CE is
+# `ujust margine-docker`.
+# The virtualisation stack (libvirt, qemu-kvm, virt-manager, virt-viewer,
+# virt-install, edk2-ovmf, swtpm, dnsmasq, the qemu display and USB
+# modules) and podman-machine, which runs on the same QEMU, left the image
+# on 2026-10-18 (about 290 MiB): `ujust margine-vm` layers them.
 FEDORA_PKGS=(
-  libvirt libvirt-nss qemu-kvm virt-manager virt-viewer edk2-ovmf swtpm dnsmasq
-  qemu-img qemu-device-display-virtio-gpu qemu-device-display-virtio-vga
-  qemu-device-usb-redirect qemu-char-spice
-  podman-compose podman-machine podman-docker
+  podman-compose podman-docker
 )
 mapfile -t NEED < <(missing "${FEDORA_PKGS[@]}")
 if (( ${#NEED[@]} == 0 )); then
-  log "virtualisation + container tooling already in the base (${#FEDORA_PKGS[@]} packages present)"
+  log "container tooling already in the base (${#FEDORA_PKGS[@]} packages present)"
 else
   log "base lacks ${#NEED[@]} packages, installing: ${NEED[*]}"
   retry 3 30 dnf -y install --setopt=install_weak_deps=False "${NEED[@]}"
@@ -92,7 +97,6 @@ DECLARED_PKGS=(
   tmux glow                                # core_cli
   podman-tui                               # container_tooling
   python3-pip                              # build_essentials
-  virt-install                             # not declared: the margine-vm just recipes call it
   # Bluefin shipped it; Universal Blue's main images do not (silverblue-main
   # trial, 2026-10-10). fastfetch is what 50-branding configures.
   fastfetch
@@ -249,7 +253,9 @@ systemctl --global mask flatpak-user-update.timer >/dev/null
 # bluefin-dx-groups expects the docker and incus-admin groups, which left
 # the image with Docker CE and incus, and it restarts every 30 s when
 # usermod fails. margine-dev-groups adds wheel users to the groups that
-# exist (libvirt, and docker after `ujust margine-docker`), every boot.
+# exist (libvirt after `ujust margine-vm`, docker after
+# `ujust margine-docker`), every boot. margine-libvirt-workaround only runs
+# where /var/lib/libvirt exists, i.e. once libvirt is layered.
 if [[ -f /usr/lib/systemd/system/bluefin-dx-groups.service ]]; then
   systemctl mask bluefin-dx-groups.service
   log "masked the base's bluefin-dx-groups.service (its groups are gone)"
@@ -271,8 +277,12 @@ fi
 # --- 5. Prove it ---------------------------------------------------------
 # What this script promises the rest of the image. A base that still lacks
 # any of these after the steps above is not something to ship.
-for p in libvirt virt-manager qemu-kvm podman-docker uupd "${DECLARED_PKGS[@]}"; do
+for p in podman-docker uupd "${DECLARED_PKGS[@]}"; do
   rpm -q "$p" >/dev/null 2>&1 || { err "$p still missing after devstack"; exit 1; }
+done
+# The VM stack is layered on demand (ujust margine-vm), never shipped.
+for p in libvirt-daemon qemu-kvm virt-manager swtpm edk2-ovmf podman-machine; do
+  if rpm -q "$p" >/dev/null 2>&1; then err "$p is in the image: the VM stack is layered on demand (ujust margine-vm)"; exit 1; fi
 done
 for p in "${ROCM_DEV[@]}"; do
   if rpm -q "$p" >/dev/null 2>&1; then err "$p still present after the ROCm trim"; exit 1; fi
@@ -287,7 +297,6 @@ done
 if ! unmet="$(dnf check --dependencies 2>&1)"; then
   err "unmet dependencies after devstack:"; echo "$unmet" >&2; exit 1
 fi
-grep -q "^libvirt:" /usr/lib/group /etc/group 2>/dev/null || { err "group libvirt missing after devstack"; exit 1; }
 [[ -f /usr/lib/systemd/system/flatpak-preinstall.service ]] || { err "flatpak-preinstall.service missing: no Flatpak would be installed at first boot"; exit 1; }
 if rpm -q docker-ce >/dev/null 2>&1 || rpm -q incus >/dev/null 2>&1; then
   err "docker-ce or incus still in the image after base-trim"; exit 1

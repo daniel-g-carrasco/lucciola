@@ -253,9 +253,11 @@ else
     # id -nG is robust (uses NSS, sees both /etc/group and /etc/passwd
     # secondary groups, plus any LDAP/SSSD source on enterprise installs).
     USER_GROUPS=" $(id -nG "$u" 2>/dev/null) "
-    # libvirt always; docker and incus-admin only when the package that
-    # brings the group is layered (ujust margine-docker, or incus by hand).
-    REQUIRED_GROUPS=(libvirt)
+    # Each group only when the package that brings it is layered: libvirt
+    # (ujust margine-vm, since 2026-10-18), docker (ujust margine-docker),
+    # incus-admin (incus by hand).
+    REQUIRED_GROUPS=()
+    rpm -q libvirt-daemon >/dev/null 2>&1 && REQUIRED_GROUPS+=(libvirt)
     rpm -q docker-ce >/dev/null 2>&1 && REQUIRED_GROUPS+=(docker)
     rpm -q incus >/dev/null 2>&1 && REQUIRED_GROUPS+=(incus-admin)
     for required in "${REQUIRED_GROUPS[@]}"; do

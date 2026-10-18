@@ -334,15 +334,6 @@ host_packages:
       - pipewire-alsa
       - wireplumber
       - alsa-utils
-    virtualization:
-      - libvirt
-      - libvirt-nss
-      - qemu-kvm
-      - virt-manager
-      - virt-viewer
-      - edk2-ovmf
-      - swtpm
-      - dnsmasq
     hardware_diagnostics:
       - lm_sensors
       - powertop
@@ -417,6 +408,18 @@ host_packages:
       - NetworkManager-ssh-gnome
       - nm-connection-editor
   optional_after_validation:
+    # Layered on demand by `ujust margine-vm` (in the image until 2026-10-18).
+    virtualization:
+      - libvirt
+      - libvirt-nss
+      - qemu-kvm
+      - virt-manager
+      - virt-viewer
+      - virt-install
+      - edk2-ovmf
+      - swtpm
+      - dnsmasq
+      - podman-machine
     intel_gpu_extras:
       - libva-intel-media-driver
       - intel-compute-runtime

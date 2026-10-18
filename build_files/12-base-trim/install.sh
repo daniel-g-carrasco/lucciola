@@ -35,7 +35,8 @@
 # that nothing needs:
 #   - qemu for every architecture but x86 (Bluefin DX installs the `qemu`
 #     meta package): 57 packages, 1088 MB. Margine's VMs
-#     (margine-test-vm, virt-manager, podman-machine) are x86 only.
+#     (margine-test-vm, virt-manager, podman-machine) are x86 only, and
+#     since 2026-10-18 layered on demand (`ujust margine-vm`).
 #   - wine and mingw64, 1.9 GB: weak dependencies of lutris left behind by
 #     the gaming bake in custom-kernel. The bake ran without weak
 #     dependencies from 2026-10-10 and left the build on 2026-10-18 (the
@@ -50,9 +51,12 @@
 # DEVELOPER STACK ON DEMAND (2026-10-10)
 #
 # Bluefin DX ships a developer stack most installs never open. What stays
-# is what Margine's recipes and validators use: the x86 virt stack, Podman
-# (with podman-docker answering to `docker`), ROCm OpenCL and the HIP
-# runtime. What goes, and comes back with one ujust command:
+# is what Margine's recipes and validators use: Podman (with podman-docker
+# answering to `docker`), ROCm OpenCL and the HIP runtime. What goes, and
+# comes back with one ujust command:
+#   - the x86 virt stack (libvirt, qemu-kvm, virt-manager, OVMF, swtpm,
+#     podman-machine): `ujust margine-vm` (2026-10-18; 15-devstack no
+#     longer installs it, and a base that ships it keeps it)
 #   - Docker CE (409 MB): `ujust margine-docker`
 #   - cockpit, eBPF tracing (bcc, bpftrace, bpftop and their LLVM 21),
 #     sysprof, igt-gpu-tools, the host toolchain (gcc, g++, glibc-devel,
@@ -126,10 +130,10 @@ QEMU_KEEP='^(qemu-system-x86(-core)?|qemu-kvm(-core)?|qemu-img|qemu-common|qemu-
 # What the trim must never take with it. Checked against what was there
 # BEFORE the trim: a base that never had one of these (silverblue-main
 # has no python3-rpm, the kernel step's akmods tooling brings and removes
-# it) is not the trim's doing, and must not fail the build here.
+# it) is not the trim's doing, and must not fail the build here. (The x86
+# virt stack left this list on 2026-10-18: silverblue-main never had it.)
 KEEP_PKGS=(fuse python3-rpm python3-systemd NetworkManager-team
-           qemu-kvm qemu-system-x86-core qemu-img qemu-common edk2-ovmf virtiofsd libvirt-daemon-driver-qemu
-           podman podman-compose podman-machine distrobox rocm-opencl rocm-hip rocm-comgr rocm-runtime rocminfo
+           podman podman-compose distrobox rocm-opencl rocm-hip rocm-comgr rocm-runtime rocminfo
            # the desktop: what gtk4 took with it on 2026-10-11 (THE CASCADE)
            gtk4 libadwaita gstreamer1-plugins-bad gnome-shell gdm mutter gnome-session gnome-settings-daemon
            gnome-control-center nautilus ptyxis vte291-gtk4 gnome-system-monitor gnome-bluetooth
