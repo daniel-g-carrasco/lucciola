@@ -1,7 +1,8 @@
 #!/usr/bin/bash
 # Add a third-party RPM repository with its signing key pinned by
 # fingerprint, for the ujust recipes that layer packages from it
-# (margine-docker, margine-tailscale). Root only.
+# (lucciola-docker, lucciola-tailscale, and VS Code through devmode).
+# Root only.
 #
 #   layer-repo NAME REPO_URL KEY_URL FINGERPRINT
 #

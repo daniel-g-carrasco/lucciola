@@ -40,6 +40,28 @@ stable release is cut.
     reserve only. The tag name lives in
     `/usr/share/margine/kernel-reserve-tag`.
 
+### Added
+- **A welcome window at the first login.** New users of the Lucciola
+  session get one short page in the website's look: the keys first, then
+  how updates work (what Lucciola System does and does not do, where
+  Homebrew fits), apps arriving in the background, and a button for the
+  guide. It comes back at each login until it is closed once, and
+  "Lucciola Welcome" in the launcher reopens it. Not in the GNOME session.
+- **The developer layer: `ujust lucciola-devmode`.** One command, in the
+  spirit of Universal Blue's `ujust devmode`, brings what Bluefin DX gave
+  developers and the image no longer carries: VS Code from Microsoft's
+  repository (signing key pinned, repository kept so VS Code updates with
+  the system), gcc, g++ and make, flatpak-builder and
+  git-credential-libsecret, layered with rpm-ostree, plus Homebrew in
+  /home/linuxbrew/.linuxbrew from Homebrew's own installer. Homebrew stays
+  out of the image: its payload would add to every update of every
+  install. `status` shows what is in place, `remove` takes the packages
+  away and asks separately before deleting Homebrew. The shells pick
+  Homebrew up by themselves (bash, zsh, fish), after the system's own
+  commands. Like the gaming layer, the build resolves the package list
+  against each new image before pushing it, and the smoke test dry-runs it
+  on the booted image.
+
 ### Changed (Lucciola's own identity)
 - **Lucciola looks like Lucciola from the boot to the desktop.** Until now
   the boot splash, the About page, notifications and the commands still

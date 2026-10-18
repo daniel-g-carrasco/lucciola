@@ -1,0 +1,480 @@
+#!/usr/bin/gjs -m
+// Welcome to Lucciola: the first steps, in one short page, at the first login
+// of the Lucciola (niri) session.
+//
+// /usr/libexec/lucciola/session-start starts it with --first-login for new
+// users (~/.local/state/lucciola/welcome-due, see there); "Lucciola Welcome"
+// in the launcher (dev.margine.Welcome.desktop) opens it any time. Closing
+// the window writes ~/.local/state/lucciola/welcome-seen, so it does not come
+// back on its own; a session that ends with the window still open shows it
+// again at the next login.
+//
+// Every fact on the page comes from the image itself, so keep them in step:
+//   keys     /usr/share/lucciola/niri/config.kdl (binds)
+//   updates  uupd.timer (system image, daily, staged for the next boot),
+//            margine-flatpak-update.timer and margine-flatpak-user-update.timer
+//            (apps, skipped on a low battery or a metered connection),
+//            staged-update-notify ("Update ready"), system-gui (Lucciola
+//            System: pkexec only for system-update and rpm-ostree rollback,
+//            restarts only when asked), margine-brew-upgrade.timer (weekly,
+//            only where Homebrew is installed: ujust lucciola-devmode)
+//   apps     flatpak-preinstall.service, margine-defaults.preinstall
+//   guide    guide-open, lucciola-guide.desktop (pinned in the dock)
+//   secure   mok-enroll status (section shown only while enrollment is pending)
+// The look follows the website (site/index.html): the dark ground, the beige
+// firefly, JetBrains Mono for the name, the headings and the keys.
+
+import GObject from "gi://GObject";
+import Gio from "gi://Gio";
+import GLib from "gi://GLib";
+import Gdk from "gi://Gdk?version=4.0";
+import Gtk from "gi://Gtk?version=4.0";
+import Adw from "gi://Adw?version=1";
+import system from "system";
+
+// The app id keeps the Margine family of dev.margine.System: it is the
+// window's Wayland app_id and must equal the .desktop file's name.
+const APP_ID = "dev.margine.Welcome";
+const STATE_DIR = GLib.build_filenamev([GLib.get_user_state_dir(), "lucciola"]);
+const MARKER = GLib.build_filenamev([STATE_DIR, "welcome-seen"]);
+const MOK_ENROLL = "/usr/libexec/margine/mok-enroll";
+
+const FIRST_LOGIN = ARGV.includes("--first-login");
+// Started by session-start, but someone already closed it (a second session
+// of the same user, a session-start run by hand): nothing to show.
+if (FIRST_LOGIN && GLib.file_test(MARKER, GLib.FileTest.EXISTS)) system.exit(0);
+
+// The website's palette (site/index.html :root).
+const CSS = `
+window.welcome {
+  background-color: #121212;
+  color: #ece6df;
+}
+window.welcome headerbar {
+  background: none;
+  box-shadow: none;
+  color: #b8b2ab;
+}
+.welcome .wordmark {
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 300;
+  font-size: 44px;
+  letter-spacing: -1.6px;
+  color: #ece6df;
+}
+.welcome .firefly {
+  min-width: 7px;
+  min-height: 7px;
+  border-radius: 999px;
+  background-color: #e6d5bf;
+  box-shadow: 0 1px 6px 1px alpha(#e6d5bf, 0.65), 0 2px 18px 6px alpha(#e6d5bf, 0.18);
+  animation: glow 6s ease-in-out infinite;
+}
+@keyframes glow { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+.welcome .lede {
+  font-size: 17px;
+  color: #ece6df;
+}
+.welcome .heading {
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 500;
+  font-size: 15px;
+  color: #e6d5bf;
+}
+.welcome .body {
+  font-size: 15px;
+  line-height: 1.15;
+  color: #ece6df;
+}
+.welcome .tight {
+  line-height: 1;
+}
+.welcome .dim {
+  color: #b8b2ab;
+}
+.welcome .bullet {
+  min-width: 5px;
+  min-height: 5px;
+  border-radius: 999px;
+  background-color: #e6d5bf;
+}
+.welcome .key {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  color: #ece6df;
+  background-color: #1a1a1a;
+  border: 1px solid #2a2a2e;
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  padding: 1px 7px;
+  min-width: 10px;
+}
+.welcome .keysep {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  color: #b8b2ab;
+}
+.welcome .rule {
+  background-color: #2a2a2e;
+  min-height: 1px;
+}
+.welcome button.cta,
+.welcome button.plain {
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 500;
+  font-size: 13px;
+  border-radius: 10px;
+  padding: 9px 16px;
+  box-shadow: none;
+}
+.welcome button.cta {
+  background-color: #e6d5bf;
+  color: #121212;
+}
+.welcome button.cta:hover { background-color: #f0e5d8; }
+.welcome button.cta:active { background-color: #d9c6ae; }
+.welcome button.plain {
+  background-color: transparent;
+  color: #b8b2ab;
+  border: 1px solid #2a2a2e;
+}
+.welcome button.plain:hover {
+  background-color: #e6d5bf;
+  border-color: #e6d5bf;
+  color: #121212;
+}
+.welcome button:focus-visible {
+  outline: 2px solid #e6d5bf;
+  outline-offset: 3px;
+}
+.welcome scrollbar slider { background-color: #2a2a2e; }
+`;
+
+// Inline commands: monospace in the firefly's colour, never broken across lines.
+const cmd = (text) =>
+  `<span font_family="JetBrains Mono" size="93%" foreground="#e6d5bf">${text.replaceAll(" ", "\u00a0")}</span>`;
+
+// The bindings a newcomer needs, from /usr/share/lucciola/niri/config.kdl.
+// Each entry: the key combinations (alternatives) and what they do.
+const KEYS = [
+  [[["Super", "Space"]], "open an app"],
+  [[["Super", "Return"]], "terminal"],
+  [[["Super", "W"]], "close the window"],
+  [[["Super", "H"], ["Super", "L"]], "the column on the left, on the right"],
+  [[["Super", "←"], ["Super", "→"]], "move the column left, right"],
+  [[["Super", "Ctrl", "R"]], "column width: a third, half, two thirds"],
+  [[["Super", "F"]], "maximize; Super Ctrl F for full screen"],
+  [[["Super", "1"], ["Super", "2"]], "workspace one, two"],
+  [[["Super", "Shift", "Space"]], "overview"],
+  [[["Print"]], "screenshot; Ctrl Print takes the window"],
+  [[["Super", "Ctrl", "L"]], "lock the screen"],
+  [[["Super", "Escape"]], "log out, restart, power off"],
+  [[["Super", "Shift", "H"]], "every shortcut"],
+];
+
+function label(text, classes, extra = {}) {
+  const l = new Gtk.Label({
+    label: text,
+    use_markup: true,
+    wrap: true,
+    wrap_mode: 2, // Pango.WrapMode.WORD_CHAR
+    xalign: 0,
+    halign: Gtk.Align.FILL,
+    ...extra,
+  });
+  for (const c of classes) l.add_css_class(c);
+  return l;
+}
+
+function launch(desktopId, fallback) {
+  const ctx = Gtk.Window.list_toplevels()[0]?.get_display().get_app_launch_context() ?? null;
+  const info = Gio.DesktopAppInfo.new(desktopId);
+  try {
+    if (info && info.launch([], ctx)) return;
+  } catch (e) {
+    logError(e, `welcome: could not launch ${desktopId}`);
+  }
+  try {
+    Gio.Subprocess.new([fallback], Gio.SubprocessFlags.NONE);
+  } catch (e) {
+    logError(e, `welcome: could not start ${fallback}`);
+  }
+}
+
+function markSeen() {
+  try {
+    GLib.mkdir_with_parents(STATE_DIR, 0o755);
+    GLib.file_set_contents(MARKER, `${GLib.DateTime.new_now_local().format_iso8601()}\n`);
+  } catch (e) {
+    logError(e, `welcome: could not write ${MARKER}`);
+  }
+}
+
+const WelcomeWindow = GObject.registerClass(
+  class WelcomeWindow extends Adw.ApplicationWindow {
+    _init(app) {
+      super._init({
+        application: app,
+        title: "Welcome to Lucciola",
+        default_width: 640,
+        default_height: 820,
+        width_request: 360,
+        height_request: 420,
+      });
+      this.add_css_class("welcome");
+
+      const toolbar = new Adw.ToolbarView();
+      toolbar.add_top_bar(new Adw.HeaderBar({ show_title: false }));
+      this.set_content(toolbar);
+
+      const scroller = new Gtk.ScrolledWindow({
+        hscrollbar_policy: Gtk.PolicyType.NEVER,
+        vexpand: true,
+      });
+      toolbar.set_content(scroller);
+
+      const clamp = new Adw.Clamp({ maximum_size: 580, tightening_threshold: 460 });
+      scroller.set_child(clamp);
+
+      this._page = new Gtk.Box({
+        orientation: Gtk.Orientation.VERTICAL,
+        spacing: 40,
+        margin_start: 28,
+        margin_end: 28,
+        margin_top: 4,
+        margin_bottom: 36,
+      });
+      clamp.set_child(this._page);
+
+      this._page.append(this._hero());
+      this._page.append(this._keys());
+      this._page.append(this._updates());
+      this._page.append(this._apps());
+      // The Secure Boot note, when it applies, goes before the guide.
+      this._guideSection = this._guide();
+      this._page.append(this._guideSection);
+      this._page.append(this._footer());
+      this._maybeSecureBoot();
+
+      this.connect("close-request", () => {
+        markSeen();
+        return false;
+      });
+    }
+
+    _section(title, children) {
+      const box = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 14 });
+      const h = label(title, ["heading"], { accessible_role: Gtk.AccessibleRole.HEADING });
+      box.append(h);
+      for (const c of children) box.append(c);
+      return box;
+    }
+
+    _hero() {
+      const box = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 18 });
+      const word = new Gtk.Box({ spacing: 7, halign: Gtk.Align.START });
+      word.append(label("lucciola", ["wordmark"], { wrap: false }));
+      const dot = new Gtk.Box({ valign: Gtk.Align.END, margin_bottom: 22 });
+      dot.add_css_class("firefly");
+      word.append(dot);
+      box.append(word);
+      box.append(label(
+        "Welcome. Here is what is worth knowing on the first day; " +
+        "the guide has the rest.",
+        ["lede"],
+      ));
+      return box;
+    }
+
+    _keycaps(combos) {
+      const box = new Gtk.Box({ spacing: 5, valign: Gtk.Align.START, halign: Gtk.Align.START });
+      combos.forEach((combo, i) => {
+        if (i > 0) {
+          const sep = new Gtk.Label({ label: "/", margin_start: 2, margin_end: 2 });
+          sep.add_css_class("keysep");
+          box.append(sep);
+        }
+        for (const k of combo) {
+          const cap = new Gtk.Label({ label: k });
+          cap.add_css_class("key");
+          box.append(cap);
+        }
+      });
+      return box;
+    }
+
+    _keys() {
+      const grid = new Gtk.Grid({ column_spacing: 22, row_spacing: 11 });
+      KEYS.forEach(([combos, what], row) => {
+        grid.attach(this._keycaps(combos), 0, row, 1, 1);
+        grid.attach(label(what, ["body", "tight"], { hexpand: true, valign: Gtk.Align.CENTER }), 1, row, 1, 1);
+      });
+      return this._section("keys", [
+        label(
+          "Super is the key with the Windows logo. Windows open side by side in " +
+          "columns, on a strip that runs past the edge of the screen: the keys " +
+          "move you along it.",
+          ["body", "dim"],
+        ),
+        grid,
+      ]);
+    }
+
+    _bullets(items) {
+      const box = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 10 });
+      for (const text of items) {
+        const row = new Gtk.Box({ spacing: 12 });
+        const dot = new Gtk.Box({ valign: Gtk.Align.START, margin_top: 8 });
+        dot.add_css_class("bullet");
+        row.append(dot);
+        row.append(label(text, ["body"], { hexpand: true }));
+        box.append(row);
+      }
+      return box;
+    }
+
+    _button(text, style, onClick) {
+      const b = new Gtk.Button({ label: text, halign: Gtk.Align.START });
+      b.add_css_class(style);
+      b.connect("clicked", onClick);
+      return b;
+    }
+
+    _updates() {
+      return this._section("updates", [
+        label("Lucciola updates itself in the background. You only restart.", ["body"]),
+        this._bullets([
+          "The system: every day the new version downloads and waits next to the one " +
+          "you run. A notification tells you when it is ready, and it starts at your " +
+          "next restart.",
+          "Apps: twice a day, except when the battery is low or the connection is metered.",
+          "A way back: every update keeps the previous version. If one goes wrong, " +
+          "restart and choose the second entry in the boot menu.",
+        ]),
+        label(
+          "Lucciola System, in the dock, shows your version and whether a newer one " +
+          "is waiting. From there you can update now, check the system or go back a " +
+          "version. It never restarts the computer by itself.",
+          ["body"],
+        ),
+        label(
+          "Homebrew does not come with Lucciola. It comes with the developer " +
+          `tools, VS Code included: ${cmd("ujust lucciola-devmode")}, then a restart. ` +
+          "Apps come from Bazaar, and command-line tools can also go in a Toolbox " +
+          `(${cmd("toolbox create")}, then ${cmd("toolbox enter")}). Once Homebrew ` +
+          "is in, Lucciola upgrades its packages once a week and Lucciola System " +
+          "lists the ones waiting.",
+          ["body", "dim"],
+        ),
+        this._button("Open Lucciola System", "plain",
+          () => launch("dev.margine.System.desktop", "/usr/libexec/margine/system-gui")),
+      ]);
+    }
+
+    _apps() {
+      return this._section("apps", [
+        label(
+          "Bazaar, the app store in the dock, installs apps from Flathub.",
+          ["body"],
+        ),
+        label(
+          "On the first start the apps that come with Lucciola download in the " +
+          "background, so some may be missing for a few minutes. GIMP, Inkscape, " +
+          "darktable and OBS Studio are the largest and arrive last.",
+          ["body", "dim"],
+        ),
+      ]);
+    }
+
+    _guide() {
+      return this._section("the guide", [
+        label(
+          "The Lucciola Guide, in the dock, covers the rest: updates, going back to " +
+          "a previous version, disk unlock and where to ask for help. A copy ships " +
+          "with the system, so it opens without a network.",
+          ["body"],
+        ),
+        this._button("Open the guide", "cta",
+          () => launch("lucciola-guide.desktop", "/usr/libexec/margine/guide-open")),
+        label(
+          "Lucciola is experimental and made by one person. If something does not " +
+          "work, write to me: the guide's help section says how.",
+          ["body", "dim"],
+        ),
+      ]);
+    }
+
+    _footer() {
+      const box = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 18 });
+      const rule = new Gtk.Box();
+      rule.add_css_class("rule");
+      box.append(rule);
+      const row = new Gtk.Box({ spacing: 18 });
+      row.append(label(
+        "Once closed, this window does not come back by itself. To see it again, " +
+        "press Super Space and look for Lucciola Welcome.",
+        ["body", "dim"],
+        { hexpand: true, valign: Gtk.Align.CENTER },
+      ));
+      const close = this._button("Close", "plain", () => this.close());
+      close.set_valign(Gtk.Align.CENTER);
+      row.append(close);
+      box.append(row);
+      return box;
+    }
+
+    // Only while the key waits for the blue screen at the next restart
+    // (mok-notify sends the same words as a notification). Asked in the
+    // background: mokutil must not delay the window.
+    _maybeSecureBoot() {
+      if (!GLib.file_test(MOK_ENROLL, GLib.FileTest.IS_EXECUTABLE)) return;
+      let proc;
+      try {
+        proc = Gio.Subprocess.new([MOK_ENROLL, "status"],
+          Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
+      } catch (e) {
+        return;
+      }
+      proc.communicate_utf8_async(null, null, (p, res) => {
+        let out = "";
+        try {
+          [, out] = p.communicate_utf8_finish(res);
+        } catch (e) {
+          return;
+        }
+        if ((out ?? "").trim() !== "pending") return;
+        const section = this._section("secure boot", [
+          label(
+            "At the next restart a blue screen appears before Lucciola starts. " +
+            "Press a key within 10 seconds, choose Enroll MOK, Continue and Yes, " +
+            `type the password ${cmd("margine")} and choose Reboot. That screen ` +
+            "uses a US keyboard layout. This registers Lucciola's key, so the " +
+            "system can start with Secure Boot on.",
+            ["body"],
+          ),
+        ]);
+        this._page.insert_child_after(section, this._guideSection.get_prev_sibling());
+      });
+    }
+  },
+);
+
+const app = new Adw.Application({ application_id: APP_ID, flags: Gio.ApplicationFlags.FLAGS_NONE });
+app.connect("startup", () => {
+  // Lucciola is dark, and so is the website this page follows.
+  Adw.StyleManager.get_default().set_color_scheme(Adw.ColorScheme.FORCE_DARK);
+  const css = new Gtk.CssProvider();
+  css.load_from_string(CSS);
+  // Esc closes, as the page says nothing else needs doing here.
+  app.set_accels_for_action("window.close", ["Escape", "<Control>w", "<Control>q"]);
+  Gtk.StyleContext.add_provider_for_display(
+    Gdk.Display.get_default(),
+    css,
+    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+  );
+});
+app.connect("activate", () => {
+  const win = app.get_active_window() ?? new WelcomeWindow(app);
+  win.present();
+});
+app.run([system.programInvocationName]);

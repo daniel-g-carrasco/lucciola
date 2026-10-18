@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Lucciola Guide
+GenericName=User guide
+Comment=Read the Lucciola guide: install, updates, keys, desktop and help. A copy ships with the system, so it opens without a network.
+Exec=/usr/libexec/margine/guide-open
+Icon=lucciola-guide
+Terminal=false
+Categories=System;Documentation;
+Keywords=guide;manual;help;documentation;lucciola;
+StartupNotify=false

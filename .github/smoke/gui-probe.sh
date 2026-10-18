@@ -38,10 +38,11 @@ poweroff_vm() {
   systemctl poweroff
 }
 
-# gaming_check runs in the BACKGROUND (started below): its rpm-ostree
-# dry-run (up to 420 s per attempt) must never delay the GUI verdict. wait_gaming is
-# called before every poweroff so the gaming verdict is still captured,
-# even when the GUI checks bail out early. Safe to call more than once.
+# gaming_check, then developer_check, run in the BACKGROUND (started
+# below): their rpm-ostree dry runs (up to 420 s per attempt) must never
+# delay the GUI verdict. wait_gaming is called before every poweroff so
+# both layer verdicts are still captured, even when the GUI checks bail
+# out early. Safe to call more than once.
 wait_gaming() { [[ -n "${GAMING_PID:-}" ]] && wait "$GAMING_PID" 2>/dev/null || true; }
 fail() { out "MARGINE-GUI-SMOKE: FAIL $*"; wait_gaming; poweroff_vm; exit 0; }
 
@@ -101,7 +102,60 @@ gaming_check() {
   [[ -n "$why" ]] || why="$(tail -n 3 /tmp/gaming.out | tr '\n' ' ' | tr -s ' ')"
   out "MARGINE-GAMING-NATIVE: FAIL rc=$rc free(/var)=$(df -h --output=avail /var 2>/dev/null | tail -1 | tr -d ' ') ${why}"
 }
-gaming_check & GAMING_PID=$!
+
+# ---- Developer layer resolvability (2026-10-18) ------------------------------
+# `ujust lucciola-devmode` layers VS Code from Microsoft's repository plus
+# gcc, flatpak-builder and friends from Fedora's. Same dry run as the
+# gaming check, after it (rpm-ostreed runs one transaction at a time), with
+# the recipe's own repository step first: `devmode repo` adds the VS Code
+# repository with its key checked, and the probe removes it again
+# afterwards. A refused key or a depsolve failure is a FAIL (blocks
+# promotion, qemu-boot-wait.sh); a repository that does not download or a
+# timeout is a SKIP: build.yml's resolve check ran before the push.
+developer_check() {
+  local list=/usr/share/margine/developer-packages.txt dev=/usr/libexec/margine/devmode
+  if [[ ! -r "$list" || ! -x "$dev" ]]; then
+    out "MARGINE-DEVELOPER-LAYER: FAIL $list or $dev not found: ujust lucciola-devmode cannot run"
+    return
+  fi
+  local pkgs
+  mapfile -t pkgs < <("$dev" packages 2>/dev/null)
+  if [[ "${#pkgs[@]}" -eq 0 ]]; then
+    out "MARGINE-DEVELOPER-LAYER: FAIL empty package list $list"
+    return
+  fi
+  rpm-ostree status >/dev/null 2>&1 || { out "MARGINE-DEVELOPER-LAYER: SKIP (rpm-ostreed not ready)"; return; }
+  if ! "$dev" repo >/tmp/developer-repo.out 2>&1; then
+    if grep -q "fingerprint mismatch" /tmp/developer-repo.out; then
+      out "MARGINE-DEVELOPER-LAYER: FAIL the VS Code repository key was refused: $(tail -n 2 /tmp/developer-repo.out | tr '\n' ' ')"
+    else
+      out "MARGINE-DEVELOPER-LAYER: SKIP (VS Code repository not reachable: $(tail -n 1 /tmp/developer-repo.out))"
+    fi
+    "$dev" repo-remove >/dev/null 2>&1 || true
+    return
+  fi
+  local rc attempt why
+  for attempt in 1 2 3; do
+    # The recipe's own flags: --allow-inactive accepts a package the image
+    # already ships, --idempotent one already requested.
+    timeout 420 rpm-ostree install --dry-run --idempotent --allow-inactive "${pkgs[@]}" >/tmp/developer.out 2>&1
+    rc=$?
+    (( rc == 0 || rc == 124 )) && break
+    grep -qiE 'transaction in progress|busy' /tmp/developer.out || break
+    sleep 20
+  done
+  "$dev" repo-remove >/dev/null 2>&1 || true
+  if (( rc == 0 )); then
+    out "MARGINE-DEVELOPER-LAYER: PASS (${#pkgs[@]} pkgs resolve)"
+  elif (( rc == 124 )); then
+    out "MARGINE-DEVELOPER-LAYER: SKIP (dry run timed out after 420 s on attempt $attempt)"
+  else
+    why="$(grep -iE 'cannot install|conflict|requires|nothing provides|depsolve|problem|not found' /tmp/developer.out | head -3 | tr '\n' ' ' | tr -s ' ')"
+    [[ -n "$why" ]] || why="$(tail -n 3 /tmp/developer.out | tr '\n' ' ' | tr -s ' ')"
+    out "MARGINE-DEVELOPER-LAYER: FAIL rc=$rc ${why}"
+  fi
+}
+{ gaming_check; developer_check; } & GAMING_PID=$!
 
 # ---- The autologin user and its session ------------------------------------
 # inject-gui-probe.sh creates "smoke" (uid 1010, home /var/home/smoke);

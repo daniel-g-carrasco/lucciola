@@ -13,7 +13,7 @@ Lucciola builds on Fedora Silverblue and adds a desktop made of niri and Noctali
 - **Your workspace.** niri places windows in columns on a strip wider than the screen. Noctalia draws the bar, the launcher, notifications and the lock screen. GNOME ships too, as a backup session on the login screen.
 - **Updates.** The whole system ships as one signed image. Updates download in the background and apply at your next restart; if one goes wrong, choose the previous version in the boot menu.
 - **Foundations.** The CachyOS kernel is signed with Lucciola's own key, so Secure Boot keeps working. The TPM can unlock the encrypted disk at boot, and your device checks every update's signature before installing it.
-- **Day one.** Zen Browser, Thunderbird, LibreOffice, GIMP, Inkscape, darktable and OBS Studio come installed, and Bazaar installs more from Flathub.
+- **Day one.** Zen Browser, Thunderbird, LibreOffice, GIMP, Inkscape, darktable and OBS Studio come installed, and Bazaar installs more from Flathub. For developers, `ujust lucciola-devmode` adds VS Code and Homebrew.
 
 Lucciola is experimental, and I maintain it alone.
 

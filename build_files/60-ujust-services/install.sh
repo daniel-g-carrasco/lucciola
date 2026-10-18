@@ -28,6 +28,11 @@ install -Dm0644 /ctx/60-custom.just /usr/share/ublue-os/just/60-custom.just
 # never drift from what `ujust lucciola-gaming-native` installs.
 install -Dm0644 /ctx/60-ujust-services/gaming-native-packages.txt \
   /usr/share/margine/gaming-native-packages.txt
+# Same rule for the developer layer: `ujust lucciola-devmode` (through
+# /usr/libexec/margine/devmode), the build's resolve check and the
+# smoke-boot dry run all read this one list.
+install -Dm0644 /ctx/60-ujust-services/developer-packages.txt \
+  /usr/share/margine/developer-packages.txt
 
 # ---------------------------------------------------------------------------
 # 5b. First-login bootstrap: not automatic in Lucciola

@@ -75,6 +75,7 @@ These five cut across almost every touchpoint below:
 | Update notifications | `build_files/system_files/usr/libexec/margine*` (units in `…/usr/lib/systemd/user/`) | `margine-notify` |
 | Notification icon and sender (lock screen included) | `build_files/system_files/usr/libexec/margine/margine-notify` | `app_icon`, `image-path`, `APP_NAME` |
 | Lucciola System app (name/icon/id) | `…/applications/dev.margine.System.desktop` + `…/icons/hicolor/scalable/apps/dev.margine.System.svg` + `…/libexec/margine/system-gui` | `dev.margine.System`, `Lucciola System` |
+| Lucciola Welcome, the first-login window (name/icon/id/look) | `…/applications/dev.margine.Welcome.desktop` (icon `lucciola-logo`) + `…/libexec/margine/welcome`, opened by `lucciola/system_files/usr/libexec/lucciola/session-start` | `dev.margine.Welcome`, `Lucciola Welcome`, `Welcome to Lucciola` |
 | Lucciola CPU Scheduler, system update launcher | `…/applications/margine-scheduler.desktop`, `…/libexec/margine/scheduler-picker`, `…/applications/margine-system-update.desktop` | `Lucciola CPU Scheduler`, `Lucciola system update` |
 | Phone Camera app (name/icon/id), virtual webcam label | `…/applications/dev.margine.PhoneCam.desktop` + `…/icons/hicolor/scalable/apps/dev.margine.PhoneCam.svg` + `…/libexec/margine/phone-cam-gui` + `…/modprobe.d/margine-phone-cam.conf` | `dev.margine.PhoneCam`, `Lucciola Phone Cam` |
 | fastfetch / MOTD / `/etc/issue` | `build_files/50-branding/install.sh`, `lucciola/assets/fastfetch-logo.txt`, `…/fastfetch/margine.jsonc`, `build_files/60-ujust-services/install.sh` | `ascii-logo.txt`, `no-show-user-motd`, `/etc/issue` |
@@ -599,7 +600,8 @@ All under `build_files/system_files/`. All autostart entries follow Golden Rules
   checks them).
 - **Names that keep `margine`** on purpose: paths (`/usr/libexec/margine`,
   `/etc/margine`, `/usr/share/margine`, `~/.local/state/margine`), unit names,
-  `VARIANT_ID`, the app ids (`dev.margine.System`, `dev.margine.PhoneCam`:
+  `VARIANT_ID`, the app ids (`dev.margine.System`, `dev.margine.PhoneCam`,
+  `dev.margine.Welcome`:
   the Wayland app_id must match the `.desktop` name, and dock pins refer to
   it), the managed-block markers written into users' Zen `user.js`
   (`margine-configure-zen-browser`, `margine-netflix-1080p`: they are found by
