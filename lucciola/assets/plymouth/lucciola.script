@@ -1,6 +1,7 @@
 // Lucciola boot splash (Plymouth script plugin).
 //
-// The wordmark centred on the Lucciola surface (#121212), its firefly
+// The wordmark centred on black (#000000, like the firmware, GRUB and the
+// console around it, so the screen does not change shade between steps), its firefly
 // breathing as on the website (6 s cycle, opacity 1 -> 0.4 -> 1), and a disk
 // unlock prompt in the same palette: the prompt text, a field drawn like the
 // greeter's, one small firefly per typed character, a Caps Lock hint.
@@ -44,8 +45,8 @@
 // ---------------------------------------------------------------------------
 // Palette (Lucciola: surface, text, text variant, sand)
 // ---------------------------------------------------------------------------
-Window.SetBackgroundTopColor    (0.0706, 0.0706, 0.0706);   // #121212
-Window.SetBackgroundBottomColor (0.0706, 0.0706, 0.0706);
+Window.SetBackgroundTopColor    (0, 0, 0);   // #000000
+Window.SetBackgroundBottomColor (0, 0, 0);
 
 text_color.red = 0.925; text_color.green = 0.902; text_color.blue = 0.875;   // #ece6df
 dim_color.red  = 0.722; dim_color.green  = 0.698; dim_color.blue  = 0.671;   // #b8b2ab

@@ -7,6 +7,11 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (boot splash on black)
+- **The boot splash is drawn on black instead of #121212,** like the
+  firmware, GRUB and the console around it, so the screen keeps the same
+  shade from power-on to the login screen.
+
 ### Added (the kernel reserve: Lucciola with Fedora's kernel)
 - **A second image, `:fedora-kernel`, the same Lucciola with Fedora's own
   kernel instead of the CachyOS one.** A bootc image carries one kernel,
