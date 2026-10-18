@@ -58,8 +58,8 @@ entry = "tile.luau"
 [[panel]]
 id = "panel"
 entry = "panel.luau"
-width = 380
-height = 470
+width = 400
+height = 560
 placement = "attached"
 position = "auto"
 open_near_click = true
