@@ -20,6 +20,12 @@
 #              (Enroll MOK -> Continue -> Yes -> password "margine")
 #   off        /etc/margine/secureboot-enroll says "off"
 #              (ujust margine-secureboot never): leave the user alone
+#   unsupported the firmware has no Secure Boot at all (no SecureBoot EFI
+#              variable, as in a virtual machine with plain OVMF):
+#              mokutil refuses to import and Secure Boot can never be
+#              turned on, so there is nothing to enroll and nothing to
+#              say (2026-10-18: the unit failed on every boot there and
+#              the login notice asked the user to fix it)
 #
 # Usage: mok-enroll            the boot-time check (mok-enroll.service)
 #        mok-enroll status     print the state, change nothing
@@ -56,6 +62,14 @@ key_state() {
 [[ -d "$EFI_DIR" ]] || { say "legacy BIOS boot: no shim, nothing to enroll"; exit 0; }
 command -v mokutil >/dev/null 2>&1 || { say "mokutil missing: cannot check the Margine key"; exit 0; }
 
+# The SecureBoot variable exists whenever the firmware implements Secure
+# Boot, on or off (UEFI spec, global variable GUID 8be4df61-...).
+if [[ ! -e "$EFI_DIR/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c" ]]; then
+  if [[ "$MODE" = status ]]; then echo unsupported; exit 0; fi
+  say "this firmware has no Secure Boot: nothing to enroll"
+  exit 0
+fi
+
 state="$(key_state)"
 case "$MODE" in
   status)
@@ -76,7 +90,8 @@ case "$state" in
     exit 0 ;;
 esac
 
-if [[ "$MODE" = boot ]] && [[ "$(tr -d '[:space:]' < "$SWITCH" 2>/dev/null)" = off ]]; then
+# -r first: a missing switch file is the normal case, not an error to log.
+if [[ "$MODE" = boot ]] && [[ -r "$SWITCH" ]] && [[ "$(tr -d '[:space:]' < "$SWITCH")" = off ]]; then
   say "Margine key NOT enrolled, and enrollment is switched off in $SWITCH: Secure Boot cannot be turned on until 'ujust margine-secureboot enroll'"
   exit 0
 fi
