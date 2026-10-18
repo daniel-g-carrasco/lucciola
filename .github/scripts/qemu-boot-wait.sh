@@ -21,7 +21,7 @@ SB_VARS="" TPM=0 SEC_WATCH=0 ALLOW_REBOOT=0
 KERNEL="" INITRD="" APPEND=""
 # greetd is Lucciola's display manager (gdm stays for the live ISO and as
 # greetd's fallback); graphical.target is the marker that matters.
-OK_REGEX='Started.*(greetd|gdm)\.service|Reached target graphical\.target|margine login:'
+OK_REGEX='Started.*(greetd|gdm)\.service|Reached target graphical\.target|(margine|lucciola) login:'
 FAIL_REGEX=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
