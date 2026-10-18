@@ -9,6 +9,13 @@
 // back on its own; a session that ends with the window still open shows it
 // again at the next login.
 //
+// The texts and their order live in /usr/share/lucciola/welcome/content.json
+// (source: lucciola/system_files/usr/share/lucciola/welcome/content.json),
+// edited with the content editor (`just edit`, tools/content-editor) and
+// checked by tools/content-editor/welcome_content.py. This file only draws
+// them: sections in file order, paragraphs, lists, key rows and the buttons,
+// which the data names by action (ACTIONS below), never by command.
+//
 // Every fact on the page comes from the image itself, so keep them in step:
 //   keys     /usr/share/lucciola/niri/config.kdl (binds)
 //   updates  uupd.timer (system image, daily, staged for the next boot),
@@ -38,6 +45,7 @@ const APP_ID = "dev.margine.Welcome";
 const STATE_DIR = GLib.build_filenamev([GLib.get_user_state_dir(), "lucciola"]);
 const MARKER = GLib.build_filenamev([STATE_DIR, "welcome-seen"]);
 const MOK_ENROLL = "/usr/libexec/margine/mok-enroll";
+const CONTENT = GLib.getenv("LUCCIOLA_WELCOME_CONTENT") ?? "/usr/share/lucciola/welcome/content.json";
 
 const FIRST_LOGIN = ARGV.includes("--first-login");
 // Started by session-start, but someone already closed it (a second session
@@ -154,23 +162,38 @@ window.welcome headerbar {
 const cmd = (text) =>
   `<span font_family="JetBrains Mono" size="93%" foreground="#e6d5bf">${text.replaceAll(" ", "\u00a0")}</span>`;
 
-// The bindings a newcomer needs, from /usr/share/lucciola/niri/config.kdl.
-// Each entry: the key combinations (alternatives) and what they do.
-const KEYS = [
-  [[["Super", "Space"]], "open an app"],
-  [[["Super", "Return"]], "terminal"],
-  [[["Super", "W"]], "close the window"],
-  [[["Super", "H"], ["Super", "L"]], "the column on the left, on the right"],
-  [[["Super", "←"], ["Super", "→"]], "move the column left, right"],
-  [[["Super", "Ctrl", "R"]], "column width: a third, half, two thirds"],
-  [[["Super", "F"]], "maximize; Super Ctrl F for full screen"],
-  [[["Super", "1"], ["Super", "2"]], "workspace one, two"],
-  [[["Super", "Shift", "Space"]], "overview"],
-  [[["Print"]], "screenshot; Ctrl Print takes the window"],
-  [[["Super", "Ctrl", "L"]], "lock the screen"],
-  [[["Super", "Escape"]], "log out, restart, power off"],
-  [[["Super", "Shift", "H"]], "every shortcut"],
-];
+// Text from content.json: plain text, and `backticks` around a command.
+const markup = (text) =>
+  GLib.markup_escape_text(text, -1).replace(/`([^`]+)`/g, (_, c) => cmd(c));
+
+// What a button in content.json may do, by name.
+const ACTIONS = {
+  "open-system": () => launch("dev.margine.System.desktop", "/usr/libexec/margine/system-gui"),
+  "open-guide": () => launch("lucciola-guide.desktop", "/usr/libexec/margine/guide-open"),
+};
+
+// Without its texts the window still says hello and opens the guide.
+const FALLBACK = {
+  window_title: "Welcome to Lucciola",
+  intro: "Welcome. The guide explains how Lucciola works.",
+  sections: [{
+    id: "guide", title: "the guide",
+    blocks: [{ type: "button", action: "open-guide", label: "Open the guide", style: "cta" }],
+  }],
+  footer: { text: "To see this window again, press Super Space and look for Lucciola Welcome.", close_label: "Close" },
+};
+
+function loadContent() {
+  try {
+    const [, bytes] = GLib.file_get_contents(CONTENT);
+    const content = JSON.parse(new TextDecoder().decode(bytes));
+    if (!Array.isArray(content.sections) || !content.footer) throw new Error("no sections or footer");
+    return content;
+  } catch (e) {
+    logError(e, `welcome: could not read ${CONTENT}`);
+    return FALLBACK;
+  }
+}
 
 function label(text, classes, extra = {}) {
   const l = new Gtk.Label({
@@ -213,9 +236,10 @@ function markSeen() {
 const WelcomeWindow = GObject.registerClass(
   class WelcomeWindow extends Adw.ApplicationWindow {
     _init(app) {
+      const content = loadContent();
       super._init({
         application: app,
-        title: "Welcome to Lucciola",
+        title: content.window_title,
         default_width: 640,
         default_height: 820,
         width_request: 360,
@@ -246,15 +270,18 @@ const WelcomeWindow = GObject.registerClass(
       });
       clamp.set_child(this._page);
 
-      this._page.append(this._hero());
-      this._page.append(this._keys());
-      this._page.append(this._updates());
-      this._page.append(this._apps());
-      // The Secure Boot note, when it applies, goes before the guide.
-      this._guideSection = this._guide();
-      this._page.append(this._guideSection);
-      this._page.append(this._footer());
-      this._maybeSecureBoot();
+      this._page.append(this._hero(content.intro));
+      for (const sec of content.sections) {
+        if (sec.hidden) continue;
+        const box = this._section(markup(sec.title), sec.blocks.map((b) => this._block(b)).filter((w) => w));
+        // A conditional section keeps its place and shows up once it applies.
+        if (sec.show_if) {
+          box.visible = false;
+          if (sec.show_if === "mok-pending") this._whenMokPending(() => { box.visible = true; });
+        }
+        this._page.append(box);
+      }
+      this._page.append(this._footer(content.footer));
 
       this.connect("close-request", () => {
         markSeen();
@@ -270,7 +297,7 @@ const WelcomeWindow = GObject.registerClass(
       return box;
     }
 
-    _hero() {
+    _hero(intro) {
       const box = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 18 });
       const word = new Gtk.Box({ spacing: 7, halign: Gtk.Align.START });
       word.append(label("lucciola", ["wordmark"], { wrap: false }));
@@ -278,11 +305,7 @@ const WelcomeWindow = GObject.registerClass(
       dot.add_css_class("firefly");
       word.append(dot);
       box.append(word);
-      box.append(label(
-        "Welcome. Here is what is worth knowing on the first day; " +
-        "the guide has the rest.",
-        ["lede"],
-      ));
+      box.append(label(markup(intro), ["lede"]));
       return box;
     }
 
@@ -303,21 +326,13 @@ const WelcomeWindow = GObject.registerClass(
       return box;
     }
 
-    _keys() {
+    _keyRows(rows) {
       const grid = new Gtk.Grid({ column_spacing: 22, row_spacing: 11 });
-      KEYS.forEach(([combos, what], row) => {
-        grid.attach(this._keycaps(combos), 0, row, 1, 1);
-        grid.attach(label(what, ["body", "tight"], { hexpand: true, valign: Gtk.Align.CENTER }), 1, row, 1, 1);
+      rows.forEach(({ keys, label: what }, row) => {
+        grid.attach(this._keycaps(keys), 0, row, 1, 1);
+        grid.attach(label(markup(what), ["body", "tight"], { hexpand: true, valign: Gtk.Align.CENTER }), 1, row, 1, 1);
       });
-      return this._section("keys", [
-        label(
-          "Super is the key with the Windows logo. Windows open side by side in " +
-          "columns, on a strip that runs past the edge of the screen: the keys " +
-          "move you along it.",
-          ["body", "dim"],
-        ),
-        grid,
-      ]);
+      return grid;
     }
 
     _bullets(items) {
@@ -327,7 +342,7 @@ const WelcomeWindow = GObject.registerClass(
         const dot = new Gtk.Box({ valign: Gtk.Align.START, margin_top: 8 });
         dot.add_css_class("bullet");
         row.append(dot);
-        row.append(label(text, ["body"], { hexpand: true }));
+        row.append(label(markup(text), ["body"], { hexpand: true }));
         box.append(row);
       }
       return box;
@@ -340,81 +355,41 @@ const WelcomeWindow = GObject.registerClass(
       return b;
     }
 
-    _updates() {
-      return this._section("updates", [
-        label("Lucciola updates itself in the background. You only restart.", ["body"]),
-        this._bullets([
-          "The system: every day the new version downloads and waits next to the one " +
-          "you run. A notification tells you when it is ready, and it starts at your " +
-          "next restart.",
-          "Apps: twice a day, except when the battery is low or the connection is metered.",
-          "A way back: every update keeps the previous version. If one goes wrong, " +
-          "restart and choose the second entry in the boot menu.",
-        ]),
-        label(
-          "Lucciola System, in the dock, shows your version and whether a newer one " +
-          "is waiting. From there you can update now, check the system or go back a " +
-          "version. It never restarts the computer by itself.",
-          ["body"],
-        ),
-        label(
-          "Homebrew does not come with Lucciola. Apps come from Bazaar, and " +
-          `command-line tools go in a Toolbox (${cmd("toolbox create")}, then ` +
-          `${cmd("toolbox enter")}). If you install Homebrew yourself, Lucciola ` +
-          "upgrades its packages once a week and Lucciola System lists the ones waiting.",
-          ["body", "dim"],
-        ),
-        this._button("Open Lucciola System", "plain",
-          () => launch("dev.margine.System.desktop", "/usr/libexec/margine/system-gui")),
-      ]);
+    // One entry of a section's "blocks" in content.json.
+    _block(b) {
+      switch (b.type) {
+      case "text":
+        return label(markup(b.text), b.dim ? ["body", "dim"] : ["body"]);
+      case "items":
+        return this._bullets(b.items);
+      case "keys":
+        return this._keyRows(b.rows);
+      case "button": {
+        const run = ACTIONS[b.action];
+        if (!run) {
+          log(`welcome: no action "${b.action}", button "${b.label}" left out`);
+          return null;
+        }
+        return this._button(b.label, b.style === "cta" ? "cta" : "plain", run);
+      }
+      default:
+        log(`welcome: unknown block type "${b.type}" left out`);
+        return null;
+      }
     }
 
-    _apps() {
-      return this._section("apps", [
-        label(
-          "Bazaar, the app store in the dock, installs apps from Flathub.",
-          ["body"],
-        ),
-        label(
-          "On the first start the apps that come with Lucciola download in the " +
-          "background, so some may be missing for a few minutes. GIMP, Inkscape, " +
-          "darktable and OBS Studio are the largest and arrive last.",
-          ["body", "dim"],
-        ),
-      ]);
-    }
-
-    _guide() {
-      return this._section("the guide", [
-        label(
-          "The Lucciola Guide, in the dock, covers the rest: updates, going back to " +
-          "a previous version, disk unlock and where to ask for help. A copy ships " +
-          "with the system, so it opens without a network.",
-          ["body"],
-        ),
-        this._button("Open the guide", "cta",
-          () => launch("lucciola-guide.desktop", "/usr/libexec/margine/guide-open")),
-        label(
-          "Lucciola is experimental and made by one person. If something does not " +
-          "work, write to me: the guide's help section says how.",
-          ["body", "dim"],
-        ),
-      ]);
-    }
-
-    _footer() {
+    _footer(footer) {
       const box = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 18 });
       const rule = new Gtk.Box();
       rule.add_css_class("rule");
       box.append(rule);
       const row = new Gtk.Box({ spacing: 18 });
       row.append(label(
-        "Once closed, this window does not come back by itself. To see it again, " +
-        "press Super Space and look for Lucciola Welcome.",
+        markup(footer.text),
         ["body", "dim"],
         { hexpand: true, valign: Gtk.Align.CENTER },
       ));
-      const close = this._button("Close", "plain", () => this.close());
+      const close = this._button(footer.close_label, "plain", () => this.close());
       close.set_valign(Gtk.Align.CENTER);
       row.append(close);
       box.append(row);
@@ -424,7 +399,7 @@ const WelcomeWindow = GObject.registerClass(
     // Only while the key waits for the blue screen at the next restart
     // (mok-notify sends the same words as a notification). Asked in the
     // background: mokutil must not delay the window.
-    _maybeSecureBoot() {
+    _whenMokPending(show) {
       if (!GLib.file_test(MOK_ENROLL, GLib.FileTest.IS_EXECUTABLE)) return;
       let proc;
       try {
@@ -440,18 +415,7 @@ const WelcomeWindow = GObject.registerClass(
         } catch (e) {
           return;
         }
-        if ((out ?? "").trim() !== "pending") return;
-        const section = this._section("secure boot", [
-          label(
-            "At the next restart a blue screen appears before Lucciola starts. " +
-            "Press a key within 10 seconds, choose Enroll MOK, Continue and Yes, " +
-            `type the password ${cmd("margine")} and choose Reboot. That screen ` +
-            "uses a US keyboard layout. This registers Lucciola's key, so the " +
-            "system can start with Secure Boot on.",
-            ["body"],
-          ),
-        ]);
-        this._page.insert_child_after(section, this._guideSection.get_prev_sibling());
+        if ((out ?? "").trim() === "pending") show();
       });
     }
   },

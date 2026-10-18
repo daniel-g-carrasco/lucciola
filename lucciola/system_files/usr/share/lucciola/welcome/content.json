@@ -1,0 +1,104 @@
+{
+  "about": "Texts of the Welcome to Lucciola window (/usr/libexec/margine/welcome), drawn in this order. Edit them with `just edit` (tools/content-editor). Commands go between ` marks.",
+  "window_title": "Welcome to Lucciola",
+  "intro": "Welcome. Here is what is worth knowing on the first day; the guide has the rest.",
+  "sections": [
+    {
+      "id": "keys",
+      "title": "keys",
+      "blocks": [
+        {
+          "type": "text",
+          "text": "Super is the key with the Windows logo. Windows open side by side in columns, on a strip that runs past the edge of the screen: the keys move you along it.",
+          "dim": true
+        },
+        {
+          "type": "keys",
+          "rows": [
+            {"keys": [["Super", "Space"]], "label": "open an app"},
+            {"keys": [["Super", "Return"]], "label": "terminal"},
+            {"keys": [["Super", "W"]], "label": "close the window"},
+            {"keys": [["Super", "H"], ["Super", "L"]], "label": "the column on the left, on the right"},
+            {"keys": [["Super", "←"], ["Super", "→"]], "label": "move the column left, right"},
+            {"keys": [["Super", "Ctrl", "R"]], "label": "column width: a third, half, two thirds"},
+            {"keys": [["Super", "F"]], "label": "maximize; Super Ctrl F for full screen"},
+            {"keys": [["Super", "1"], ["Super", "2"]], "label": "workspace one, two"},
+            {"keys": [["Super", "Shift", "Space"]], "label": "overview"},
+            {"keys": [["Print"]], "label": "screenshot; Ctrl Print takes the window"},
+            {"keys": [["Super", "Ctrl", "L"]], "label": "lock the screen"},
+            {"keys": [["Super", "Escape"]], "label": "log out, restart, power off"},
+            {"keys": [["Super", "Shift", "H"]], "label": "every shortcut"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "updates",
+      "title": "updates",
+      "blocks": [
+        {"type": "text", "text": "Lucciola updates itself in the background. You only restart."},
+        {
+          "type": "items",
+          "items": [
+            "The system: every day the new version downloads and waits next to the one you run. A notification tells you when it is ready, and it starts at your next restart.",
+            "Apps: twice a day, except when the battery is low or the connection is metered.",
+            "A way back: every update keeps the previous version. If one goes wrong, restart and choose the second entry in the boot menu."
+          ]
+        },
+        {
+          "type": "text",
+          "text": "Lucciola System, in the dock, shows your version and whether a newer one is waiting. From there you can update now, check the system or go back a version. It never restarts the computer by itself."
+        },
+        {
+          "type": "text",
+          "text": "Homebrew does not come with Lucciola. Apps come from Bazaar, and command-line tools go in a Toolbox (`toolbox create`, then `toolbox enter`). If you install Homebrew yourself, Lucciola upgrades its packages once a week and Lucciola System lists the ones waiting.",
+          "dim": true
+        },
+        {"type": "button", "action": "open-system", "label": "Open Lucciola System", "style": "plain"}
+      ]
+    },
+    {
+      "id": "apps",
+      "title": "apps",
+      "blocks": [
+        {"type": "text", "text": "Bazaar, the app store in the dock, installs apps from Flathub."},
+        {
+          "type": "text",
+          "text": "On the first start the apps that come with Lucciola download in the background, so some may be missing for a few minutes. GIMP, Inkscape, darktable and OBS Studio are the largest and arrive last.",
+          "dim": true
+        }
+      ]
+    },
+    {
+      "id": "secure-boot",
+      "title": "secure boot",
+      "show_if": "mok-pending",
+      "blocks": [
+        {
+          "type": "text",
+          "text": "At the next restart a blue screen appears before Lucciola starts. Press a key within 10 seconds, choose Enroll MOK, Continue and Yes, type the password `margine` and choose Reboot. That screen uses a US keyboard layout. This registers Lucciola's key, so the system can start with Secure Boot on."
+        }
+      ]
+    },
+    {
+      "id": "guide",
+      "title": "the guide",
+      "blocks": [
+        {
+          "type": "text",
+          "text": "The Lucciola Guide, in the dock, covers the rest: updates, going back to a previous version, disk unlock and where to ask for help. A copy ships with the system, so it opens without a network."
+        },
+        {"type": "button", "action": "open-guide", "label": "Open the guide", "style": "cta"},
+        {
+          "type": "text",
+          "text": "Lucciola is experimental and made by one person. If something does not work, write to me: the guide's help section says how.",
+          "dim": true
+        }
+      ]
+    }
+  ],
+  "footer": {
+    "text": "Once closed, this window does not come back by itself. To see it again, press Super Space and look for Lucciola Welcome.",
+    "close_label": "Close"
+  }
+}
