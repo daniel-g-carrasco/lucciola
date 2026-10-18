@@ -7,8 +7,10 @@
 #
 # The same look as Lucciola's Noctalia (20-margine-style.toml): dark, the
 # Margine palette (palettes/Margine.json, keys renamed the greeter's way),
-# JetBrains Mono, libadwaita-like corners. The wallpaper is the one GDM
-# showed. Scale is left automatic: the greeter scales each screen from its
+# JetBrains Mono, libadwaita-like corners. The wallpaper is Lucciola's, the
+# desktop's and GDM's too. Installed systems keep the copy they have, whose
+# path (/usr/share/backgrounds/margine/margine.png) now links to the same
+# image. Scale is left automatic: the greeter scales each screen from its
 # physical size (2 on the 2880x1920 13.5" reference laptop, capped at 2),
 # and Sync copies the desktop's own scales.
 
@@ -41,6 +43,6 @@ hover = "#2e2e32"
 on_hover = "#ffffff"
 
 [appearance.wallpaper]
-path = "/usr/share/backgrounds/margine/margine.png"
+path = "/usr/share/backgrounds/lucciola/lucciola.png"
 fill_mode = "crop"
 fill_color = "#121212"

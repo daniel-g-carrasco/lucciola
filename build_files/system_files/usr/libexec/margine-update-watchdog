@@ -18,8 +18,8 @@
 #   2. only if it is an extra-data app, record a strike;
 #   3. at 2 strikes in 7 days, `flatpak mask` it so unattended updates
 #      complete again, and record it in blocked/ for the session
-#      notifier (margine-staged-notify) and margine-status to surface.
-# Recovery: `ujust margine-update-unblock` (unmask + foreground update).
+#      notifier (margine-staged-notify) and lucciola-status to surface.
+# Recovery: `ujust lucciola-update-unblock` (unmask + foreground update).
 set -uo pipefail
 
 STATE_DIR=/var/lib/margine/update-watchdog
@@ -84,7 +84,7 @@ if flatpak mask "$culprit" >/dev/null 2>&1 || flatpak mask 2>/dev/null | grep -q
     echo "$culprit $(date -u +%Y-%m-%dT%H:%M:%SZ) vendor-download-hang" >> "$BLOCKED"
     chmod 0644 "$BLOCKED"
   fi
-  log "masked '$culprit': unattended updates will skip it from now on. Recover with: ujust margine-update-unblock $culprit"
+  log "masked '$culprit': unattended updates will skip it from now on. Recover with: ujust lucciola-update-unblock $culprit"
 else
   log "ERROR: could not mask '$culprit'; unattended updates may keep hanging on it."
   exit 1

@@ -4,7 +4,7 @@
 # Ingredients baked here:
 #   - v4l2loopback is already built+signed by custom-kernel; this module
 #     makes it LOAD at boot with a deterministic device: /dev/video21,
-#     labeled "Margine Phone Cam". exclusive_caps=1 means apps only see
+#     labeled "Lucciola Phone Cam". exclusive_caps=1 means apps only see
 #     a capture device while a producer is feeding it, so the idle node
 #     never clutters camera pickers.
 #   - scrcpy from the OFFICIAL release tarball, pinned by version+sha256.

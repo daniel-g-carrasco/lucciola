@@ -46,7 +46,7 @@ wait_gaming() { [[ -n "${GAMING_PID:-}" ]] && wait "$GAMING_PID" 2>/dev/null || 
 fail() { out "MARGINE-GUI-SMOKE: FAIL $*"; wait_gaming; poweroff_vm; exit 0; }
 
 # ---- Gaming-native layer resolvability (independent of the GUI) ------------
-# `ujust margine-gaming-native` layers a multilib RPM set whose fragile
+# `ujust lucciola-gaming-native` layers a multilib RPM set whose fragile
 # edge is steam's 32-bit chain: about 200 i686 packages, layered since
 # 2026-10-18 together with the applications (the image no longer carries
 # them), each of which must fit the x86_64 packages of the image. A
@@ -59,7 +59,7 @@ fail() { out "MARGINE-GUI-SMOKE: FAIL $*"; wait_gaming; poweroff_vm; exit 0; }
 gaming_check() {
   local list=/usr/share/margine/gaming-native-packages.txt
   if [[ ! -r "$list" ]]; then
-    out "MARGINE-GAMING-NATIVE: FAIL package list $list not found: ujust margine-gaming-native cannot run"
+    out "MARGINE-GAMING-NATIVE: FAIL package list $list not found: ujust lucciola-gaming-native cannot run"
     return
   fi
   local pkgs
@@ -275,7 +275,7 @@ as_user busctl --user --timeout=10 call org.freedesktop.Notifications /org/freed
 # little (oo7 can answer for a keyring that needed no password), so the
 # daemon's own line for the secret it received must be in its log since the
 # password login; the autologin before it had no password to give. The same
-# property `ujust margine-keyring status` reads.
+# property `ujust lucciola-keyring status` reads.
 keyring_locked() {
   as_user busctl --user --timeout=10 get-property org.freedesktop.secrets \
     /org/freedesktop/secrets/aliases/default org.freedesktop.Secret.Collection Locked 2>/dev/null | awk '{print $2}'
@@ -351,9 +351,9 @@ PANIC="$(journalctl -b -q --no-pager -o cat _SYSTEMD_USER_UNIT=niri.service _UID
 # when a display is reachable, a GTK icon lookup. (Headless-safe since
 # fedora-atomic#56: no display => skip, not a false FAIL.) Boot splash,
 # logos and os-release LOGO are still Margine's in Lucciola.
-if [[ -x /usr/bin/margine-validate-branding ]]; then
-  /usr/bin/margine-validate-branding > /tmp/branding.out 2>&1 \
-    || fail "margine-validate-branding: $(tail -3 /tmp/branding.out | tr '\n' ' ')"
+if [[ -x /usr/bin/lucciola-validate-branding ]]; then
+  /usr/bin/lucciola-validate-branding > /tmp/branding.out 2>&1 \
+    || fail "lucciola-validate-branding: $(tail -3 /tmp/branding.out | tr '\n' ' ')"
 fi
 
 out "MARGINE-GUI-SMOKE: PASS login=${S_SERVICE}/password keyring=unlocked session=${S_DESK,,}/${S_TYPE} niri=${NIRI_VER:-?} outputs=$OUTPUTS bar=$BAR notifications=$NCOMM portal=FileChooser.v${PORTAL_V}"

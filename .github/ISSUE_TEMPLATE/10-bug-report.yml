@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Thanks for taking the time. Tip: on an installed Margine, run
-        `ujust margine-report` in a terminal. It collects the info below
+        `ujust lucciola-report` in a terminal. It collects the info below
         into one file you can paste here.
   - type: textarea
     id: what
@@ -48,5 +48,5 @@ body:
     id: logs
     attributes:
       label: Logs and details
-      description: Paste the relevant part of `journalctl -b`, the `ujust margine-report` output, or a photo/screenshot of the error.
+      description: Paste the relevant part of `journalctl -b`, the `ujust lucciola-report` output, or a photo/screenshot of the error.
       render: text

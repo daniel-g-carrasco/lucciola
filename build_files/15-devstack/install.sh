@@ -27,7 +27,7 @@
 #
 # Since 2026-10-18 the virtualisation stack is not part of it: libvirt,
 # QEMU/KVM, virt-manager, OVMF, swtpm and podman-machine are layered on
-# demand with `ujust margine-vm`.
+# demand with `ujust lucciola-vm`.
 #
 # Third-party repos are handled the way custom-kernel handles RPMFusion
 # and NVIDIA (#363): fetch the key, verify its fingerprint, only then let
@@ -53,11 +53,11 @@ missing() {
 # --- 1. Container tooling from Fedora's own repos --------------------------
 # The podman extras DX carried. podman-docker answers to `docker` for
 # scripts: Margine ships Podman only (2026-10-10), Docker CE is
-# `ujust margine-docker`.
+# `ujust lucciola-docker`.
 # The virtualisation stack (libvirt, qemu-kvm, virt-manager, virt-viewer,
 # virt-install, edk2-ovmf, swtpm, dnsmasq, the qemu display and USB
 # modules) and podman-machine, which runs on the same QEMU, left the image
-# on 2026-10-18 (about 290 MiB): `ujust margine-vm` layers them.
+# on 2026-10-18 (about 290 MiB): `ujust lucciola-vm` layers them.
 FEDORA_PKGS=(
   podman-compose podman-docker
 )
@@ -82,7 +82,7 @@ fi
 # (AppIndicator, Dash to Dock, Caffeine, GSConnect) went with the rest of
 # Margine's Shell customisation.
 # vkBasalt, mangohud and goverlay are not backfilled: the gaming layer is
-# the user's (ujust margine-gaming, ujust margine-gaming-native). Until
+# the user's (ujust lucciola-gaming, ujust lucciola-gaming-native). Until
 # 2026-10-18 the image carried all three: custom-kernel installed mangohud
 # and goverlay, and vkBasalt came as goverlay's weak dependency (with
 # mesa-demos and vulkan-tools).
@@ -223,12 +223,12 @@ if rpm -q rocm-hip >/dev/null 2>&1 && ! rpm -q hipcc >/dev/null 2>&1 && ! rpm -q
 fi
 
 # --- 2. Docker CE: not in the image since 2026-10-10 ---------------------
-# 12-base-trim removes what a base ships; `ujust margine-docker` layers it
+# 12-base-trim removes what a base ships; `ujust lucciola-docker` layers it
 # from Docker's repository (key pinned by fingerprint, same as the key
 # check here used to do) for the few tools wired to Docker's own daemon.
 
 # --- 3. VS Code: on demand ------------------------------------------------
-# The RPM a base ships is removed by 12-base-trim; `ujust margine-vscode`
+# The RPM a base ships is removed by 12-base-trim; `ujust lucciola-vscode`
 # layers it from Microsoft's repository (key pinned) for whoever needs the
 # native build, e.g. extensions that run host tools. The Flatpak
 # (com.visualstudio.code) was preinstalled from 2026-10-10 to 2026-10-18;
@@ -282,9 +282,9 @@ systemctl --global mask flatpak-user-update.timer >/dev/null
 # Group membership is Margine's job on every base (2026-10-10): the base's
 # bluefin-dx-groups expects the docker and incus-admin groups, which left
 # the image with Docker CE and incus, and it restarts every 30 s when
-# usermod fails. margine-dev-groups adds wheel users to the groups that
-# exist (libvirt after `ujust margine-vm`, docker after
-# `ujust margine-docker`), every boot. margine-libvirt-workaround only runs
+# usermod fails. lucciola-dev-groups adds wheel users to the groups that
+# exist (libvirt after `ujust lucciola-vm`, docker after
+# `ujust lucciola-docker`), every boot. margine-libvirt-workaround only runs
 # where /var/lib/libvirt exists, i.e. once libvirt is layered.
 if [[ -f /usr/lib/systemd/system/bluefin-dx-groups.service ]]; then
   systemctl mask bluefin-dx-groups.service
@@ -310,9 +310,9 @@ fi
 for p in podman-docker uupd "${DECLARED_PKGS[@]}"; do
   rpm -q "$p" >/dev/null 2>&1 || { err "$p still missing after devstack"; exit 1; }
 done
-# The VM stack is layered on demand (ujust margine-vm), never shipped.
+# The VM stack is layered on demand (ujust lucciola-vm), never shipped.
 for p in libvirt-daemon qemu-kvm virt-manager swtpm edk2-ovmf podman-machine; do
-  if rpm -q "$p" >/dev/null 2>&1; then err "$p is in the image: the VM stack is layered on demand (ujust margine-vm)"; exit 1; fi
+  if rpm -q "$p" >/dev/null 2>&1; then err "$p is in the image: the VM stack is layered on demand (ujust lucciola-vm)"; exit 1; fi
 done
 for p in "${ROCM_DEV[@]}"; do
   if rpm -q "$p" >/dev/null 2>&1; then err "$p still present after the ROCm trim"; exit 1; fi

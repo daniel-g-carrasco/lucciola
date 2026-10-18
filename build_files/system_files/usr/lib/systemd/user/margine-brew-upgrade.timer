@@ -1,5 +1,5 @@
 [Unit]
-Description=Margine: weekly Homebrew upgrade
+Description=Lucciola: weekly Homebrew upgrade
 
 [Timer]
 # Wall-clock, not monotonic: OnUnitActiveSec freezes across suspend and

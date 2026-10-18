@@ -40,12 +40,11 @@ check_nonempty() { [[ -s "$ROOTFS/$1" ]] || { echo "::error::file $1 missing or 
 check_exec() { [[ -x "$ROOTFS/$1" ]] || { echo "::error::not executable $1 ($2)"; fail=1; }; }
 
 # A.1 — About-panel logo: os-release LOGO + asset on disk
-if ! grep -qE '^LOGO=margine-logo$' "$ROOTFS/etc/os-release"; then
-  echo "::error::A.1 /etc/os-release does not declare LOGO=margine-logo"; fail=1
+if ! grep -qE '^LOGO=lucciola-logo$' "$ROOTFS/etc/os-release"; then
+  echo "::error::A.1 /etc/os-release does not declare LOGO=lucciola-logo"; fail=1
 fi
-if [[ ! -f "$ROOTFS/usr/share/pixmaps/margine-logo.png" && ! -f "$ROOTFS/usr/share/pixmaps/margine-logo.svg" ]]; then
-  echo "::error::A.1 /usr/share/pixmaps/margine-logo.{png,svg} missing"; fail=1
-fi
+check_nonempty "usr/share/icons/hicolor/scalable/apps/lucciola-logo.svg" "A.1"
+check_nonempty "usr/share/pixmaps/lucciola-logo.png" "A.1"
 check_nonempty "usr/share/pixmaps/fedora_logo_med.png" "A.1"
 check_nonempty "usr/share/pixmaps/fedora_whitelogo_med.png" "A.1"
 
@@ -130,7 +129,7 @@ check_exec "usr/libexec/margine-first-boot-status" "A.4"
 # image ships: the generated font, a drop-in that loadfonts it + selects it
 # via gfxterm_font + switches to gfxterm, and the re-render helper (bootupd
 # does NOT re-render the static config on `bootc upgrade`, so existing installs
-# need `ujust margine-grub-hidpi`).
+# need `ujust lucciola-grub-hidpi`).
 GRUB_GFX="usr/lib/bootupd/grub2-static/configs.d/05_margine-gfxmode.cfg"
 check_file "$GRUB_GFX" "A.4.gfx"
 check_nonempty "usr/lib/bootupd/grub2-static/fonts/margine.pf2" "A.4.gfx"
@@ -193,7 +192,7 @@ grep -q '^[[:space:]]*set gfxterm_font=' "$ROOTFS/$GRUB_GFX" 2>/dev/null \
 grep -q 'terminal_output gfxterm' "$ROOTFS/$GRUB_GFX" 2>/dev/null \
   || { echo "::error::A.4.gfx GRUB drop-in does not switch to gfxterm"; fail=1; }
 
-# A.4.grub-lock: `ujust margine-grub-lock` only works while bootupd's
+# A.4.grub-lock: `ujust lucciola-grub-lock` only works while bootupd's
 # static GRUB config keeps reading user.cfg (GRUB2_PASSWORD). If a base
 # change drops that snippet, the password would silently protect nothing,
 # and TPM2 disk unlock would again be one `e` away from a root shell.
@@ -208,12 +207,19 @@ fi
 [[ -f "$ROOTFS/usr/libexec/margine/boot-writable.sh" ]] \
   || { echo "::error::usr/libexec/margine/boot-writable.sh missing: grub-lock and grub-hidpi-apply cannot write to a read-only /boot (A.4.grub-lock)"; fail=1; }
 
-# A.4.keyring — login keyring on oo7 (Fedora 45). margine-keyring opens the
+# A.4.keyring: login keyring on oo7 (Fedora 45). lucciola-keyring opens the
 # keyring at login with a TPM-bound credential (fingerprint, autologin);
 # keyring-legacy-aside runs before oo7-daemon so a Fedora 44 plaintext
 # keyring cannot stop it, keyring-import-legacy moves its items over; the
 # D-Bus activation file starts oo7 outside GNOME's session target (Lucciola).
-check_exec "usr/bin/margine-keyring" "A.4.keyring"
+check_exec "usr/bin/lucciola-keyring" "A.4.keyring"
+# A.4.names: the commands are lucciola-* since 2026-10-18; the margine-*
+# names stay as links to them while installs and habits move over.
+for n in autologin dev-groups fetch keyring status tpm-unlock validate-margine-system validate-branding; do
+  check_exec "usr/bin/lucciola-$n" "A.4.names"
+  [[ "$(readlink "$ROOTFS/usr/bin/margine-$n" 2>/dev/null)" == "lucciola-$n" ]] \
+    || { echo "::error::A.4.names usr/bin/margine-$n is not a link to lucciola-$n"; fail=1; }
+done
 check_exec "usr/bin/seahorse" "A.4.keyring"
 check_exec "usr/libexec/margine/keyring-legacy-aside" "A.4.keyring"
 check_exec "usr/libexec/margine/keyring-import-legacy" "A.4.keyring"
@@ -317,7 +323,17 @@ grep -qxF 'system-db:distro' "$ROOTFS/etc/dconf/profile/user" || { echo "::error
 # (added 2026-06-12). These assert OUTCOMES, independent of how the build
 # scripts behave.
 test -s "$ROOTFS/usr/share/icons/hicolor/scalable/apps/margine-logo.svg" \
-  || { echo "::error::A.3.ter margine-logo.svg missing from hicolor"; fail=1; }
+  || { echo "::error::A.3.ter margine-logo.svg missing from hicolor (the old name, kept as an alias of lucciola-logo)"; fail=1; }
+# The boot splash: Lucciola's theme, selected, at DeviceScale=1 (the theme
+# sizes itself in device pixels), and the wallpaper with the old Margine
+# path still resolving (installed systems' greeter sync.toml names it).
+check_nonempty "usr/share/plymouth/themes/lucciola/lucciola.script" "A.3.ter"
+grep -qx 'Theme=lucciola' "$ROOTFS/etc/plymouth/plymouthd.conf" \
+  || { echo "::error::A.3.ter plymouthd.conf does not select the lucciola theme"; fail=1; }
+grep -qx 'DeviceScale=1' "$ROOTFS/etc/plymouth/plymouthd.conf" \
+  || { echo "::error::A.3.ter plymouthd.conf lacks DeviceScale=1"; fail=1; }
+check_nonempty "usr/share/backgrounds/lucciola/lucciola.png" "A.3.ter"
+check_nonempty "usr/share/backgrounds/margine/margine.png" "A.3.ter"
 test -s "$ROOTFS/usr/share/icons/hicolor/scalable/apps/fedora-logo-icon.svg" \
   || { echo "::error::A.3.ter fedora-logo-icon.svg missing (fedora-welcome + gnome-initial-setup hardcode it)"; fail=1; }
 test -s "$ROOTFS/usr/share/pixmaps/fedora_logo_med.png" \

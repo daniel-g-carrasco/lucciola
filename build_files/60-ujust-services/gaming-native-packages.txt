@@ -1,4 +1,4 @@
-# Native gaming layer — RPMs that `ujust margine-gaming-native` layers
+# Native gaming layer: RPMs that `ujust lucciola-gaming-native` layers
 # via rpm-ostree. SINGLE SOURCE OF TRUTH: the recipe (60-custom.just),
 # the build's resolve check (.github/scripts/gaming-native-resolve.sh) and
 # the smoke-boot dry-run check (.github/smoke/gui-probe.sh), via

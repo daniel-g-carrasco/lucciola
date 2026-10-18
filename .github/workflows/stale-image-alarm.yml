@@ -8,7 +8,7 @@ name: Stale image / base alarm
 #
 # So: one job, once a day, that asks the only question that matters to
 # someone on the receiving end. For an existing user sitting in front of
-# `ujust margine-update`, how old is the image they would get? (Margine
+# `ujust lucciola-update`, how old is the image they would get? (Margine
 # also measured its published ISO on archive.org; Lucciola has no ISO yet,
 # so that check comes back with it.) It alarms on two channels on purpose:
 #   - ntfy, for the push notification;

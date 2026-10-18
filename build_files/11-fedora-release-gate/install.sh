@@ -6,7 +6,7 @@
 # rebases it to the next Fedora, every Margine build silently moves with it.
 # Several things in this tree are tied to the release: packages pinned by
 # their fc44 name, the Fedora 45 switch of the Secret Service from
-# gnome-keyring to oo7 (which changes how margine-keyring and the TPM
+# gnome-keyring to oo7 (which changes how lucciola-keyring and the TPM
 # keyring unlock work), third-party repos, the Flatpak GL runtime.
 # checklist.md next to this script lists them. This step compares the
 # base's VERSION_ID with expected-release and fails the build, printing the

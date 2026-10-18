@@ -1,5 +1,5 @@
 [Unit]
-Description=Margine: apply the HiDPI GRUB font + re-render grub.cfg when the baked config changes
+Description=Lucciola: apply the HiDPI GRUB font + re-render grub.cfg when the baked config changes
 Documentation=https://github.com/daniel-g-carrasco/margine-image
 # The bootloader lives on /boot (+ESP); bootc/bootupd only write it at install,
 # not on image upgrades. This oneshot closes that gap: it renders the image's

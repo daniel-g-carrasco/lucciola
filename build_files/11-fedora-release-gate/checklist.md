@@ -15,17 +15,17 @@ matches the base; go through this list first, then bump the number.
   (`niri.service.d/50-lucciola-secrets.conf`). Without them a niri session
   has no Secret Service at all.
 - oo7 migrates gnome-keyring's encrypted keyring with the login password,
-  but not the plaintext one `margine-keyring blank` left on Fedora 44: with
+  but not the plaintext one `lucciola-keyring blank` left on Fedora 44: with
   the password at hand oo7-daemon exits on it ("File header doesn't
   match"), without it oo7 starts an empty Login keyring.
   `keyring-legacy-aside` (ExecStartPre of oo7-daemon) renames the file,
   `keyring-import-legacy` moves its items over (at login, or
-  `ujust margine-keyring import`). Only for oo7 0.7.0~beta: upstream
+  `ujust lucciola-keyring import`). Only for oo7 0.7.0~beta: upstream
   migrates the plaintext format itself since #579 (2026-09-26), so the
   aside step stands down on any other version. Rehearsed in a `silverblue-main:45`
   container with a real oo7-daemon: text, network and binary items, lookup
   by attribute and by schema, persistence across a daemon restart.
-- `margine-keyring` no longer blanks the keyring (oo7 refuses an empty
+- `lucciola-keyring` no longer blanks the keyring (oo7 refuses an empty
   password): `tpm` stores the keyring password as a user credential that
   oo7-daemon imports at start (`ImportCredential=oo7.keyring-encryption-password`).
   To test in a VM with a TPM: fingerprint-like login (autologin) opens the
@@ -34,7 +34,7 @@ matches the base; go through this list first, then bump the number.
   `/etc/pam.d/gdm-{password,fingerprint,autologin,switchable-auth}`. Those
   copies keep shadowing GDM's new `/usr/lib/pam.d` files after the update:
   run `tpm-keyring-unlock-deconfigure` before rebasing, then
-  `ujust margine-keyring tpm`.
+  `ujust lucciola-keyring tpm`.
 - Back up `~/.local/share/keyrings` before testing: oo7's migration of a
   legacy login keyring has failed in reports (linux-credentials/oo7#577).
 
@@ -71,7 +71,7 @@ matches the base; go through this list first, then bump the number.
 - RPM Fusion, Docker CE, VS Code, Tailscale repositories: release-specific
   URLs resolve.
 - ROCm: `rocm-opencl` still builds darktable's kernels
-  (`ujust margine-darktable-opencl status`), and whether Mesa's rusticl works
+  (`ujust lucciola-darktable-opencl status`), and whether Mesa's rusticl works
   again (then the ROCm shim could go).
 
 ## Desktop and apps
@@ -85,7 +85,7 @@ matches the base; go through this list first, then bump the number.
 - Flatpak: the GL runtime branch the preinstalled apps use, and the
   `org.gnome.Platform` versions.
 - `validate-margine-system`, smoke-boot and the install gate pass on the
-  new release; `ujust margine-update` from the previous release works
+  new release; `ujust lucciola-update` from the previous release works
   (gaming layer included, see the update-path gate).
 
 ## Last

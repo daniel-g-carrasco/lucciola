@@ -447,7 +447,7 @@ fi
 # scx-scheds — sched_ext BPF schedulers managed by scx_loader/scxctl
 # (current shipped names come from `scxctl list`). Ships in the same
 # CachyOS addons COPR as the kernel itself, lives in the base image so the
-# `ujust margine-scheduler` recipe is available on every Margine
+# `ujust lucciola-scheduler` recipe is available on every Margine
 # install — gaming variant inherits it without re-adding. Enable the
 # COPR just for the install, then disable + scrub the repo file so user
 # systems don't pull random updates from it outside our pipeline.
@@ -463,7 +463,7 @@ ls /usr/bin/scx_* 2>/dev/null | sed 's|^/usr/bin/||' | sort
 
 # scx_loader is opt-in (Bazzite pattern + audit §6.7). Disabling it
 # here is idempotent — if the package preset is already 'disabled' the
-# call is a no-op. Users opt in via `ujust margine-scheduler` or the
+# call is a no-op. Users opt in via `ujust lucciola-scheduler` or the
 # margine-scheduler.desktop GUI. (The tuned profiles {balanced,powersave,
 # throughput-performance}-margine that flipped the scx mode left on
 # 2026-10-18: no profile selection ever picked them.) Default-on burned
@@ -504,11 +504,11 @@ fi
 # fdkaac), so the handbook's codec promises hold.
 # steam-devices: udev rules for USB game controllers (Steam, Xbox, PS,
 # generic gamepads), a few kilobytes; the Flatpak Steam of
-# `ujust margine-gaming` needs them on the host. From Fedora.
+# `ujust lucciola-gaming` needs them on the host. From Fedora.
 #
 # What left this step on 2026-10-18 (Lucciola):
-#   - mangohud and goverlay (vkBasalt came with them): `ujust margine-gaming`
-#     and `ujust margine-gaming-native` layer them when someone asks for
+#   - mangohud and goverlay (vkBasalt came with them): `ujust lucciola-gaming`
+#     and `ujust lucciola-gaming-native` layer them when someone asks for
 #     the gaming layer.
 #   - RPMFusion: it was enabled here only for mangohud, goverlay,
 #     steam-devices and the gaming closure below; Fedora has the first
@@ -520,7 +520,7 @@ log "Base now ships: steam-devices + the gstreamer bad/ugly codecs (negativo17)"
 # ---------------------------------------------------------------------------
 # Native gaming: align the image with the layer, do not bake the layer
 # ---------------------------------------------------------------------------
-# `ujust margine-gaming-native` layers steam, whose 32-bit (i686) chain is
+# `ujust lucciola-gaming-native` layers steam, whose 32-bit (i686) chain is
 # about 200 packages: mesa/llvm, SDL3, gtk3, glycin, NetworkManager-libnm,
 # ... rpm-ostree cannot touch an image package while it layers, so every
 # i686 library must fit the x86_64 packages the image ships. The base

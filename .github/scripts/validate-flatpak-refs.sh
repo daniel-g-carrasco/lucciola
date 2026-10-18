@@ -2,7 +2,7 @@
 # Validate that every Flathub app ID our ujust recipes install still resolves
 # on Flathub.
 #
-# Why this exists: the AI layer (`ujust margine-ai` -> Alpaca) and the gaming
+# Why this exists: the AI layer (`ujust lucciola-ai` -> Alpaca) and the gaming
 # layer are pure-Flatpak, so there's no rpm depsolve to dry-run the way
 # gaming-native-packages.txt is validated. The equivalent rot for a Flatpak
 # layer is an app being renamed or delisted upstream — which makes the recipe's

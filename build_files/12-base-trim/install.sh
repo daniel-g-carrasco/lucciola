@@ -36,7 +36,7 @@
 #   - qemu for every architecture but x86 (Bluefin DX installs the `qemu`
 #     meta package): 57 packages, 1088 MB. Margine's VMs
 #     (margine-test-vm, virt-manager, podman-machine) are x86 only, and
-#     since 2026-10-18 layered on demand (`ujust margine-vm`).
+#     since 2026-10-18 layered on demand (`ujust lucciola-vm`).
 #   - wine and mingw64, 1.9 GB: weak dependencies of lutris left behind by
 #     the gaming bake in custom-kernel. The bake ran without weak
 #     dependencies from 2026-10-10 and left the build on 2026-10-18 (the
@@ -55,15 +55,15 @@
 # answering to `docker`), ROCm OpenCL and the HIP runtime. What goes, and
 # comes back with one ujust command:
 #   - the x86 virt stack (libvirt, qemu-kvm, virt-manager, OVMF, swtpm,
-#     podman-machine): `ujust margine-vm` (2026-10-18; 15-devstack no
+#     podman-machine): `ujust lucciola-vm` (2026-10-18; 15-devstack no
 #     longer installs it, and a base that ships it keeps it)
-#   - Docker CE (409 MB): `ujust margine-docker`
+#   - Docker CE (409 MB): `ujust lucciola-docker`
 #   - cockpit, eBPF tracing (bcc, bpftrace, bpftop and their LLVM 21),
 #     sysprof, igt-gpu-tools, the host toolchain (gcc, g++, glibc-devel,
-#     kernel-devel): `ujust margine-devtools`; distrobox is the everyday
+#     kernel-devel): `ujust lucciola-devtools`; distrobox is the everyday
 #     way to build things
 #   - tailscale (72 MB and a daemon with an open UDP port on every install,
-#     docs/SECURITY-CLAIMS.md D4): `ujust margine-tailscale`
+#     docs/SECURITY-CLAIMS.md D4): `ujust lucciola-tailscale`
 #   - incus and incus-agent, rclone, restic, borgbackup: layer them or
 #     `brew install` them
 #   - the HIP compiler and its 2 GB of static LLVM (rocm-llvm-static,
@@ -119,7 +119,7 @@ TRIM_PKGS=(
   sysprof sysprof-cli libsysprof-capture igt-gpu-tools
   gcc gcc-c++ cpp gcc-plugin-annobin glibc-devel libstdc++-devel kernel-headers kernel-cachyos-devel systemtap-devel
   tailscale incus incus-agent rclone restic borgbackup
-  code                                                      # VS Code RPM: `ujust margine-vscode` layers it
+  code                                                      # VS Code RPM: `ujust lucciola-vscode` layers it
 )
 
 # What the x86 VMs keep: the x86 system emulator with its UEFI firmware,

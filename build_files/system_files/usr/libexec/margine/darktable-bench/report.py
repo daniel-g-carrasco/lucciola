@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Records and report for `ujust margine-darktable-bench`.
+"""Records and report for `ujust lucciola-darktable-bench`.
 
   report.py record LOG SAMPLES CONFIG IMAGE SIZE TAG ATTEMPT WALL RC QUIET_OK
                    QUIET DISTURB KFAULT AC PROFILE CPU_MAX GPU_MAX CLOCKS0 CLOCKS1
@@ -141,11 +141,11 @@ def report(out):
         p("")
         if g < 1:
             p("On these photos the GPU does not pay off: keep darktable on the CPU "
-              "(`ujust margine-darktable-opencl disable`).")
+              "(`ujust lucciola-darktable-opencl disable`).")
         else:
             p(f"Fastest on average: **{best}**"
               + ("" if worst >= 1 else f" (but slower than the CPU in at least one case, down to {worst:.2f}x)")
-              + ". `ujust margine-darktable-opencl` sets gpu005a4.")
+              + ". `ujust lucciola-darktable-opencl` sets gpu005a4.")
     bad = [r for r in measured if not r["valid"]]
     if bad:
         p("\nDiscarded runs:")

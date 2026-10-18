@@ -1,10 +1,10 @@
 #!/usr/bin/python3
-# Margine Phone Camera — use an Android phone as a webcam.
+# Phone Camera: use an Android phone as a webcam.
 #
 # Thin GUI over the pieces the image already ships: adb (android-tools),
 # scrcpy (pinned release bundle, /usr/bin/scrcpy wrapper) and the
 # v4l2loopback device the image loads at boot as /dev/video21
-# ("Margine Phone Cam", exclusive_caps=1). The app never needs
+# ("Lucciola Phone Cam", exclusive_caps=1). The app never needs
 # privileges: it only starts/stops an scrcpy producer and previews the
 # loopback device via GStreamer (gtk4paintablesink).
 #
@@ -32,7 +32,10 @@ gi.require_version("Gst", "1.0")
 from gi.repository import Adw, Gio, GLib, Gst, Gtk  # noqa: E402
 
 APP_ID = "dev.margine.PhoneCam"
-CARD_LABEL = "Margine Phone Cam"
+CARD_LABEL = "Lucciola Phone Cam"
+# The label until 2026-10-18: the module keeps it until the first restart
+# into an image with the new modprobe.d option, so it is still accepted.
+OLD_CARD_LABEL = "Margine Phone Cam"
 ADB_POLL_MS = 3000
 DEFAULT_SIZES = ["1920x1080", "1280x720", "640x480"]
 PREFERRED_SIZE = "1920x1080"
@@ -53,13 +56,22 @@ def find_loopback_device():
                 name = f.read().strip()
         except OSError:
             continue
-        if name.startswith(CARD_LABEL):
+        if name.startswith((CARD_LABEL, OLD_CARD_LABEL)):
             return f"/dev/{entry}"
         # Manually-created loopbacks (the pre-app workflow) used the
         # shorter label: accept them so the app works there too.
         if name.startswith("Phone Cam") and fallback is None:
             fallback = f"/dev/{entry}"
     return fallback
+
+
+def device_label(device):
+    """The name apps list for the device, as the kernel reports it."""
+    try:
+        with open(f"/sys/class/video4linux/{os.path.basename(device)}/name") as f:
+            return f.read().strip() or CARD_LABEL
+    except OSError:
+        return CARD_LABEL
 
 
 class PhoneCamWindow(Adw.ApplicationWindow):
@@ -309,7 +321,7 @@ class PhoneCamWindow(Adw.ApplicationWindow):
         self._start_button.add_css_class("destructive-action")
         # Give the producer a moment to negotiate before previewing.
         GLib.timeout_add(700, self._start_preview)
-        self._toast("Camera running — pick “Margine Phone Cam” in any app")
+        self._toast(f"Camera running: pick “{device_label(self._device)}” in any app")
 
     def _on_scrcpy_exit(self, proc, result):
         try:

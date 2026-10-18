@@ -148,8 +148,8 @@ mkdir -p "$ETC/margine-smoke"
 ( umask 077; printf '%s\n' "$SMOKE_PW" > "$ETC/margine-smoke/smoke-password" )
 
 # 2. greetd autologin into the Lucciola session: the [initial_session]
-#    `ujust margine-autologin on smoke` writes (same command line as
-#    AUTOLOGIN_CMD in build_files/system_files/usr/bin/margine-autologin:
+#    `ujust lucciola-autologin on smoke` writes (same command line as
+#    AUTOLOGIN_CMD in build_files/system_files/usr/bin/lucciola-autologin:
 #    keep the two in step). The launcher starts the session recorded in
 #    the user's AccountsService record; the smoke user has none, so
 #    accounts-daemon fills it from the image's user template
@@ -164,7 +164,7 @@ fi
 tee -a "$CONF" >/dev/null <<'GREETDEOF'
 
 [initial_session]
-# Autologin, set by `ujust margine-autologin on`: greetd starts this
+# Autologin, set by `ujust lucciola-autologin on`: greetd starts this
 # user's session at boot, once per boot, without asking for a password.
 command = "/usr/libexec/lucciola/autologin-session"
 user = "smoke"

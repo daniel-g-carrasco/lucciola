@@ -78,8 +78,8 @@ FORCE=0
 # verdict and a healthy setup is never touched, but anything that rebinds
 # a kernel driver on plug-in must be one command away from off. The file
 # lives in /etc, which persists across image updates on an ostree system.
-#   ujust margine-dock-rescue off     writes "off"
-#   ujust margine-dock-rescue on      writes "on"
+#   ujust lucciola-dock-rescue off     writes "off"
+#   ujust lucciola-dock-rescue on      writes "on"
 # Absent file means the default below. --force ignores the switch: a
 # person typing the manual command has already decided.
 SWITCH=$ROOT/etc/margine/dock-dp-rescue
@@ -113,7 +113,7 @@ log() {
   return 0
 }
 
-# --force is how `ujust margine-dock-wake` gets here: someone asking for
+# --force is how `ujust lucciola-dock-wake` gets here: someone asking for
 # the rescue by hand, on any machine. It skips every gate and the grace
 # period, because a person typing a command has already decided.
 

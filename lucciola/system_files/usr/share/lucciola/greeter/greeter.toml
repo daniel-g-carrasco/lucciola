@@ -8,8 +8,11 @@
 # (/usr/share/lucciola/greeter/sync.toml, copied once), where Sync replaces it.
 
 [appearance]
-# No Noctalia logo on Lucciola's login screen (GDM showed no logo either).
-hide_logo = true
+# The logo at the bottom of the screen is Lucciola's firefly: the RPM puts
+# lucciola-mark.svg in place of Noctalia's logo (noctalia-greeter.spec,
+# Source1), since the greeter has no setting for its own logo. It is drawn
+# about 64 px high, tinted with the palette's on_surface.
+hide_logo = false
 
 [auth]
 # PAM asks one thing at a time. With fingerprint login turned on
