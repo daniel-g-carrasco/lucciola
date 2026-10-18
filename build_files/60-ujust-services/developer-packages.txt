@@ -1,0 +1,39 @@
+# Developer layer: RPMs that `ujust lucciola-devmode` layers via
+# rpm-ostree. SINGLE SOURCE OF TRUTH: the recipe (60-custom.just, through
+# /usr/libexec/margine/devmode), the build's resolve check
+# (.github/scripts/layer-resolve.sh developer) and the smoke-boot dry run
+# (.github/smoke/gui-probe.sh), via /usr/share/margine/developer-packages.txt
+# in the image, all read this exact list.
+#
+# Lines starting with # and blank lines are ignored. One package per line.
+#
+# Homebrew is not here: it is not an RPM, the recipe installs it in
+# /home/linuxbrew with Homebrew's own installer (devmode brew-install).
+#
+# What Bluefin DX shipped and Lucciola leaves out of this list, and why:
+# the commit that created this file has the full table. In short, Docker
+# CE, the VM stack and the eBPF tools have their own recipes
+# (lucciola-docker, lucciola-vm, lucciola-devtools); Podman, its compose
+# and docker shims, Toolbox, Distrobox, adb and fastboot, git and just are
+# in the image; cockpit, incus, the foreign-architecture QEMU and the
+# performance counters stay out.
+
+# VS Code from Microsoft's repository (devmode repo adds it, signing key
+# pinned by fingerprint). The repository stays configured: rpm-ostree
+# looks a layered package up in the enabled repositories at every update.
+code
+# A C and C++ compiler on the host. Homebrew's documentation asks for one
+# on Fedora (formulae without a bottle build from source, `brew doctor`
+# warns without it), and so do editor extensions and native modules that
+# build against the host (node-gyp, Python wheels, Rust's linker). Bluefin
+# DX carried gcc as a dependency of its toolchain; Lucciola's image does
+# not.
+gcc
+gcc-c++
+make
+# Builds Flatpak apps. It drives the host's flatpak and bubblewrap, which a
+# Toolbox does not have: it belongs on the host. Bluefin DX shipped it.
+flatpak-builder
+# git keeps HTTPS credentials in the login keyring, for the host's git and
+# VS Code's. Margine's devtools recipe carried it.
+git-credential-libsecret

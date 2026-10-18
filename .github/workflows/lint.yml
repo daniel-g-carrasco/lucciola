@@ -119,6 +119,12 @@ jobs:
         # See tests/session-start-welcome.test.sh.
         run: bash tests/session-start-welcome.test.sh
 
+      - name: Developer layer helper (ujust lucciola-devmode)
+        # Reads the package list, picks what remove may drop, installs and
+        # deletes Homebrew: tested on temp files with a fake installer.
+        # The repository step runs for real in build.yml's resolve check.
+        run: bash tests/devmode.test.sh
+
       - name: Signed transport migration helper
         # Moves unverified installs to ostree-image-signed:. What it leaves
         # alone (other images, no policy, failed verification) is tested.

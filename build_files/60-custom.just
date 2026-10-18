@@ -1473,7 +1473,8 @@ lucciola-tailscale ACTION="install":
 # (the Flatpak com.visualstudio.code is in Bazaar); extensions that run
 # host tools (a terminal on the host, gh, podman, rpm-ostree) need the
 # native build. Layers it from Microsoft's repository, signing key pinned
-# by fingerprint.
+# by fingerprint in /usr/libexec/margine/devmode, which lucciola-devmode
+# uses too. VS Code alone; lucciola-devmode adds it with the rest.
 # VS Code native RPM from Microsoft's repository: install (default) / remove / status.
 [group('Developer')]
 lucciola-vscode ACTION="install":
@@ -1484,15 +1485,10 @@ lucciola-vscode ACTION="install":
         rpm -q code >/dev/null 2>&1 && echo "VS Code RPM: installed ($(rpm -q --qf '%{VERSION}' code))" || echo "VS Code RPM: not installed (the Flatpak com.visualstudio.code is in Bazaar)" ;;
       remove)
         sudo rpm-ostree uninstall code
-        sudo rm -f /etc/yum.repos.d/vscode.repo
+        sudo /usr/libexec/margine/devmode repo-remove
         echo "VS Code RPM removed (a Flatpak VS Code, if installed, stays). Reboot to apply." ;;
       install)
-        tmp="$(mktemp)"
-        printf '%s\n' '[code]' 'name=Visual Studio Code' 'baseurl=https://packages.microsoft.com/yumrepos/vscode' \
-          'enabled=1' 'gpgcheck=1' 'gpgkey=https://packages.microsoft.com/keys/microsoft.asc' > "$tmp"
-        sudo /usr/libexec/margine/layer-repo vscode "file://$tmp" \
-          https://packages.microsoft.com/keys/microsoft.asc BC528686B50D79E339D3721CEB3E94ADBE1229CF
-        rm -f "$tmp"
+        sudo /usr/libexec/margine/devmode repo
         sudo rpm-ostree install --idempotent code
         echo "VS Code RPM layered. Reboot to use it." ;;
       *) echo "usage: ujust lucciola-vscode [install|remove|status]"; exit 2 ;;
@@ -1580,6 +1576,140 @@ lucciola-vm ACTION="install":
         echo "VM tools layered. Reboot: lucciola-dev-groups then adds wheel users to the"
         echo "libvirt group. Rootless VMs (qemu:///session, ujust lucciola-test-vm) need no group." ;;
       *) echo "usage: ujust lucciola-vm [install|remove|status]"; exit 2 ;;
+    esac
+
+# The developer layer, Lucciola's answer to Bluefin DX and Universal Blue's
+# `ujust devmode` (2026-10-18): VS Code from Microsoft's repository, a host
+# C/C++ toolchain, flatpak-builder and git-credential-libsecret, layered
+# with rpm-ostree from /usr/share/margine/developer-packages.txt (the list
+# the build's resolve check and the smoke-boot dry run read too), and
+# Homebrew in /home/linuxbrew/.linuxbrew, not baked in the image: its
+# payload would weigh on every update of every install. The work is in
+# /usr/libexec/margine/devmode; margine-brew-upgrade.timer upgrades Homebrew
+# weekly once it is there. Docker CE, VMs and the eBPF tools keep their own
+# recipes.
+# Developer layer (VS Code, gcc, flatpak-builder, Homebrew): install (default) / status / remove.
+[group('Developer')]
+lucciola-devmode ACTION="install":
+    #!/usr/bin/bash
+    set -euo pipefail
+    DEV=/usr/libexec/margine/devmode
+    [ -x "$DEV" ] || { echo "Missing $DEV: bad image?" >&2; exit 1; }
+    restart_note() {
+      if "$DEV" pending; then
+        echo "Restart to use the new system packages: systemctl reboot"
+      else
+        echo "No system change is waiting: nothing to restart."
+      fi
+    }
+    case "{{ ACTION }}" in
+      status)
+        "$DEV" status ;;
+      install)
+        mapfile -t PKGS < <("$DEV" packages)
+        cat <<'EOF'
+    == Lucciola developer layer ==
+
+    System packages (layered with rpm-ostree, active after a restart):
+      - code              VS Code, from Microsoft's repository. Its signing
+                          key is checked against a known fingerprint, and
+                          the repository stays so that VS Code updates come
+                          with system updates.
+      - gcc, gcc-c++, make
+                          a C and C++ compiler on the system, for Homebrew
+                          and for editor extensions that build code
+      - flatpak-builder   builds Flatpak apps
+      - git-credential-libsecret
+                          git keeps HTTPS passwords in the login keyring
+
+    In /home/linuxbrew, no restart needed:
+      - Homebrew, from Homebrew's own installer, owned by you. Lucciola
+        upgrades its packages once a week, and Lucciola System lists the
+        ones waiting.
+
+    Already in Lucciola: Podman (podman-compose, and `docker` through
+    podman-docker), Toolbox, Distrobox, git, just, adb and fastboot.
+    Separate recipes: lucciola-docker (Docker CE), lucciola-vm (virtual
+    machines), lucciola-devtools (eBPF tracing, sysprof).
+
+    Layered packages are reapplied on every system update, which takes a
+    little longer. ujust lucciola-update handles it; `bootc upgrade`
+    refuses a system with layered packages.
+
+    Safe to run again. To undo: ujust lucciola-devmode remove
+
+    EOF
+        read -rp "Continue? [y/N] " ans
+        case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
+
+        echo
+        echo "== VS Code repository =="
+        sudo "$DEV" repo
+
+        echo
+        echo "== Layering the system packages (rpm-ostree) =="
+        # --idempotent: a re-run must not fail on what is already layered.
+        # --allow-inactive: a package the image itself ships one day stays
+        # requested, and comes back as a layer if the image drops it.
+        sudo rpm-ostree install --idempotent --allow-inactive "${PKGS[@]}"
+
+        echo
+        echo "== Homebrew =="
+        brew_rc=0
+        "$DEV" brew-install || brew_rc=$?
+
+        echo
+        echo "== Done =="
+        restart_note
+        if (( brew_rc != 0 )); then
+          echo "Homebrew did not install (exit $brew_rc): run ujust lucciola-devmode again to retry." >&2
+          exit "$brew_rc"
+        fi
+        echo "Homebrew works in new terminals: brew install <name>." ;;
+      remove)
+        if ! layered="$("$DEV" layered)"; then
+          echo "Could not read what the system has layered (rpm-ostree status)." >&2
+          exit 1
+        fi
+        DROP=()
+        [ -n "$layered" ] && mapfile -t DROP <<<"$layered"
+        HAS_BREW=0
+        [ -x /home/linuxbrew/.linuxbrew/bin/brew ] && HAS_BREW=1
+        if (( ${#DROP[@]} == 0 && HAS_BREW == 0 )); then
+          echo "The developer layer is not installed: nothing to remove."
+          [ -f /etc/yum.repos.d/vscode.repo ] && sudo "$DEV" repo-remove
+          exit 0
+        fi
+        echo "This will:"
+        if (( ${#DROP[@]} )); then
+          echo "  - rpm-ostree uninstall ${DROP[*]}"
+          echo "  - remove the VS Code repository"
+        fi
+        (( HAS_BREW )) && echo "  - ask, separately, whether to delete Homebrew"
+        echo
+        echo "  NOT touched: the Flatpak VS Code if you have it, your VS Code"
+        echo "  settings in ~/.config/Code, and the other developer recipes."
+        echo
+        read -rp "Continue? [y/N] " ans
+        case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
+
+        if (( ${#DROP[@]} )); then
+          sudo rpm-ostree uninstall "${DROP[@]}"
+        fi
+        sudo "$DEV" repo-remove
+
+        if (( HAS_BREW )); then
+          n="$("$DEV" brew-count)"
+          echo
+          read -rp "Delete Homebrew and the $n packages installed with it? [y/N] " ans
+          case "$ans" in
+            [yY]|[yY][eE][sS]) "$DEV" brew-remove ;;
+            *) echo "Homebrew stays in /home/linuxbrew/.linuxbrew." ;;
+          esac
+        fi
+        echo
+        restart_note ;;
+      *) echo "usage: ujust lucciola-devmode [install|status|remove]"; exit 2 ;;
     esac
 
 # Install/reinstall Koofr Desktop (native, rootless, autostart hidden).
@@ -2046,6 +2176,7 @@ alias margine-bootstrap := lucciola-bootstrap
 alias margine-darktable-bench := lucciola-darktable-bench
 alias margine-darktable-opencl := lucciola-darktable-opencl
 alias margine-darktable-scroll := lucciola-darktable-scroll
+alias margine-devmode := lucciola-devmode
 alias margine-devtools := lucciola-devtools
 alias margine-dock-rescue := lucciola-dock-rescue
 alias margine-dock-wake := lucciola-dock-wake
