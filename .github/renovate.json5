@@ -59,8 +59,7 @@
       // happening by hand twice in August. A day is generous against a
       // window measured in minutes, and scrcpy is not security-critical
       // enough to want it sooner. (o-tiling and wayland-scroll-factor were
-      // tracked the same way in Margine; their managers and fix-sha
-      // workflows were not carried over, see customManagers below.)
+      // tracked the same way in Margine; Lucciola ships neither.)
       matchDepNames: [
         'Genymobile/scrcpy',
       ],
@@ -159,12 +158,6 @@
       ],
       datasourceTemplate: 'docker',
     },
-    // No managers for wayland-scroll-factor (45-wsf) and o-tiling
-    // (build-margine-extensions.sh): both act only in the GNOME session,
-    // Lucciola's fallback, and Renovate can bump their version but not
-    // their sha256, which Margine's wsf-pin-sha and otiling-pin-sha
-    // workflows recomputed. Without those, every bump would be a red build.
-    // Their pins move by hand until the slimming decides whether they stay.
     {
       // scrcpy (Phone Camera engine), pinned release tarball in
       // 70-phone-cam. Same sha-companion pattern: renovate bumps

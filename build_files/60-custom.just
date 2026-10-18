@@ -3,9 +3,9 @@
 # /usr/share/ublue-os/just/00-entry.just `import?` of 60-custom.just
 # (the only optional extension point in Bluefin's entry file).
 
-# Apply the full Margine user-state (home, GNOME, keybinds, apps) in one shot.
-[group('Margine')]
-margine-bootstrap $MODE="interactive":
+# Apply the Lucciola user-state (default apps, Zen, darktable) in one shot.
+[group('Lucciola')]
+lucciola-bootstrap $MODE="interactive":
     #!/usr/bin/bash
     set -uo pipefail
     UNATTENDED=0
@@ -15,32 +15,28 @@ margine-bootstrap $MODE="interactive":
 
     if [[ "$UNATTENDED" -ne 1 ]]; then
       cat <<'EOF'
-    == Margine user-state bootstrap ==
+    == Lucciola user-state bootstrap ==
 
-    Applies the full Margine user-state declaration. Idempotent — safe
-    to re-run after upgrades; each step reports [no change] for keys
-    that already match the spec.
+    Applies the Lucciola user-state declaration. Idempotent: safe to
+    re-run after upgrades; each step reports [no change] for keys that
+    already match the spec.
 
     Steps:
-      1. margine-configure-home-layout         (~/data + ~/dev + ~/scratch + XDG remap + bookmarks)
-      2. margine-configure-gnome-keybindings   (Hyprland-style SUPER+1..0, SUPER+E, tiling binds)
-      3. margine-configure-gnome-appearance    (accent, theme, dconf for extensions)
-      4. margine-configure-default-applications (Zen as browser, Ptyxis terminal, etc.)
-      5. margine-configure-gnome-app-folders   (Activities grid grouped by category)
-      6. margine-configure-darktable-import    (import from Pictures/raw, RAWs only)
+      1. lucciola-configure-default-applications (Zen as browser, Ptyxis terminal, etc.)
+      2. lucciola-configure-zen-browser          (DuckDuckGo default, uBlock Origin)
+      3. lucciola-configure-darktable-import     (import from Pictures/raw, RAWs only)
 
-    As of 2026-06-03 PR A, GNOME extensions are no longer installed
-    or enabled per-user: o-tiling and hide-cursor live in /usr/share/
-    gnome-shell/extensions/ (baked by margine-image build), enablement
-    is in /usr/share/glib-2.0/schemas/zz1-margine.gschema.override.
-    Bootstrap no longer touches them.
+    Your folders stay the standard ones (Documents, Downloads, Pictures...).
+    Margine's own layout (~/data, ~/dev, ~/scratch, the XDG folders inside
+    them) is not applied any more; to use it on purpose:
+    lucciola-configure-home-layout --apply. The GNOME steps (keybindings,
+    appearance, app folders) are gone: GNOME is Lucciola's stock fallback
+    session.
 
-    No package install. No layer staged. Pure user-state under $HOME
-    and user-dconf. Reversible by hand.
+    No package install. No layer staged. Pure user-state under $HOME.
+    Reversible by hand.
 
-    Run `ujust margine-bootstrap unattended` to skip the prompt
-    (this is what /etc/xdg/autostart/margine-first-boot.desktop does
-    the first time you log in).
+    Run `ujust lucciola-bootstrap unattended` to skip the prompt.
 
     EOF
       read -rp "Continue? [Y/n] " ans
@@ -48,21 +44,10 @@ margine-bootstrap $MODE="interactive":
     fi
 
     FAILED=()
-    # Extension install + enable used to be in this chain (steps 2/3)
-    # but lived per-user under ~/.local/share/gnome-shell/extensions/
-    # and shadowed Bluefin's own copies (search-light), or never ran
-    # at all due to first-login race with flatpak-preinstall.service.
-    # Replaced 2026-06-03 by system-wide install in margine-image's
-    # build-margine-extensions.sh + zz1-margine.gschema.override
-    # enabled-extensions list. Nothing left here for extensions.
     for step in \
-        margine-configure-home-layout \
-        margine-configure-gnome-keybindings \
-        margine-configure-gnome-appearance \
-        margine-configure-default-applications \
-        margine-configure-gnome-app-folders \
-        margine-configure-zen-browser \
-        margine-configure-darktable-import ; do
+        lucciola-configure-default-applications \
+        lucciola-configure-zen-browser \
+        lucciola-configure-darktable-import ; do
       echo
       echo "==> $step --apply"
       if ! $step --apply; then
@@ -78,11 +63,10 @@ margine-bootstrap $MODE="interactive":
       echo "== Bootstrap complete with ${#FAILED[@]} failed step(s): =="
       printf '   - %s\n' "${FAILED[@]}"
     fi
-    echo "Log out and back in (or restart GNOME Shell with Alt+F2 → 'r')"
-    echo "to refresh the dock, extensions, keybindings, and bookmarks."
+    echo "Log out and back in to refresh the default applications."
 
-    # Drop a marker so the autostart entry doesn't re-trigger every
-    # session. Re-run `ujust margine-bootstrap` to refresh manually.
+    # Marker: when the bootstrap last ran. Re-run `ujust lucciola-bootstrap`
+    # to refresh.
     mkdir -p "$HOME/.config/margine"
     date -uIs > "$HOME/.config/margine/bootstrapped"
 
@@ -91,12 +75,12 @@ margine-bootstrap $MODE="interactive":
 
 # Install the gaming layer: Steam/Lutris/Heroic Flatpaks + RPM helpers.
 [group('Gaming')]
-margine-gaming:
+lucciola-gaming:
     #!/usr/bin/bash
     set -euo pipefail
 
     cat <<'EOF'
-    == Margine gaming layer ==
+    == Lucciola gaming layer ==
 
     This installs:
 
@@ -113,12 +97,12 @@ margine-gaming:
         - gamescope       (HDR / per-game compositor / scaling)
         - mangohud        (FPS / GPU / CPU overlay)
         - vkBasalt        (post-processing Vulkan layer)
-        - gamemode        (CPU governor + niceness during gameplay)
         - goverlay        (GUI configurator for MangoHud + vkBasalt)
+
+      Already in the image, nothing to install:
+        - gamemode        (CPU governor + niceness during gameplay)
         - steam-devices   (controller udev rules)
-        - input-remapper  (remap keyboard/mouse/gamepad without per-device drivers)
         - tuned, tuned-ppd (CPU governor switching balanced↔performance)
-        - rom-properties  (Nautilus column extension for ROM metadata)
 
     Notes:
       - GameMode auto-engages when Steam launches a game. No setup.
@@ -128,12 +112,12 @@ margine-gaming:
         Then add MANGOHUD=1 %command% in the game's Steam launch options.
       - For host gamescope inside Flatpak Steam:
           gamescope -- %command%   in Steam launch options.
-      - To roll this back: ujust margine-gaming-remove
+      - To roll this back: ujust lucciola-gaming-remove
 
     Trade-off — host RPMs are layered via rpm-ostree, which means:
       - Your booted deployment becomes "branched" from the base OCI
         image: `rpm-ostree status` will show LayeredPackages: …
-      - You MUST update with `ujust margine-update` (NOT `bootc
+      - You MUST update with `ujust lucciola-update` (NOT `bootc
         upgrade`, which REFUSES a client-layered deployment). It
         re-applies the layer on top of the new base — slower (~30-60s
         extra per update) and can occasionally fail on file conflicts
@@ -168,16 +152,17 @@ margine-gaming:
 
     echo
     echo "== Layering gaming-only host helpers (rpm-ostree) =="
-    # gamescope + vkBasalt are the only RPMs strictly gaming-only.
-    # Everything else (mangohud, goverlay, steam-devices, gamemode,
-    # input-remapper, tuned, tuned-ppd, scx-scheds) is already in
-    # base Margine — see custom-kernel/install.sh + build_files/build.sh.
-    # rom-properties-gtk was dropped in 2026-05 (no F44 build available).
+    # The gaming-only RPMs. steam-devices, gamemode, tuned, tuned-ppd and
+    # scx-scheds are already in the image. mangohud and goverlay were too
+    # until 2026-10-18; they are layered here now, so re-running this
+    # recipe brings them back on a system that had them from the image.
     # --idempotent: a re-run (common: "did it install?") must not abort
     # under set -e when the package is already layered.
     sudo rpm-ostree install --idempotent \
         gamescope \
-        vkBasalt
+        vkBasalt \
+        mangohud \
+        goverlay
 
     echo
     cat <<'EOF'
@@ -188,27 +173,34 @@ margine-gaming:
     Activities grid.
     EOF
 
-# Roll back the Margine gaming layer (undo margine-gaming)
+# Roll back the gaming layer (undo lucciola-gaming).
 [group('Gaming')]
-margine-gaming-remove:
+lucciola-gaming-remove:
     #!/usr/bin/bash
     set -euo pipefail
 
     echo "This will:"
-    echo "  - rpm-ostree uninstall gamescope + vkBasalt (the only gaming-only RPMs)"
+    echo "  - rpm-ostree uninstall gamescope, vkBasalt, mangohud and goverlay"
     echo "  - flatpak uninstall the 7 gaming Flatpaks (Steam, Lutris, Heroic,"
     echo "    Bottles, Protontricks, ProtonPlus, RetroArch)"
     echo
-    echo "  NOT touched (kept — useful for non-gaming workflows too):"
-    echo "    mangohud, goverlay, steam-devices, gamemode, input-remapper,"
-    echo "    tuned, tuned-ppd, scx-scheds. All in base Margine."
+    echo "  NOT touched (part of the image, not of the layer):"
+    echo "    steam-devices, gamemode, tuned, tuned-ppd, scx-scheds."
     echo
     read -rp "Continue? [y/N] " ans
     case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
 
-    sudo rpm-ostree uninstall \
-        gamescope \
-        vkBasalt || true
+    # Only what is layered: rpm-ostree refuses the whole request when one
+    # name is not (mangohud and goverlay came with the image until
+    # 2026-10-18, so older layers lack them).
+    mapfile -t LAYERED < <(rpm-ostree status --json | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)["deployments"][0].get("requested-packages", [])))')
+    declare -A IS_LAYERED=()
+    for p in "${LAYERED[@]}"; do IS_LAYERED["$p"]=1; done
+    DROP=()
+    for p in gamescope vkBasalt mangohud goverlay; do
+        [[ -n "${IS_LAYERED[$p]:-}" ]] && DROP+=("$p")
+    done
+    (( ${#DROP[@]} )) && sudo rpm-ostree uninstall "${DROP[@]}"
 
     sudo flatpak uninstall --system -y \
         com.valvesoftware.Steam \
@@ -223,29 +215,32 @@ margine-gaming-remove:
 # as rpm-ostree layered RPMs, the launchers without an RPM stay Flatpak).
 # Native gives maximum Proton/Wine compatibility (no Flatpak sandbox
 # restrictions on controllers, kernel namespaces, Mesa version, etc.)
-# at the cost of +30-60s per `ujust margine-update` and occasional file-
+# at the cost of +30-60s per `ujust lucciola-update` and occasional file-
 # conflict risk. Use it if you game daily, run anti-cheat titles
 # (EAC/BattlEye), use VR/Steam Link, or mix NVIDIA proprietary with
-# Mesa-git. For occasional gaming the Flatpak default (margine-gaming)
+# Mesa-git. For occasional gaming the Flatpak default (lucciola-gaming)
 # is enough.
 
 # Install the gaming layer NATIVELY (rpm-ostree RPMs, max Proton compat).
 [group('Gaming')]
-margine-gaming-native:
+lucciola-gaming-native:
     #!/usr/bin/bash
     set -euo pipefail
 
     cat <<'EOF'
-    == Margine gaming layer (NATIVE variant) ==
+    == Lucciola gaming layer (NATIVE variant) ==
 
     This installs:
 
       Native RPMs (layered via rpm-ostree — requires reboot):
-        - steam              (Valve Steam client, RPM Fusion non-free)
+        - steam              (Valve Steam client, from negativo17, with its
+                              32-bit libraries: about 200 packages, a few
+                              hundred MB to download the first time)
         - lutris             (open-source game manager)
         - RetroArch          (multi-emulator front-end)
         - gamescope          (HDR / per-game compositor / scaling)
         - vkBasalt           (post-processing Vulkan layer)
+        - mangohud, goverlay (FPS / GPU / CPU overlay and its settings)
 
       Flatpaks (for launchers without an official RPM):
         - com.heroicgameslauncher.hgl   (Epic + GOG)
@@ -254,22 +249,22 @@ margine-gaming-native:
         - com.vysp3r.ProtonPlus         (Proton-GE manager)
 
     Native vs Flatpak — when to pick which:
-      - margine-gaming         (DEFAULT, Flatpak): sandboxed, zero
+      - lucciola-gaming         (DEFAULT, Flatpak): sandboxed, zero
                                 upgrade overhead. Fine for the
                                 occasional gamer.
-      - margine-gaming-native  (THIS, RPM-layered): maximum Proton/
+      - lucciola-gaming-native  (THIS, RPM-layered): maximum Proton/
                                 Wine compatibility — anti-cheat (EAC/
                                 BattlEye) works, VR/Steam Link/USB
                                 controllers integrate without sandbox
                                 quirks, Mesa version always matches
                                 the system. The cost is +30-60s per
-                                `ujust margine-update` to re-apply the layer.
+                                `ujust lucciola-update` to re-apply the layer.
 
     Pick this variant if: anti-cheat titles, VR, daily play, or NVIDIA
     proprietary + Mesa-git side-by-side.
 
-    To roll this back: ujust margine-gaming-native-remove
-    To switch from the Flatpak variant first: ujust margine-gaming-remove
+    To roll this back: ujust lucciola-gaming-native-remove
+    To switch from the Flatpak variant first: ujust lucciola-gaming-remove
 
     EOF
     read -rp "Continue? [y/N] " ans
@@ -304,19 +299,19 @@ margine-gaming-native:
     The Flatpak apps are already in Activities (no reboot needed for them).
     EOF
 
-# Roll back the native gaming layer (undo margine-gaming-native).
+# Roll back the native gaming layer (undo lucciola-gaming-native).
 [group('Gaming')]
-margine-gaming-native-remove:
+lucciola-gaming-native-remove:
     #!/usr/bin/bash
     set -euo pipefail
 
     echo "This will:"
-    echo "  - rpm-ostree uninstall steam, lutris, RetroArch, gamescope, vkBasalt"
+    echo "  - rpm-ostree uninstall steam, lutris, RetroArch, gamescope, vkBasalt,"
+    echo "    mangohud, goverlay (and the 32-bit libraries steam brought)"
     echo "  - flatpak uninstall Heroic, Bottles, Protontricks, ProtonPlus"
     echo
-    echo "  NOT touched (kept — useful for non-gaming workflows too):"
-    echo "    mangohud, goverlay, steam-devices, gamemode, input-remapper,"
-    echo "    tuned, tuned-ppd, scx-scheds. All in base Margine."
+    echo "  NOT touched (part of the image, not of the layer):"
+    echo "    steam-devices, gamemode, tuned, tuned-ppd, scx-scheds."
     echo
     read -rp "Continue? [y/N] " ans
     case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
@@ -324,7 +319,17 @@ margine-gaming-native-remove:
     PKGLIST=/usr/share/margine/gaming-native-packages.txt
     [ -r "$PKGLIST" ] || { echo "Missing $PKGLIST — bad image?" >&2; exit 1; }
     mapfile -t GAMING_PKGS < <(grep -vE '^[[:space:]]*(#|$)' "$PKGLIST")
-    sudo rpm-ostree uninstall "${GAMING_PKGS[@]}" || true
+    # Only what is layered: rpm-ostree refuses the whole request when one
+    # name is not (a layer made before mangohud and goverlay joined the
+    # list lacks them).
+    mapfile -t LAYERED < <(rpm-ostree status --json | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)["deployments"][0].get("requested-packages", [])))')
+    declare -A IS_LAYERED=()
+    for p in "${LAYERED[@]}"; do IS_LAYERED["$p"]=1; done
+    DROP=()
+    for p in "${GAMING_PKGS[@]}"; do
+        [[ -n "${IS_LAYERED[$p]:-}" ]] && DROP+=("$p")
+    done
+    (( ${#DROP[@]} )) && sudo rpm-ostree uninstall "${DROP[@]}"
 
     sudo flatpak uninstall --system -y \
         com.heroicgameslauncher.hgl \
@@ -341,12 +346,12 @@ margine-gaming-native-remove:
 # image, scx_loader stays disabled by default, and users opt in here
 # or through Activities -> "Margine CPU Scheduler".
 #
-#   ujust margine-scheduler          # show current state
-#   ujust margine-scheduler lavd     # start/switch to a shipped scheduler
-#   ujust margine-scheduler off      # stop scx_loader, return to BORE
+#   ujust lucciola-scheduler          # show current state
+#   ujust lucciola-scheduler lavd     # start/switch to a shipped scheduler
+#   ujust lucciola-scheduler off      # stop scx_loader, return to BORE
 # Switch the CPU scheduler (sched_ext/BPF): status, off, or a scxctl name.
 [group('Performance')]
-margine-scheduler $MODE="status":
+lucciola-scheduler $MODE="status":
     #!/usr/bin/bash
     set -uo pipefail
 
@@ -413,7 +418,7 @@ margine-scheduler $MODE="status":
         ;;
 
       default|stop|off)
-        echo "Stopping scx_loader.service; kernel default (BORE on Margine) takes over."
+        echo "Stopping scx_loader.service; kernel default (BORE on Lucciola) takes over."
         stop_loader
         echo "ok - scx_loader.service is stopped and disabled."
         ;;
@@ -425,7 +430,7 @@ margine-scheduler $MODE="status":
           echo "Available scx schedulers:"
           list_schedulers | sed 's/^/  - /'
           echo
-          echo "Usage: ujust margine-scheduler [status|off|<scheduler>]"
+          echo "Usage: ujust lucciola-scheduler [status|off|<scheduler>]"
           exit 1
         fi
 
@@ -450,12 +455,12 @@ margine-scheduler $MODE="status":
 # path CAN use the host ROCm directly.
 
 # Install Alpaca: a local-LLM GUI (Ollama backend) in a Flatpak sandbox.
-[group('Margine')]
-margine-ai:
+[group('Lucciola')]
+lucciola-ai:
     #!/usr/bin/bash
     set -euo pipefail
     cat <<'EOF'
-    == Margine AI workflow ==
+    == Lucciola AI workflow ==
 
     This installs:
       - com.jeffser.Alpaca (Flatpak) — GUI chat with local LLMs.
@@ -493,7 +498,7 @@ margine-ai:
     Hardware note:
       - 8 GB VRAM is the comfort floor for ~7B-parameter models.
 
-    To uninstall: ujust margine-ai-remove
+    To uninstall: ujust lucciola-ai-remove
 
     EOF
     read -rp "Continue? [y/N] " ans
@@ -541,9 +546,9 @@ margine-ai:
     you to pick a model to download.
     EOF
 
-# Roll back the Margine AI workflow (undo margine-ai)
-[group('Margine')]
-margine-ai-remove:
+# Roll back the AI workflow (undo lucciola-ai).
+[group('Lucciola')]
+lucciola-ai-remove:
     #!/usr/bin/bash
     set -euo pipefail
     echo "This will:"
@@ -560,43 +565,22 @@ margine-ai-remove:
     sudo flatpak uninstall --system -y com.jeffser.Alpaca || true
     echo "Done."
 
-# Toggle the wayland-scroll-factor gnome-shell preload (on by default).
-[group('Margine')]
-wsf-preload STATE="status":
-    #!/usr/bin/bash
-    set -euo pipefail
-    OVERRIDE=/etc/systemd/user/org.gnome.Shell@.service.d/99-margine-wsf-off.conf
-    case "{{ STATE }}" in
-      off)
-        printf '[Service]\nUnsetEnvironment=LD_PRELOAD\n' | sudo install -Dm0644 /dev/stdin "$OVERRIDE"
-        echo "WSF preload disabled. Log out and back in to unload it."
-        ;;
-      on)
-        sudo rm -f "$OVERRIDE"
-        echo "WSF preload re-enabled. Log out and back in to load it."
-        ;;
-      *)
-        if [[ -f "$OVERRIDE" ]]; then echo "WSF preload: disabled via $OVERRIDE"; else echo "WSF preload: enabled (image default)"; fi
-        command -v wsf >/dev/null && wsf status || true
-        ;;
-    esac
-
-# Deprecated alias for margine-tpm-unlock (use that).
-[group('Margine')]
+# Deprecated alias for lucciola-tpm-unlock (use that).
+[group('Lucciola')]
 margine-tpm2-enroll ACTION="enroll":
     #!/usr/bin/bash
     set -euo pipefail
-    # Superseded by margine-tpm-unlock, which is lockout-proof by construction
+    # Superseded by lucciola-tpm-unlock, which is lockout-proof by construction
     # (refuses to enroll unless a passphrase/recovery keyslot survives — the
     # old recipe had no such guard, plus the A7 crypttab-sed finding). Kept as
     # a thin forwarder so muscle memory / older docs don't hit "recipe not
     # found"; enroll→enable, remove→disable.
-    echo "NOTE: 'margine-tpm2-enroll' was renamed to 'margine-tpm-unlock' (safer)."
+    echo "NOTE: 'margine-tpm2-enroll' was renamed to 'lucciola-tpm-unlock' (safer)."
     case "{{ ACTION }}" in
-      enroll) exec sudo /usr/bin/margine-tpm-unlock enable ;;
-      remove) exec sudo /usr/bin/margine-tpm-unlock disable ;;
-      status) exec /usr/bin/margine-tpm-unlock status ;;
-      *) echo "Usage: ujust margine-tpm-unlock [status|enable|disable]"; exit 1 ;;
+      enroll) exec sudo /usr/bin/lucciola-tpm-unlock enable ;;
+      remove) exec sudo /usr/bin/lucciola-tpm-unlock disable ;;
+      status) exec /usr/bin/lucciola-tpm-unlock status ;;
+      *) echo "Usage: ujust lucciola-tpm-unlock [status|enable|disable]"; exit 1 ;;
     esac
 
 # Slim profile for low-spec / non-technical machines: stops the deferred
@@ -605,32 +589,33 @@ margine-tpm2-enroll ACTION="enroll":
 # GNOME core suite stay. Masking flatpak-preinstall.service is REQUIRED,
 # not an optimization: the service re-installs every list entry at each
 # boot, so without the mask the removed apps come back. Reversible with
-# margine-slim-restore.
-[group('Margine')]
-margine-slim:
+# lucciola-slim-restore.
+[doc('Remove the larger preinstalled apps and keep them from coming back (undo: lucciola-slim-restore).')]
+[group('Lucciola')]
+lucciola-slim:
     #!/usr/bin/bash
     set -euo pipefail
     # Guard: if the browser is missing the first-boot install has not
     # finished (or failed) — masking now could strand a half-set system.
     if ! flatpak info --system app.zen_browser.zen >/dev/null 2>&1; then
       echo "Zen is not installed yet — first-boot app install still running (or broken)."
-      echo "Wait for the 'Margine is ready' notification, then re-run. (ujust margine-doctor helps if it never arrives.)"
+      echo "Wait for the 'Lucciola is ready' notification, then re-run. (ujust lucciola-doctor helps if it never arrives.)"
       exit 1
     fi
     cat <<'EOF'
-    == Margine slim profile ==
+    == Lucciola slim profile ==
 
     This will:
       - mask flatpak-preinstall.service (stops the deferred heavy
         creator apps: GIMP, Inkscape, darktable, OBS Studio — and
         stops it re-installing anything removed below at every boot)
       - remove the tinkerer apps: Apostrophe, Audacity, EasyEffects,
-        DistroShelf, Extension Manager, Fragments, Pinta, G4Music,
-        Blanket
-      - keep: Zen, Thunderbird, Bitwarden, LibreOffice and the whole
-        GNOME core suite
+        DistroShelf, Pinta, G4Music (and Extension Manager, Fragments,
+        Blanket where an older install still has them)
+      - keep: Zen, Thunderbird, LibreOffice and the whole GNOME core
+        suite
 
-    Everything is reversible: ujust margine-slim-restore brings the
+    Everything is reversible: ujust lucciola-slim-restore brings the
     stock set back, and single apps can be reinstalled from Bazaar.
     EOF
     read -rp "Continue? [y/N] " ans
@@ -648,22 +633,24 @@ margine-slim:
       sudo flatpak uninstall --system -y "$app" 2>/dev/null || true
     done
     sudo flatpak uninstall --system --unused -y || true
-    echo "Done — slim profile active. Restore anytime: ujust margine-slim-restore"
+    echo "Done: slim profile active. Restore anytime: ujust lucciola-slim-restore"
 
-# Near-empty profile on top of margine-slim: also removes office, mail
+# Near-empty profile on top of lucciola-slim: also removes office, mail
 # and the situational GNOME apps. What survives: Zen, Papers, Loupe,
 # Calculator, Text Editor, Calendar, Clocks and the system utilities
 # (Bazaar, Flatseal, Mission Center, Firmware, Disk Usage Analyzer).
-# Add anything back from Bazaar. Reversible with margine-slim-restore.
-[group('Margine')]
-margine-naked: margine-slim
+# Add anything back from Bazaar. Reversible with lucciola-slim-restore.
+[doc('Near-empty app set on top of lucciola-slim (undo: lucciola-slim-restore).')]
+[group('Lucciola')]
+lucciola-naked: lucciola-slim
     #!/usr/bin/bash
     set -euo pipefail
     cat <<'EOF'
-    == Margine naked profile (on top of slim) ==
+    == Lucciola naked profile (on top of slim) ==
 
-    This ALSO removes: LibreOffice, Thunderbird, Bitwarden, Maps,
-    Weather, Contacts, Sound Recorder, Impression, Deja Dup.
+    This ALSO removes: LibreOffice, Thunderbird, Contacts, Sound
+    Recorder, Impression, Deja Dup (and Bitwarden, Maps, Weather where
+    an older install still has them).
     EOF
     read -rp "Continue? [y/N] " ans
     case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted (slim profile already applied)."; exit 0 ;; esac
@@ -675,43 +662,47 @@ margine-naked: margine-slim
       sudo flatpak uninstall --system -y "$app" 2>/dev/null || true
     done
     sudo flatpak uninstall --system --unused -y || true
-    echo "Done — naked profile active. Restore anytime: ujust margine-slim-restore"
+    echo "Done: naked profile active. Restore anytime: ujust lucciola-slim-restore"
 
-# Undo margine-slim / margine-naked: unmasking flatpak-preinstall is
+# Undo lucciola-slim / lucciola-naked: unmasking flatpak-preinstall is
 # enough — its list contains the full stock set (bake fallback included),
 # so the next run re-installs everything that was removed.
-[group('Margine')]
-margine-slim-restore:
+[doc('Bring back the apps lucciola-slim or lucciola-naked removed.')]
+[group('Lucciola')]
+lucciola-slim-restore:
     #!/usr/bin/bash
     set -euo pipefail
-    echo "Restoring the stock Margine app set (runs in background, 5-15 min on a normal line)…"
+    echo "Restoring the stock Lucciola app set (runs in background, 5-15 min on a normal line)…"
     sudo systemctl unmask flatpak-preinstall.service
     sudo systemctl start flatpak-preinstall.service --no-block
     echo "Started. Apps reappear as they land; check progress with:"
     echo "  systemctl status flatpak-preinstall.service"
 
-# Go back to the stock Linux home layout (~/Documents, ~/Downloads, ...)
-# for anyone who does not want Margine's opinionated one. Never moves or
-# deletes files: it only changes where apps default to.
-[group('Margine')]
-margine-home-stock:
+# Go back to the stock Linux home layout (~/Documents, ~/Downloads, ...) on a
+# home where Margine's opinionated one was applied (an install that came
+# from Margine, or lucciola-configure-home-layout run by hand). New Lucciola
+# accounts already have the stock layout. Never moves or deletes files: it
+# only changes where apps default to.
+[doc("Go back to the stock home folders (Documents, Downloads...) on a home with Margine's layout.")]
+[group('Lucciola')]
+lucciola-home-stock:
     #!/usr/bin/bash
     set -euo pipefail
     echo "== Restore the stock home layout =="
     echo
-    echo "Margine ships an opinionated home: ~/data (backed up), ~/dev (code),"
-    echo "~/scratch (throwaway), with the XDG folders remapped inside them."
-    echo "This puts the machine back to what any other GNOME distro gives you."
+    echo "Margine's opinionated home: ~/data (backed up), ~/dev (code), ~/scratch"
+    echo "(throwaway), with the XDG folders remapped inside them. Lucciola uses the"
+    echo "standard folders; this puts a home that has Margine's layout back to them."
     echo
-    margine-restore-stock-home
+    lucciola-restore-stock-home
     echo
     read -rp "Apply these changes? [y/N] " ans
     case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
-    margine-restore-stock-home --apply
+    lucciola-restore-stock-home --apply
 
 # Remove the duplicate, broken printer queues cups-browsed left behind.
-[group('Margine')]
-margine-printers-repair:
+[group('Lucciola')]
+lucciola-printers-repair:
     #!/usr/bin/bash
     set -uo pipefail
     echo "== Repair duplicated printer queues =="
@@ -769,8 +760,8 @@ margine-printers-repair:
     echo "Reopen any app that was already running: print dialogs cache this list."
 
 # Turn the automatic dock display rescue on or off (default: on).
-[group('Margine')]
-margine-dock-rescue $STATE="status":
+[group('Lucciola')]
+lucciola-dock-rescue $STATE="status":
     #!/usr/bin/bash
     set -uo pipefail
     SWITCH=/etc/margine/dock-dp-rescue
@@ -779,7 +770,7 @@ margine-dock-rescue $STATE="status":
         sudo mkdir -p /etc/margine
         printf '%s\n' "$STATE" | sudo tee "$SWITCH" >/dev/null
         echo "Automatic dock display rescue: $STATE"
-        [ "$STATE" = off ] && echo "The manual command still works: ujust margine-dock-wake"
+        [ "$STATE" = off ] && echo "The manual command still works: ujust lucciola-dock-wake"
         ;;
       status)
         cur="$(tr -d '[:space:]' 2>/dev/null < "$SWITCH" || true)"
@@ -794,15 +785,15 @@ margine-dock-rescue $STATE="status":
         echo "negotiated fine, monitor or not. Last decisions:"
         journalctl -b --no-pager -t margine-dock-dp-rescue 2>/dev/null | tail -6 | sed 's/^/  /'
         echo
-        echo "ujust margine-dock-rescue off   |   ujust margine-dock-rescue on"
+        echo "ujust lucciola-dock-rescue off   |   ujust lucciola-dock-rescue on"
         ;;
       *)
-        echo "usage: ujust margine-dock-rescue [on|off|status]"; exit 1 ;;
+        echo "usage: ujust lucciola-dock-rescue [on|off|status]"; exit 1 ;;
     esac
 
 # Wake an external monitor a USB-C dock plugged in but never announced.
-[group('Margine')]
-margine-dock-wake:
+[group('Lucciola')]
+lucciola-dock-wake:
     #!/usr/bin/bash
     set -uo pipefail
     echo "== Wake a dock display =="
@@ -826,17 +817,17 @@ margine-dock-wake:
     case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
     sudo /usr/libexec/margine/dock-dp-rescue --force
 
-# Run all Margine validators (the "is my system as shipped?" check).
-[group('Margine')]
-margine-doctor:
+# Run all the validators (the "is my system as shipped?" check).
+[group('Lucciola')]
+lucciola-doctor:
     #!/usr/bin/bash
     set -uo pipefail
     # Private log dir per run: fixed /tmp/<name>.out paths were
     # predictable (symlink hazard) and collided across users (A8).
-    outdir="$(mktemp -d /tmp/margine-doctor.XXXXXX)"
+    outdir="$(mktemp -d /tmp/lucciola-doctor.XXXXXX)"
     overall=0
     ran=0
-    for v in /usr/bin/margine-validate-*; do
+    for v in /usr/bin/lucciola-validate-*; do
       [[ -x "$v" ]] || continue
       ran=$((ran + 1))
       name="$(basename "$v")"
@@ -852,29 +843,30 @@ margine-doctor:
     # failure class this recipe exists to catch. Never report healthy
     # on an empty loop (review finding A8).
     if [[ "$ran" -eq 0 ]]; then
-      echo "margine-doctor: NO validators found under /usr/bin/margine-validate-* — image regression."
+      echo "lucciola-doctor: NO validators found under /usr/bin/lucciola-validate-*: image regression."
       exit 1
     fi
     if [[ "$overall" -eq 0 ]]; then
-      echo "margine-doctor: all $ran validators passed ✅ (logs: $outdir)"
+      echo "lucciola-doctor: all $ran validators passed ✅ (logs: $outdir)"
     else
-      echo "margine-doctor: something is off — see the FAIL logs in $outdir"
+      echo "lucciola-doctor: something is off: see the FAIL logs in $outdir"
     fi
     exit $overall
 
-# Show Margine deployment vs latest :stable + lineage + kernel (read-only).
-[group('Margine')]
-margine-status:
-    @/usr/bin/margine-status
+# Show this deployment vs the latest :stable + lineage + kernel (read-only).
+[group('Lucciola')]
+lucciola-status:
+    @/usr/bin/lucciola-status
 
 # Pull the latest Margine :stable and stage it for the next reboot.
-# `ujust margine-update force` runs the update even when the image is
+# `ujust lucciola-update force` runs the update even when the image is
 # current (it also refreshes rpm-ostree layered packages).
-[group('Margine')]
-margine-update FORCE="":
+[doc('Stage the latest :stable for the next restart (force: also when current).')]
+[group('Lucciola')]
+lucciola-update FORCE="":
     #!/usr/bin/bash
     set -euo pipefail
-    # The verdict comes from margine-status, which compares image DIGESTS.
+    # The verdict comes from lucciola-status, which compares image DIGESTS.
     # Until 2026-09-20 this recipe printed "You're current, nothing to do"
     # and then asked for the password and ran the whole update anyway,
     # ending with "Reboot to switch into the new deployment" when there
@@ -883,7 +875,7 @@ margine-update FORCE="":
     # unreadable) still goes through the real update, which is the safe
     # side to err on.
     state=0
-    MARGINE_STATUS_EXIT_STATE=1 /usr/bin/margine-status || state=$?
+    MARGINE_STATUS_EXIT_STATE=1 /usr/bin/lucciola-status || state=$?
     if [ "{{ FORCE }}" != "force" ]; then
       case "$state" in
         0)  exit 0 ;;
@@ -895,18 +887,18 @@ margine-update FORCE="":
     # /usr/libexec/margine/system-update, shared with the Margine System
     # app so the terminal and the GUI can never disagree about how this
     # machine updates. (Short version: bootc upgrade refuses a
-    # client-layered deployment, e.g. after margine-gaming-native, so
+    # client-layered deployment, e.g. after lucciola-gaming-native, so
     # layered systems must go through rpm-ostree.)
     sudo /usr/libexec/margine/system-update
 
 # Enable/disable/inspect autologin on the login screen (greetd; default: status, read-only).
-[group('Margine')]
-margine-autologin ACTION="status" USER="":
-    @/usr/bin/margine-autologin "{{ ACTION }}" "{{ USER }}"
+[group('Lucciola')]
+lucciola-autologin ACTION="status" USER="":
+    @/usr/bin/lucciola-autologin "{{ ACTION }}" "{{ USER }}"
 
 # Secure Boot readiness: is the Margine key enrolled, and how to turn Secure Boot on.
-[group('Margine')]
-margine-secureboot ACTION="status":
+[group('Lucciola')]
+lucciola-secureboot ACTION="status":
     #!/usr/bin/bash
     set -uo pipefail
     HELPER=/usr/libexec/margine/mok-enroll
@@ -929,7 +921,7 @@ margine-secureboot ACTION="status":
         echo "Now restart. Before $product starts, a blue screen (MOK Manager) appears"
         echo "and waits for you: Enroll MOK -> Continue -> Yes"
         echo "  -> password: margine (US keyboard layout, letters only) -> Reboot"
-        echo "Then: ujust margine-secureboot   (to check, and for the firmware step)"
+        echo "Then: ujust lucciola-secureboot   (to check, and for the firmware step)"
         ;;
       never)
         sudo mkdir -p /etc/margine
@@ -937,7 +929,7 @@ margine-secureboot ACTION="status":
         sudo mokutil --revoke-import >/dev/null 2>&1 || true
         echo "$product will no longer ask to enroll its Secure Boot key."
         echo "Secure Boot must then stay OFF: with it on, the $product kernel would not boot."
-        echo "Undo any time with: ujust margine-secureboot enroll"
+        echo "Undo any time with: ujust lucciola-secureboot enroll"
         ;;
       status)
         echo "Secure Boot:        ${sb:-unknown}"
@@ -953,72 +945,74 @@ margine-secureboot ACTION="status":
           enrolled:*enabled*)
             echo "All set: Secure Boot is on and the $product kernel is trusted."
             echo "If the disk unlocks with the TPM, also lock the boot menu:"
-            echo "  ujust margine-grub-lock        (shows whether it is already on)" ;;
+            echo "  ujust lucciola-grub-lock        (shows whether it is already on)" ;;
           enrolled:*)
             echo "Ready to turn Secure Boot on:"
             echo "  1. If the disk unlocks with the TPM, keep the disk passphrase at hand:"
             echo "     Secure Boot changes the TPM measurements (PCR 7), so the next boot"
-            echo "     asks for the passphrase once; afterwards run: ujust margine-tpm-unlock enable"
+            echo "     asks for the passphrase once; afterwards run: ujust lucciola-tpm-unlock enable"
             echo "  2. systemctl reboot --firmware-setup"
             echo "  3. In the firmware, enable Secure Boot. On Framework laptops:"
             echo "     Security -> Secure Boot -> Enforce Secure Boot -> Enabled, then save."
             echo "     Leave the factory keys alone (no custom keys, no 'Force Secure Boot')."
-            echo "  4. Back in $product: ujust margine-secureboot   -> Secure Boot enabled" ;;
+            echo "  4. Back in $product: ujust lucciola-secureboot   -> Secure Boot enabled" ;;
           pending:*)
             echo "At the next restart a blue screen (MOK Manager) appears before $product starts:"
             echo "  press a key within 10 seconds -> Enroll MOK -> Continue -> Yes"
             echo "  -> password: margine -> Reboot. Missed it? It is asked again next boot." ;;
           absent:*)
             echo "Do NOT turn Secure Boot on yet: the $product kernel would not boot."
-            echo "Enroll the key first: ujust margine-secureboot enroll" ;;
+            echo "Enroll the key first: ujust lucciola-secureboot enroll" ;;
         esac
         ;;
       *)
-        echo "usage: ujust margine-secureboot [status|enroll|never]"; exit 1 ;;
+        echo "usage: ujust lucciola-secureboot [status|enroll|never]"; exit 1 ;;
     esac
 
 # TPM2 LUKS auto-unlock for the encrypted root (status/enable/disable).
-[group('Margine')]
-margine-tpm-unlock ACTION="status" PCRS="7":
-    sudo /usr/bin/margine-tpm-unlock "{{ ACTION }}" "{{ PCRS }}"
+[group('Lucciola')]
+lucciola-tpm-unlock ACTION="status" PCRS="7":
+    sudo /usr/bin/lucciola-tpm-unlock "{{ ACTION }}" "{{ PCRS }}"
 
 # Lock the GRUB menu: booting stays free, editing it needs a password (status/on/off).
-[group('Margine')]
-margine-grub-lock ACTION="status":
+[group('Lucciola')]
+lucciola-grub-lock ACTION="status":
     @sudo /usr/libexec/margine/grub-lock "{{ ACTION }}"
 
 # Re-apply the HiDPI GRUB font + grub.cfg now (safe, idempotent).
-[group('Margine')]
-margine-grub-hidpi:
+[group('Lucciola')]
+lucciola-grub-hidpi:
     @sudo /usr/libexec/margine/grub-hidpi-apply
 
 # Login keyring: status, open it at every login with the TPM (tpm/tpm-off), import Fedora 44's (import).
-[group('Margine')]
-margine-keyring ACTION="status":
-    @/usr/bin/margine-keyring "{{ ACTION }}"
+[group('Lucciola')]
+lucciola-keyring ACTION="status":
+    @/usr/bin/lucciola-keyring "{{ ACTION }}"
 
-# Spin up a throwaway VM to test a Margine ISO on the REAL secure path: UEFI
+# Spin up a throwaway VM to test a Lucciola ISO on the REAL secure path: UEFI
 # Secure Boot with Microsoft's keys pre-enrolled (so you also walk the MOK
 # enrollment flow Margine relies on) + an emulated TPM 2.0 (so you can test
 # LUKS TPM2 auto-unlock). Runs rootless on qemu:///session, so it reads ISOs
 # straight from your home — no sudo, no copying multi-GB files.
 #
-#   ujust margine-test-vm ~/scratch/downloads/margine-<date>.iso     # create + boot a VM from that ISO (recommended)
-#   ujust margine-test-vm ~/scratch/downloads/x.iso mytest 100         # custom name + 100 GiB disk
-#   ujust margine-test-vm                                       # no ISO: define a TEMPLATE to clone in virt-manager
+#   ujust lucciola-test-vm ~/Downloads/lucciola-<date>.iso        # create + boot a VM from that ISO (recommended)
+#   ujust lucciola-test-vm ~/Downloads/x.iso mytest 100           # custom name + 100 GiB disk
+#   ujust lucciola-test-vm                                       # no ISO: define a TEMPLATE to clone in virt-manager
 #
-# Tear a test VM down with `ujust margine-test-vm-remove [name]`.
+# Tear a test VM down with `ujust lucciola-test-vm-remove [name]`. The VM
+# tools are not in the image: `ujust lucciola-vm` layers them.
 
 # Collect a diagnostic bundle and open the GitHub bug-report page.
 # One command to give testers: it gathers what every bug report needs
 # (image version, deployment state, Secure Boot, flatpak health, recent
-# errors) into ~/margine-report.txt, then opens the issue template. Keeps
+# errors) into ~/lucciola-report.txt, then opens the issue template. Keeps
 # reports in ONE searchable place instead of forum threads and comments.
-[group('Margine')]
-margine-report:
+[doc('Collect a diagnostic report (~/lucciola-report.txt) and open the bug-report page.')]
+[group('Lucciola')]
+lucciola-report:
     #!/usr/bin/bash
     set -uo pipefail
-    OUT="$HOME/margine-report.txt"
+    OUT="$HOME/lucciola-report.txt"
     {
       echo "=== Lucciola report ($(date -u +%FT%TZ)) ==="
       echo
@@ -1049,9 +1043,9 @@ margine-report:
     echo "Opening the bug-report page. Attach or paste $OUT into the Logs field."
     xdg-open "https://github.com/daniel-g-carrasco/lucciola/issues/new/choose" >/dev/null 2>&1 ||       echo "Open manually: https://github.com/daniel-g-carrasco/lucciola/issues/new/choose"
 
-# Create + boot a throwaway Margine test VM from an ISO (libvirt).
-[group('Margine')]
-margine-test-vm ISO="" NAME="" DISK="80":
+# Create + boot a throwaway test VM from an ISO (libvirt).
+[group('Lucciola')]
+lucciola-test-vm ISO="" NAME="" DISK="80":
     #!/usr/bin/bash
     set -uo pipefail
 
@@ -1065,7 +1059,7 @@ margine-test-vm ISO="" NAME="" DISK="80":
     TEMPLATE="margine-test-template"
 
     for b in virt-install virsh; do
-      command -v "$b" >/dev/null 2>&1 || { echo "Missing '$b': the image's virt stack (build_files/15-devstack) should provide it."; exit 1; }
+      command -v "$b" >/dev/null 2>&1 || { echo "Missing '$b': the VM tools are not installed. Install them with 'ujust lucciola-vm', reboot, then run this again."; exit 1; }
     done
     virsh -c "$CONN" version >/dev/null 2>&1 || { echo "Cannot reach libvirt at $CONN."; exit 1; }
 
@@ -1082,16 +1076,16 @@ margine-test-vm ISO="" NAME="" DISK="80":
     print_walkthrough() {
       echo
       echo "  === Testing the secure path in this VM ==="
-      echo "  1. Boot the ISO and install Margine."
+      echo "  1. Boot the ISO and install Lucciola."
       echo "  2. First boot after install: Secure Boot is ON with Microsoft's keys,"
-      echo "     so shim runs, but Margine signs its kernel/modules with its own MOK."
+      echo "     so shim runs, but the kernel and modules are signed with the Margine key (a MOK)."
       echo "     A blue MOK Manager screen appears:"
       echo "         Enroll MOK -> Continue -> Yes -> enter the password"
-      echo "     (Margine's MOK password is 'margine', public by design), reboot."
+      echo "     (the MOK password is 'margine', public by design), reboot."
       echo "  3. Confirm Secure Boot:    mokutil --sb-state     # -> SecureBoot enabled"
-      echo "  4. TPM2 LUKS auto-unlock:  ujust margine-tpm-unlock enable"
+      echo "  4. TPM2 LUKS auto-unlock:  ujust lucciola-tpm-unlock enable"
       echo "     then reboot — the disk should unlock from the emulated TPM with no"
-      echo "     passphrase prompt ('ujust margine-tpm-unlock status' to inspect)."
+      echo "     passphrase prompt ('ujust lucciola-tpm-unlock status' to inspect)."
     }
 
     # Shared firmware: Secure Boot + enrolled MS keys, q35+SMM (required for SB),
@@ -1106,7 +1100,7 @@ margine-test-vm ISO="" NAME="" DISK="80":
         echo "Template '$TEMPLATE' already exists."
         echo "Clone it in virt-manager (right-click -> Clone), attach your ISO to the"
         echo "clone's CD-ROM, then boot. To rebuild it:"
-        echo "  ujust margine-test-vm-remove $TEMPLATE   (then re-run this)"
+        echo "  ujust lucciola-test-vm-remove $TEMPLATE   (then re-run this)"
         exit 0
       fi
       echo "Defining test template '$TEMPLATE' (${DISK} GiB, Secure Boot + enrolled MS keys + TPM 2.0)..."
@@ -1130,8 +1124,8 @@ margine-test-vm ISO="" NAME="" DISK="80":
       echo "  1. Open virt-manager. If it isn't listed: File -> Add Connection ->"
       echo "     'QEMU/KVM user session' -> Connect."
       echo "  2. Right-click '$TEMPLATE' -> Clone... (one clone per test)."
-      echo "  3. On the clone, point the CD-ROM at your ISO (~/scratch/downloads/*.iso), boot."
-      echo "  Or skip the clicking:  ujust margine-test-vm ~/scratch/downloads/<your>.iso"
+      echo "  3. On the clone, point the CD-ROM at your ISO (~/Downloads/*.iso), boot."
+      echo "  Or skip the clicking:  ujust lucciola-test-vm ~/Downloads/<your>.iso"
       print_walkthrough
       exit 0
     fi
@@ -1185,13 +1179,15 @@ margine-test-vm ISO="" NAME="" DISK="80":
     fi
     print_walkthrough
 
-# Tear down a Margine test VM (stops it, removes domain + disks + UEFI nvram).
-[group('Margine')]
-margine-test-vm-remove NAME="margine-test-template":
+# Tear down a test VM (stops it, removes domain + disks + UEFI nvram).
+[doc('Tear down a test VM (domain, disks, UEFI nvram).')]
+[group('Lucciola')]
+lucciola-test-vm-remove NAME="margine-test-template":
     #!/usr/bin/bash
     set -uo pipefail
     CONN="qemu:///session"
     NAME="{{ NAME }}"
+    command -v virsh >/dev/null 2>&1 || { echo "virsh is missing: the VM tools are not installed (ujust lucciola-vm)."; exit 1; }
     if ! virsh -c "$CONN" dominfo "$NAME" >/dev/null 2>&1; then
       echo "No such VM on $CONN: $NAME"
       echo "List test VMs:  virsh -c $CONN list --all"
@@ -1213,12 +1209,13 @@ margine-test-vm-remove NAME="margine-test-template":
 # virt-manager VMs (on qemu:///system) are never listed here.
 #
 # Remove ALL throwaway 'margine-test-*' VMs at once (domains + disks + nvram).
-[group('Margine')]
-margine-test-vm-clean $ALL="false":
+[group('Lucciola')]
+lucciola-test-vm-clean $ALL="false":
     #!/usr/bin/bash
     set -uo pipefail
     CONN="qemu:///session"
     KEEP="margine-test-template"
+    command -v virsh >/dev/null 2>&1 || { echo "virsh is missing: the VM tools are not installed (ujust lucciola-vm)."; exit 1; }
     if ! virsh -c "$CONN" version >/dev/null 2>&1; then echo "Cannot reach libvirt at $CONN."; exit 1; fi
     mapfile -t all < <(virsh -c "$CONN" list --all --name 2>/dev/null | grep '^margine-test-' || true)
     cleaned=()
@@ -1252,8 +1249,9 @@ margine-test-vm-clean $ALL="false":
 # the watchdog masks the app so nightly updates keep working, and points
 # here. This recipe unmasks it, updates it IN THE FOREGROUND (you see the
 # progress and can Ctrl+C a stall), and clears the exclusion on success.
-[group('Margine')]
-margine-update-unblock APP="":
+[doc('Update an app the update watchdog excluded from unattended updates.')]
+[group('Lucciola')]
+lucciola-update-unblock APP="":
     #!/usr/bin/bash
     set -uo pipefail
     BLOCKED=/var/lib/margine/update-watchdog/blocked
@@ -1263,7 +1261,7 @@ margine-update-unblock APP="":
         echo "Apps excluded from unattended updates:"
         awk '{print "  " $1 "  (since " $2 ")"}' "$BLOCKED"
         echo
-        echo "Re-run with the app id, e.g.:  ujust margine-update-unblock $(awk 'NR==1{print $1}' "$BLOCKED")"
+        echo "Re-run with the app id, e.g.:  ujust lucciola-update-unblock $(awk 'NR==1{print $1}' "$BLOCKED")"
       else
         echo "No apps are excluded from unattended updates."
       fi
@@ -1292,10 +1290,10 @@ margine-update-unblock APP="":
 # alone. Then darktable's settings are tuned for integrated GPUs (5% of RAM,
 # advantage 4: the X-Trans demosaic goes to the CPU, the rest stays on the
 # GPU). Measurements: docs/notes/2026-10-09-darktable-gpu-rocm.md;
-# `ujust margine-darktable-bench` repeats them on your own photos.
+# `ujust lucciola-darktable-bench` repeats them on your own photos.
 # GPU (OpenCL) for darktable via ROCm on AMD: status / enable (default) / disable.
 [group('Apps')]
-margine-darktable-opencl ACTION="enable":
+lucciola-darktable-opencl ACTION="enable":
     #!/usr/bin/bash
     set -uo pipefail
     DT=org.darktable.Darktable
@@ -1335,7 +1333,7 @@ margine-darktable-opencl ACTION="enable":
         echo "darktable is back to the Flatpak's own OpenCL (rusticl); with Mesa 26.2 that means the CPU."
         exit 0 ;;
       enable) ;;
-      *) echo "usage: ujust margine-darktable-opencl [status|enable|disable]"; exit 2 ;;
+      *) echo "usage: ujust lucciola-darktable-opencl [status|enable|disable]"; exit 2 ;;
     esac
     if [ "$AMD" = 1 ] && [ -e "$SHIM/libamdocl64.so" ] && [ -e "$VENDORS/amdocl64.icd" ]; then
       flatpak override --user --env=LD_LIBRARY_PATH="/run/host$SHIM" \
@@ -1354,7 +1352,7 @@ margine-darktable-opencl ACTION="enable":
     echo "$RESULT"
     if ! grep -q "is AVAILABLE and ENABLED" <<<"$RESULT"; then
       echo "OpenCL is still not available; darktable keeps running on the CPU."
-      echo "Undo with: ujust margine-darktable-opencl disable"
+      echo "Undo with: ujust lucciola-darktable-opencl disable"
       exit 1
     fi
     if running; then
@@ -1365,12 +1363,12 @@ margine-darktable-opencl ACTION="enable":
     fi
     # Turn OpenCL and the ROCm platform on in the real profile, let darktable
     # record the device there, then tune the device line.
-    margine-configure-darktable-import --apply --gpu-tune
+    lucciola-configure-darktable-import --apply --gpu-tune
     flatpak run --command=darktable-cltest "$DT" >/dev/null 2>&1
-    margine-configure-darktable-import --apply --gpu-tune
+    lucciola-configure-darktable-import --apply --gpu-tune
     echo
     echo "Done. Start darktable; Preferences > processing shows the GPU."
-    echo "Undo with: ujust margine-darktable-opencl disable"
+    echo "Undo with: ujust lucciola-darktable-opencl disable"
 
 # The mouse wheel and two-finger scroll move darktable's module panel
 # (panel, Margine's default for new profiles) or adjust the control under
@@ -1378,18 +1376,18 @@ margine-darktable-opencl ACTION="enable":
 # Ctrl+Alt+scroll still adjusts a control. Close darktable first.
 # darktable scrolling: module panel (panel) or control under the pointer (values).
 [group('Apps')]
-margine-darktable-scroll ACTION="panel":
+lucciola-darktable-scroll ACTION="panel":
     #!/usr/bin/bash
     set -uo pipefail
     case "{{ ACTION }}" in
-      panel|values) margine-configure-darktable-import --apply --scroll "{{ ACTION }}" ;;
-      *) echo "usage: ujust margine-darktable-scroll [panel|values]"; exit 2 ;;
+      panel|values) lucciola-configure-darktable-import --apply --scroll "{{ ACTION }}" ;;
+      *) echo "usage: ujust lucciola-darktable-scroll [panel|values]"; exit 2 ;;
     esac
 
 # Times darktable on your own RAWs (by default, for each RAW format in
 # Pictures/raw, the photo with the longest edit history; or the files you
 # pass): CPU only against the GPU through ROCm, with the settings
-# margine-darktable-opencl uses and the alternatives. It waits for a quiet,
+# lucciola-darktable-opencl uses and the alternatives. It waits for a quiet,
 # cool machine before every run and discards and repeats runs that other
 # programs or a suspend disturbed; your darktable profile is only read.
 # quick takes about half an hour, full one to two hours: plug the charger in
@@ -1397,7 +1395,7 @@ margine-darktable-scroll ACTION="panel":
 # darktable benchmark, CPU against GPU, on your photos: [quick|full] [RAW...].
 [group('Apps')]
 [positional-arguments]
-margine-darktable-bench MODE="quick" *RAWS:
+lucciola-darktable-bench MODE="quick" *RAWS:
     #!/usr/bin/bash
     exec /usr/libexec/margine/darktable-bench/bench "$@"
 
@@ -1405,11 +1403,11 @@ margine-darktable-bench MODE="quick" *RAWS:
 # `docker` for scripts. For the tools wired to Docker's own daemon, this
 # layers Docker CE from Docker's repository (signing key pinned by
 # fingerprint), in place of podman-docker, enables the socket and the IPv4
-# forwarding Docker needs; margine-dev-groups puts wheel users in the
+# forwarding Docker needs; lucciola-dev-groups puts wheel users in the
 # docker group at the next boot.
 # Docker CE from Docker's repository: install (default) / remove / status.
 [group('Developer')]
-margine-docker ACTION="install":
+lucciola-docker ACTION="install":
     #!/usr/bin/bash
     set -euo pipefail
     PKGS=(docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin)
@@ -1418,7 +1416,7 @@ margine-docker ACTION="install":
         if rpm -q docker-ce >/dev/null 2>&1; then
           echo "Docker CE: installed ($(rpm -q --qf '%{VERSION}' docker-ce)); docker.socket: $(systemctl is-enabled docker.socket 2>/dev/null || echo not-enabled)"
         else
-          echo "Docker CE: not installed (podman answers to docker). Install: ujust margine-docker"
+          echo "Docker CE: not installed (podman answers to docker). Install: ujust lucciola-docker"
         fi ;;
       remove)
         sudo rpm-ostree override reset podman-docker $(printf -- '--uninstall %s ' "${PKGS[@]}")
@@ -1435,8 +1433,8 @@ margine-docker ACTION="install":
         # The unit only exists in the new deployment: enable it by hand.
         sudo mkdir -p /etc/systemd/system/sockets.target.wants
         sudo ln -sf /usr/lib/systemd/system/docker.socket /etc/systemd/system/sockets.target.wants/docker.socket
-        echo "Docker CE layered. Reboot: margine-dev-groups then adds wheel users to the docker group." ;;
-      *) echo "usage: ujust margine-docker [install|remove|status]"; exit 2 ;;
+        echo "Docker CE layered. Reboot: lucciola-dev-groups then adds wheel users to the docker group." ;;
+      *) echo "usage: ujust lucciola-docker [install|remove|status]"; exit 2 ;;
     esac
 
 # Tailscale on demand. Not in the image since 2026-10-10: it ran a daemon
@@ -1444,7 +1442,7 @@ margine-docker ACTION="install":
 # Layers it from Tailscale's repository (key pinned) and enables tailscaled.
 # Tailscale from its repository: install (default) / remove / status.
 [group('Developer')]
-margine-tailscale ACTION="install":
+lucciola-tailscale ACTION="install":
     #!/usr/bin/bash
     set -euo pipefail
     case "{{ ACTION }}" in
@@ -1453,7 +1451,7 @@ margine-tailscale ACTION="install":
           echo "tailscale: installed; tailscaled: $(systemctl is-active tailscaled 2>/dev/null || true)"
           tailscale status 2>/dev/null | head -3 || true
         else
-          echo "tailscale: not installed. Install: ujust margine-tailscale"
+          echo "tailscale: not installed. Install: ujust lucciola-tailscale"
         fi ;;
       remove)
         sudo rpm-ostree uninstall tailscale
@@ -1468,25 +1466,26 @@ margine-tailscale ACTION="install":
         sudo mkdir -p /etc/systemd/system/multi-user.target.wants
         sudo ln -sf /usr/lib/systemd/system/tailscaled.service /etc/systemd/system/multi-user.target.wants/tailscaled.service
         echo "Tailscale layered. Reboot, then: sudo tailscale up" ;;
-      *) echo "usage: ujust margine-tailscale [install|remove|status]"; exit 2 ;;
+      *) echo "usage: ujust lucciola-tailscale [install|remove|status]"; exit 2 ;;
     esac
 
-# VS Code as an RPM, on demand. The image preinstalls the Flatpak
-# (com.visualstudio.code); extensions that run host tools (a terminal on the
-# host, gh, podman, rpm-ostree) need the native build. Layers it from
-# Microsoft's repository, signing key pinned by fingerprint.
+# VS Code as an RPM, on demand. Nothing is preinstalled since 2026-10-18
+# (the Flatpak com.visualstudio.code is in Bazaar); extensions that run
+# host tools (a terminal on the host, gh, podman, rpm-ostree) need the
+# native build. Layers it from Microsoft's repository, signing key pinned
+# by fingerprint.
 # VS Code native RPM from Microsoft's repository: install (default) / remove / status.
 [group('Developer')]
-margine-vscode ACTION="install":
+lucciola-vscode ACTION="install":
     #!/usr/bin/bash
     set -euo pipefail
     case "{{ ACTION }}" in
       status)
-        rpm -q code >/dev/null 2>&1 && echo "VS Code RPM: installed ($(rpm -q --qf '%{VERSION}' code))" || echo "VS Code RPM: not installed (the Flatpak com.visualstudio.code is the default)" ;;
+        rpm -q code >/dev/null 2>&1 && echo "VS Code RPM: installed ($(rpm -q --qf '%{VERSION}' code))" || echo "VS Code RPM: not installed (the Flatpak com.visualstudio.code is in Bazaar)" ;;
       remove)
         sudo rpm-ostree uninstall code
         sudo rm -f /etc/yum.repos.d/vscode.repo
-        echo "VS Code RPM removed; the Flatpak stays. Reboot to apply." ;;
+        echo "VS Code RPM removed (a Flatpak VS Code, if installed, stays). Reboot to apply." ;;
       install)
         tmp="$(mktemp)"
         printf '%s\n' '[code]' 'name=Visual Studio Code' 'baseurl=https://packages.microsoft.com/yumrepos/vscode' \
@@ -1495,8 +1494,8 @@ margine-vscode ACTION="install":
           https://packages.microsoft.com/keys/microsoft.asc BC528686B50D79E339D3721CEB3E94ADBE1229CF
         rm -f "$tmp"
         sudo rpm-ostree install --idempotent code
-        echo "VS Code RPM layered. Reboot; both the Flatpak and the RPM then appear in the Dev folder." ;;
-      *) echo "usage: ujust margine-vscode [install|remove|status]"; exit 2 ;;
+        echo "VS Code RPM layered. Reboot to use it." ;;
+      *) echo "usage: ujust lucciola-vscode [install|remove|status]"; exit 2 ;;
     esac
 
 # Developer tools on demand, what Bluefin DX used to ship and the image no
@@ -1505,7 +1504,7 @@ margine-vscode ACTION="install":
 # g++, make). For everyday builds, distrobox and toolbox stay the way.
 # Developer tools layer (bpf, sysprof, igt, gcc): install (default) / remove / status.
 [group('Developer')]
-margine-devtools ACTION="install":
+lucciola-devtools ACTION="install":
     #!/usr/bin/bash
     set -euo pipefail
     PKGS=(bcc bpftrace bpftop sysprof igt-gpu-tools gcc gcc-c++ make git-lfs git-credential-libsecret)
@@ -1513,12 +1512,85 @@ margine-devtools ACTION="install":
       status) for p in "${PKGS[@]}"; do printf '  %-14s %s\n' "$p" "$(rpm -q "$p" >/dev/null 2>&1 && echo installed || echo -)"; done ;;
       remove) sudo rpm-ostree uninstall "${PKGS[@]}"; echo "Removed. Reboot to apply." ;;
       install) sudo rpm-ostree install --idempotent "${PKGS[@]}"; echo "Layered. Reboot to use them." ;;
-      *) echo "usage: ujust margine-devtools [install|remove|status]"; exit 2 ;;
+      *) echo "usage: ujust lucciola-devtools [install|remove|status]"; exit 2 ;;
+    esac
+
+# Virtual machines on demand: libvirt, QEMU/KVM, virt-manager, UEFI firmware
+# (edk2-ovmf) and the software TPM (swtpm), plus podman-machine, which runs
+# on the same QEMU. Not in the image since 2026-10-18 (about 290 MiB most
+# installs never open). Layers them; the libvirt sockets are enabled for
+# the next boot, when lucciola-dev-groups also puts wheel users in the
+# libvirt group (virt-manager on qemu:///system without a password).
+# Run it again after the reboot to start the sockets and join the group at
+# once. `ujust lucciola-test-vm` needs it.
+# VMs (libvirt, QEMU/KVM, virt-manager, OVMF, swtpm): install (default) / remove / status.
+[group('Developer')]
+lucciola-vm ACTION="install":
+    #!/usr/bin/bash
+    set -euo pipefail
+    PKGS=(libvirt libvirt-nss qemu-kvm virt-manager virt-viewer virt-install edk2-ovmf swtpm dnsmasq
+          qemu-img qemu-device-display-virtio-gpu qemu-device-display-virtio-vga
+          qemu-device-usb-redirect qemu-char-spice podman-machine)
+    # Fedora's presets enable these when libvirt is installed (90-default.preset):
+    # the modular daemons, socket activated.
+    SOCKETS=()
+    for d in virtqemud virtnetworkd virtstoraged virtnodedevd virtsecretd virtinterfaced virtnwfilterd virtproxyd; do
+      SOCKETS+=("$d.socket" "$d-ro.socket" "$d-admin.socket")
+    done
+    SOCKETS+=(virtlogd.socket virtlogd-admin.socket virtlockd.socket virtlockd-admin.socket)
+    installed() { rpm -q libvirt-daemon qemu-kvm virt-manager >/dev/null 2>&1; }
+    case "{{ ACTION }}" in
+      status)
+        if installed; then
+          echo "VM tools: installed (libvirt $(rpm -q --qf '%{VERSION}' libvirt-daemon), QEMU $(rpm -q --qf '%{VERSION}' qemu-kvm))"
+          echo "virtqemud.socket: $(systemctl is-active virtqemud.socket 2>/dev/null || true)"
+          if [[ " $(id -nG) " == *" libvirt "* ]]; then echo "group libvirt: yes"; else echo "group libvirt: not yet (reboot, or run: ujust lucciola-vm)"; fi
+        elif rpm-ostree status --json | python3 -c 'import json,sys; sys.exit(0 if "libvirt" in json.load(sys.stdin)["deployments"][0].get("requested-packages", []) else 1)'; then
+          echo "VM tools: layered, active after a reboot."
+        else
+          echo "VM tools: not installed. Install: ujust lucciola-vm"
+        fi ;;
+      remove)
+        mapfile -t LAYERED < <(rpm-ostree status --json | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)["deployments"][0].get("requested-packages", [])))')
+        declare -A IS_LAYERED=()
+        for p in "${LAYERED[@]}"; do IS_LAYERED["$p"]=1; done
+        DROP=()
+        for p in "${PKGS[@]}"; do [[ -n "${IS_LAYERED[$p]:-}" ]] && DROP+=("$p"); done
+        if (( ${#DROP[@]} == 0 )); then echo "No VM package is layered: nothing to remove."; exit 0; fi
+        sudo rpm-ostree uninstall "${DROP[@]}"
+        for s in "${SOCKETS[@]}"; do sudo rm -f "/etc/systemd/system/sockets.target.wants/$s"; done
+        echo "VM tools removed. Reboot to apply. Your VMs' disks stay in /var/lib/libvirt/images"
+        echo "and ~/.local/share/libvirt/images." ;;
+      install)
+        if installed; then
+          # Booted into the layer: start what the next boot would start.
+          sudo systemctl enable --now "${SOCKETS[@]}" 2>/dev/null || sudo systemctl start virtqemud.socket virtnetworkd.socket virtstoraged.socket || true
+          sudo /usr/bin/lucciola-dev-groups
+          echo "VM tools ready. virt-manager works now; log out and back in once so the"
+          echo "libvirt group applies (qemu:///system without a password)."
+          exit 0
+        fi
+        echo "Layering the VM tools (about 290 MiB): ${PKGS[*]}"
+        sudo rpm-ostree install --idempotent "${PKGS[@]}"
+        # The units only exist in the new deployment: enable them by hand.
+        sudo mkdir -p /etc/systemd/system/sockets.target.wants
+        for s in "${SOCKETS[@]}"; do
+          sudo ln -sf "/usr/lib/systemd/system/$s" "/etc/systemd/system/sockets.target.wants/$s"
+        done
+        echo "VM tools layered. Reboot: lucciola-dev-groups then adds wheel users to the"
+        echo "libvirt group. Rootless VMs (qemu:///session, ujust lucciola-test-vm) need no group." ;;
+      *) echo "usage: ujust lucciola-vm [install|remove|status]"; exit 2 ;;
     esac
 
 # Install/reinstall Koofr Desktop (native, rootless, autostart hidden).
+# Spola (ujust install-spola) replaced it; this stays for whoever still
+# needs the vendor client, and for `ujust install-koofr remove` after a
+# migration. Its tray icon may not work: Koofr re-announces the icon every
+# second, Noctalia rebuilds the tray each time and hover and clicks stop
+# working (noctalia-dev/noctalia#4537), and since 2026-10-18 the image
+# carries neither the shim that worked around it nor libappindicator-gtk3.
 # `ujust install-koofr launchers` only rewrites the menu and autostart
-# entries of an existing install (e.g. to pick up the tray fix).
+# entries of an existing install (e.g. to drop the old tray shim).
 [group('Apps')]
 install-koofr ACTION="install":
     #!/usr/bin/bash
@@ -1528,13 +1600,7 @@ install-koofr ACTION="install":
     AUTOSTART="${HOME}/.config/autostart/koofr.desktop"
     CFG="${HOME}/.koofr/config.json"
     URL="https://app.koofr.net/dl/apps/linux64"
-    # Koofr re-announces the same tray icon every second through a new temp
-    # file; the image's shim passes it on only when it really changes (see
-    # build_files/47-koofr-tray-fix). Without it tray hosts that rebuild on
-    # every change (Noctalia) lose hover and clicks on all tray icons.
-    FIX=/usr/lib64/margine/koofr-tray-fix.so
     RUN="${DEST}/storagegui"
-    [ -f "${FIX}" ] && RUN="env LD_PRELOAD=${FIX} ${DEST}/storagegui"
 
     write_launchers() {
       # Menu launcher: NO flag -> a manual launch opens the window normally.
@@ -1556,7 +1622,7 @@ install-koofr ACTION="install":
     if [ "{{ ACTION }}" = "launchers" ]; then
       [ -x "${DEST}/storagegui" ] || { echo "Koofr is not installed (no ${DEST}/storagegui)."; exit 1; }
       write_launchers
-      echo "Koofr launchers rewritten$([ -f "${FIX}" ] && echo ' with the tray fix'). It applies from the next start of Koofr (log out and back in)."
+      echo "Koofr launchers rewritten. It applies from the next start of Koofr (log out and back in)."
       exit 0
     fi
 
@@ -1592,6 +1658,7 @@ install-koofr ACTION="install":
     fi
 
     echo; echo "Koofr installed in ${DEST}. Autostart = hidden to tray; menu launch = normal window."
+    echo "Its tray icon may not show or respond under Noctalia; Spola (ujust install-spola) is the supported client."
 
 # Install Spola, the Koofr sync client that replaces Koofr Desktop
 # (https://spola.neistar.com): a Flatpak from its own signed repository,
@@ -1678,12 +1745,12 @@ koofr ACTION="install":
 
 # Set up Sunshine (Moonlight game-stream host). EXPERIMENTAL, opt-in.
 [group('Gaming')]
-margine-sunshine:
+lucciola-sunshine:
     #!/usr/bin/bash
     set -euo pipefail
 
     cat <<'EOF'
-    == Margine Sunshine setup (EXPERIMENTAL) ==
+    == Lucciola Sunshine setup (EXPERIMENTAL) ==
 
     Sunshine is the host side of Moonlight game streaming. This sets it up
     the atomic-friendly way (no rpm-ostree layering):
@@ -1695,7 +1762,7 @@ margine-sunshine:
       4. opens the Sunshine firewall ports (47984-48010, TCP + UDP)
 
     Heads-up:
-      - This is Margine's first cut, not yet validated end-to-end. If
+      - This is a first cut, not yet validated end-to-end. If
         something is off, please report it.
       - It opens network ports and grants input-device access, which is
         why it is an explicit opt-in command and not a default.
@@ -1746,12 +1813,12 @@ margine-sunshine:
          password and pair your Moonlight client.
       4. To autostart on login, enable it in the Sunshine web UI.
 
-    Roll back with:  ujust margine-sunshine-remove
+    Roll back with:  ujust lucciola-sunshine-remove
     EOF
 
-# Undo margine-sunshine (Flatpak + uinput rule + firewall ports).
+# Undo lucciola-sunshine (Flatpak + uinput rule + firewall ports).
 [group('Gaming')]
-margine-sunshine-remove:
+lucciola-sunshine-remove:
     #!/usr/bin/bash
     set -euo pipefail
     echo "Removing Sunshine..."
@@ -1781,8 +1848,9 @@ margine-sunshine-remove:
 # see an Opera-on-Linux user agent (the one condition Netflix uses to
 # unlock 1080p on Linux). 1080p also depends on the title, your plan and
 # the network. Verify with the Netflix overlay: Ctrl+Shift+Alt+D.
+[doc('Netflix in 1080p in Zen (a user-agent extension, DRM on): status / install / remove.')]
 [group('Apps')]
-margine-netflix-1080p $ACTION="status":
+lucciola-netflix-1080p $ACTION="status":
     #!/usr/bin/bash
     set -uo pipefail
     APP="app.zen_browser.zen"
@@ -1834,7 +1902,7 @@ margine-netflix-1080p $ACTION="status":
       exit 0
     fi
     if [ "$ACTION" != "install" ]; then
-      echo "usage: ujust margine-netflix-1080p [status|install|remove]"
+      echo "usage: ujust lucciola-netflix-1080p [status|install|remove]"
       exit 2
     fi
     # Precise: match the running Flatpak app id exactly, not any process
@@ -1862,6 +1930,7 @@ margine-netflix-1080p $ACTION="status":
     # sideloaded add-ons stay disabled; 14 clears the PROFILE bit (1) only, so
     # the app/user/system scopes stay locked. The profile dir is the user's
     # own, so this does not widen who can add an extension.
+    # The markers keep the recipe's old name: they are in users' user.js.
     if ! grep -q "margine-netflix-1080p" "$USER_JS" 2>/dev/null; then
       {
         echo '// margine-netflix-1080p managed block'
@@ -1881,7 +1950,7 @@ margine-netflix-1080p $ACTION="status":
     echo
     echo "Note: this only changes how Netflix identifies the browser. It does not"
     echo "provide Widevine (Zen downloads that itself) and cannot guarantee 1080p for"
-    echo "every title, plan or network. Remove with: ujust margine-netflix-1080p remove"
+    echo "every title, plan or network. Remove with: ujust lucciola-netflix-1080p remove"
 
 # Enable GPU (HIP) rendering in the preinstalled Blender Flatpak on AMD.
 #
@@ -1898,8 +1967,9 @@ margine-netflix-1080p $ACTION="status":
 # supports it natively (no HSA_OVERRIDE, which would abort with
 # INVALID_ISA), a GPU-only Cycles render completes, and the GUI stays
 # clean. status / enable / disable.
+[doc('Blender (Flatpak) renders on an AMD GPU through the host ROCm: status / enable / disable.')]
 [group('Apps')]
-margine-blender-gpu $ACTION="status":
+lucciola-blender-gpu $ACTION="status":
     #!/usr/bin/bash
     set -uo pipefail
     APP="org.blender.Blender"
@@ -1930,7 +2000,7 @@ margine-blender-gpu $ACTION="status":
       exit 0
     fi
     if [ "$ACTION" != "enable" ]; then
-      echo "usage: ujust margine-blender-gpu [status|enable|disable]"
+      echo "usage: ujust lucciola-blender-gpu [status|enable|disable]"
       exit 2
     fi
     if [ -z "$HOST_HIP" ]; then
@@ -1963,4 +2033,49 @@ margine-blender-gpu $ACTION="status":
     echo
     echo "Verified HIP device: ${DEV:-NONE FOUND}"
     echo "Open Blender (it opens normally now), then in each project set Render Properties > Device > GPU Compute."
-    echo "Revert with: ujust margine-blender-gpu disable"
+    echo "Revert with: ujust lucciola-blender-gpu disable"
+
+# The recipes were margine-* until 2026-10-18. The old names stay as
+# aliases (ujust --list shows them next to the new ones) while installs,
+# notes and habits move over.
+alias margine-ai := lucciola-ai
+alias margine-ai-remove := lucciola-ai-remove
+alias margine-autologin := lucciola-autologin
+alias margine-blender-gpu := lucciola-blender-gpu
+alias margine-bootstrap := lucciola-bootstrap
+alias margine-darktable-bench := lucciola-darktable-bench
+alias margine-darktable-opencl := lucciola-darktable-opencl
+alias margine-darktable-scroll := lucciola-darktable-scroll
+alias margine-devtools := lucciola-devtools
+alias margine-dock-rescue := lucciola-dock-rescue
+alias margine-dock-wake := lucciola-dock-wake
+alias margine-docker := lucciola-docker
+alias margine-doctor := lucciola-doctor
+alias margine-gaming := lucciola-gaming
+alias margine-gaming-native := lucciola-gaming-native
+alias margine-gaming-native-remove := lucciola-gaming-native-remove
+alias margine-gaming-remove := lucciola-gaming-remove
+alias margine-grub-hidpi := lucciola-grub-hidpi
+alias margine-grub-lock := lucciola-grub-lock
+alias margine-home-stock := lucciola-home-stock
+alias margine-keyring := lucciola-keyring
+alias margine-naked := lucciola-naked
+alias margine-netflix-1080p := lucciola-netflix-1080p
+alias margine-printers-repair := lucciola-printers-repair
+alias margine-report := lucciola-report
+alias margine-scheduler := lucciola-scheduler
+alias margine-secureboot := lucciola-secureboot
+alias margine-slim := lucciola-slim
+alias margine-slim-restore := lucciola-slim-restore
+alias margine-status := lucciola-status
+alias margine-sunshine := lucciola-sunshine
+alias margine-sunshine-remove := lucciola-sunshine-remove
+alias margine-tailscale := lucciola-tailscale
+alias margine-test-vm := lucciola-test-vm
+alias margine-test-vm-clean := lucciola-test-vm-clean
+alias margine-test-vm-remove := lucciola-test-vm-remove
+alias margine-tpm-unlock := lucciola-tpm-unlock
+alias margine-update := lucciola-update
+alias margine-update-unblock := lucciola-update-unblock
+alias margine-vm := lucciola-vm
+alias margine-vscode := lucciola-vscode

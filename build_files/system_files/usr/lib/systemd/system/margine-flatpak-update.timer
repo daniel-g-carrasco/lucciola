@@ -1,5 +1,5 @@
 [Unit]
-Description=Margine: update system Flatpak apps, twice a day
+Description=Lucciola: update system Flatpak apps, twice a day
 
 [Timer]
 # Wall-clock, not monotonic (monotonic timers freeze across suspend and

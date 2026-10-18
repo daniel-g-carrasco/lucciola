@@ -1,5 +1,5 @@
 [Unit]
-Description=Margine: schedule staleness check every 12h
+Description=Lucciola: schedule staleness check every 12h
 
 [Timer]
 OnBootSec=10min

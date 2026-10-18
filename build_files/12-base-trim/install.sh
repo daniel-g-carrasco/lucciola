@@ -35,13 +35,15 @@
 # that nothing needs:
 #   - qemu for every architecture but x86 (Bluefin DX installs the `qemu`
 #     meta package): 57 packages, 1088 MB. Margine's VMs
-#     (margine-test-vm, virt-manager, podman-machine) are x86 only.
+#     (margine-test-vm, virt-manager, podman-machine) are x86 only, and
+#     since 2026-10-18 layered on demand (`ujust lucciola-vm`).
 #   - wine and mingw64, 1.9 GB: weak dependencies of lutris left behind by
-#     the gaming bake in custom-kernel. The bake no longer installs weak
-#     dependencies; this is the guard.
+#     the gaming bake in custom-kernel. The bake ran without weak
+#     dependencies from 2026-10-10 and left the build on 2026-10-18 (the
+#     gaming chain is layered on demand); this is the guard.
 #   - fluid soundfonts and wildmidi (330 MB), python3-boto3/botocore
-#     (130 MB), gnome-user-docs and yelp (65 MB; Margine ships its own
-#     offline docs and Bluefin itself excludes yelp): orphans.
+#     (130 MB), gnome-user-docs and yelp (65 MB; Bluefin itself excludes
+#     yelp): orphans.
 # The families are matched by name pattern, so they are removed whatever
 # the base's version of them; the prove-it block then checks that
 # everything the x86 VMs need is still there.
@@ -49,16 +51,19 @@
 # DEVELOPER STACK ON DEMAND (2026-10-10)
 #
 # Bluefin DX ships a developer stack most installs never open. What stays
-# is what Margine's recipes and validators use: the x86 virt stack, Podman
-# (with podman-docker answering to `docker`), ROCm OpenCL and the HIP
-# runtime. What goes, and comes back with one ujust command:
-#   - Docker CE (409 MB): `ujust margine-docker`
+# is what Margine's recipes and validators use: Podman (with podman-docker
+# answering to `docker`), ROCm OpenCL and the HIP runtime. What goes, and
+# comes back with one ujust command:
+#   - the x86 virt stack (libvirt, qemu-kvm, virt-manager, OVMF, swtpm,
+#     podman-machine): `ujust lucciola-vm` (2026-10-18; 15-devstack no
+#     longer installs it, and a base that ships it keeps it)
+#   - Docker CE (409 MB): `ujust lucciola-docker`
 #   - cockpit, eBPF tracing (bcc, bpftrace, bpftop and their LLVM 21),
 #     sysprof, igt-gpu-tools, the host toolchain (gcc, g++, glibc-devel,
-#     kernel-devel): `ujust margine-devtools`; distrobox is the everyday
+#     kernel-devel): `ujust lucciola-devtools`; distrobox is the everyday
 #     way to build things
 #   - tailscale (72 MB and a daemon with an open UDP port on every install,
-#     docs/SECURITY-CLAIMS.md D4): `ujust margine-tailscale`
+#     docs/SECURITY-CLAIMS.md D4): `ujust lucciola-tailscale`
 #   - incus and incus-agent, rclone, restic, borgbackup: layer them or
 #     `brew install` them
 #   - the HIP compiler and its 2 GB of static LLVM (rocm-llvm-static,
@@ -98,7 +103,7 @@ TRIM_PKGS=(
   # negativo17's gstreamer1-plugins-bad (custom-kernel's codec swap) links
   # libWildMidi and gtk4 requires that package (THE CASCADE above).
   python3-boto3 python3-botocore python3-s3transfer         # AWS SDK, orphans
-  gnome-user-docs yelp yelp-libs yelp-xsl                   # GNOME help: Margine ships offline docs
+  gnome-user-docs yelp yelp-libs yelp-xsl                   # GNOME help, orphans
   # Two packages the new base brings and no Margine ever shipped (Bluefin
   # excluded both): GNOME Software, because Bazaar is the store and GNOME
   # Software would check, stage and announce OS and firmware updates on
@@ -114,7 +119,7 @@ TRIM_PKGS=(
   sysprof sysprof-cli libsysprof-capture igt-gpu-tools
   gcc gcc-c++ cpp gcc-plugin-annobin glibc-devel libstdc++-devel kernel-headers kernel-cachyos-devel systemtap-devel
   tailscale incus incus-agent rclone restic borgbackup
-  code                                                      # VS Code RPM: the Flatpak is preinstalled, `ujust margine-vscode` layers the RPM
+  code                                                      # VS Code RPM: `ujust lucciola-vscode` layers it
 )
 
 # What the x86 VMs keep: the x86 system emulator with its UEFI firmware,
@@ -125,10 +130,10 @@ QEMU_KEEP='^(qemu-system-x86(-core)?|qemu-kvm(-core)?|qemu-img|qemu-common|qemu-
 # What the trim must never take with it. Checked against what was there
 # BEFORE the trim: a base that never had one of these (silverblue-main
 # has no python3-rpm, the kernel step's akmods tooling brings and removes
-# it) is not the trim's doing, and must not fail the build here.
+# it) is not the trim's doing, and must not fail the build here. (The x86
+# virt stack left this list on 2026-10-18: silverblue-main never had it.)
 KEEP_PKGS=(fuse python3-rpm python3-systemd NetworkManager-team
-           qemu-kvm qemu-system-x86-core qemu-img qemu-common edk2-ovmf virtiofsd libvirt-daemon-driver-qemu
-           podman podman-compose podman-machine distrobox rocm-opencl rocm-hip rocm-comgr rocm-runtime rocminfo
+           podman podman-compose distrobox rocm-opencl rocm-hip rocm-comgr rocm-runtime rocminfo
            # the desktop: what gtk4 took with it on 2026-10-11 (THE CASCADE)
            gtk4 libadwaita gstreamer1-plugins-bad gnome-shell gdm mutter gnome-session gnome-settings-daemon
            gnome-control-center nautilus ptyxis vte291-gtk4 gnome-system-monitor gnome-bluetooth

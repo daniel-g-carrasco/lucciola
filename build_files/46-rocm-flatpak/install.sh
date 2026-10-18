@@ -25,7 +25,7 @@
 # names come from this image's libraries, so a ROCm bump in the base keeps
 # the shim right with no change to the user's override, which points only at
 # these fixed paths. Nothing on the host uses it.
-# `ujust margine-darktable-opencl enable` points the darktable Flatpak here.
+# `ujust lucciola-darktable-opencl enable` points the darktable Flatpak here.
 set -euo pipefail
 . /ctx/00-common.sh
 

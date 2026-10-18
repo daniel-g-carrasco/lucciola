@@ -1,0 +1,141 @@
+#!/usr/bin/bash
+# lucciola-status: is this machine following the Lucciola flow?
+#
+# Shows your booted deployment vs the latest published image of the tag it
+# follows (:stable for most installs), plus the
+# Fedora → Universal Blue → Lucciola lineage and the running kernel. Read-only;
+# makes no changes. (margine-status, its name until 2026-10-18, is a link
+# to it. The margine.dev/status page it used to point to describes
+# Margine's image, not this one, so the pointer is gone.)
+set -uo pipefail
+
+IMAGE="ghcr.io/daniel-g-carrasco/lucciola:stable"
+REPO="${IMAGE%:*}"
+
+if [ -t 1 ]; then
+  c_reset=$'\e[0m'; c_dim=$'\e[2m'; c_grn=$'\e[32m'; c_ylw=$'\e[33m'; c_ember=$'\e[38;5;208m'
+else
+  c_reset=; c_dim=; c_grn=; c_ylw=; c_ember=
+fi
+
+label() { skopeo inspect --no-tags "docker://$1" --format "{{ index .Labels \"$2\" }}" 2>/dev/null || true; }
+digest() { skopeo inspect --no-tags "docker://$1" --format '{{.Digest}}' 2>/dev/null || true; }
+
+# --- booted deployment ---
+booted_ver=""; booted_digest=""
+if command -v bootc >/dev/null 2>&1; then
+  st="$(bootc status --format json 2>/dev/null || echo '{}')"
+  booted_digest="$(printf '%s' "$st" | jq -r '.status.booted.image.imageDigest // ""' 2>/dev/null)"
+  booted_ver="$(printf '%s' "$st" | jq -r '.status.booted.image.version // ""' 2>/dev/null)"
+fi
+# Fallback via rpm-ostree. On a CLIENT-LAYERED deployment (e.g. after
+# `ujust lucciola-gaming-native`) `bootc status` omits booted.image, so the
+# digest+version above come back empty — which previously read as a network
+# failure. rpm-ostree still records the base image manifest digest; use it.
+# MUST select booted==true: deployments[0] is the STAGED deployment when an
+# update is pending, and reading it here made this tool claim "up to date"
+# for a version the machine was NOT running (2026-07-10, daniel's laptop:
+# booted 20260706, staged 20260707, status showed 20260707 as booted).
+ros="$(rpm-ostree status --json 2>/dev/null || echo '{}')"
+# Compare against the tag this machine actually follows (:stable,
+# :candidate, a dated tag...). Hardcoding :stable told every install on
+# another tag that an update was available, forever. Only tags of this
+# image's repository count; a digest pin or another image keeps the :stable
+# comparison.
+origin="$(printf '%s' "$ros" | jq -r '[.deployments[]? | select(.booted==true)][0]."container-image-reference" // ""' 2>/dev/null)"
+followed="${origin#*:}"; followed="${followed#docker://}"
+case "$followed" in
+  "$REPO":*) [[ "$followed" == *@* ]] || IMAGE="$followed" ;;
+esac
+TAG="${IMAGE##*:}"
+if [ -z "$booted_digest" ]; then
+  booted_digest="$(printf '%s' "$ros" | jq -r '[.deployments[]? | select(.booted==true)][0]."base-commit-meta"."ostree.manifest-digest" // ""' 2>/dev/null)"
+fi
+if [ -z "$booted_ver" ] || [ "$booted_ver" = "null" ]; then
+  booted_ver="$(printf '%s' "$ros" | jq -r '[.deployments[]? | select(.booted==true)][0].version // "unknown"' 2>/dev/null || echo unknown)"
+fi
+# A STAGED deployment applies at next boot: surface it instead of letting
+# the user believe nothing is pending.
+staged_ver="$(printf '%s' "$ros" | jq -r '[.deployments[]? | select(.staged==true)][0].version // ""' 2>/dev/null)"
+staged_digest="$(printf '%s' "$ros" | jq -r '[.deployments[]? | select(.staged==true)][0]."base-commit-meta"."ostree.manifest-digest" // ""' 2>/dev/null)"
+kernel="$(uname -r)"
+
+# --- latest published image of the followed tag + lineage ---
+latest_ver="$(label "$IMAGE" org.opencontainers.image.version)"; latest_ver="${latest_ver:-unknown}"
+latest_digest="$(digest "$IMAGE")"
+# The base the latest image was built FROM, as the image's own label names
+# it: Universal Blue's silverblue-main. (Lucciola was built FROM a Margine
+# image until 2026-10, and this used to follow that one hop down.)
+base_ref="$(label "$IMAGE" org.opencontainers.image.base.name)"
+case "$base_ref" in
+  *silverblue-main*) base_name="Universal Blue main" ;;
+  *bluefin*)         base_name="Bluefin" ;;
+  "")                base_name="base" ;;
+  *)                 base_name="${base_ref##*/}"; base_name="${base_name%%:*}" ;;
+esac
+base_ver=""; [ -n "$base_ref" ] && base_ver="$(label "$base_ref" org.opencontainers.image.version)"
+base_ver="${base_ver:-unknown}"
+fedora_ver="${base_ver%%.*}"
+[ "$fedora_ver" = "$base_ver" ] && fedora_ver="$(sed -n 's/^VERSION_ID=//p' /usr/lib/os-release)"
+
+# --- verdict ---
+# Distinguish the two failure modes so we never blame the network when it was
+# a LOCAL read that failed — if latest_digest came back, the registry was
+# clearly reachable.
+if [ -z "$latest_digest" ]; then
+  verdict="${c_dim}? registry unreachable${c_reset}"; state=noremote
+elif [ -z "$booted_digest" ]; then
+  verdict="${c_dim}? local digest unknown${c_reset}"; state=nolocal
+elif [ "$booted_digest" = "$latest_digest" ]; then
+  verdict="${c_grn}✓ up to date${c_reset}"; state=current
+elif [ -n "$staged_digest" ] && [ "$staged_digest" = "$latest_digest" ]; then
+  verdict="${c_ylw}⟳ staged, reboot to apply${c_reset}"; state=staged
+else
+  verdict="${c_ylw}↑ update available${c_reset}"; state=behind
+fi
+
+# --- unattended-updates health ---
+# Surface the two silent failure modes of the update flow: uupd's last
+# run timed out (a wedged step, killed by our drop-in), and apps the
+# watchdog excluded from unattended updates. Empty when all is well.
+uupd_result="$(systemctl show uupd.service -p Result --value 2>/dev/null || true)"
+blocked_file=/var/lib/margine/update-watchdog/blocked
+blocked_apps=""
+[ -s "$blocked_file" ] && blocked_apps="$(awk '{printf "%s%s", sep, $1; sep=", "}' "$blocked_file" 2>/dev/null)"
+
+printf '\n'
+printf '  %-15s %s%s%s   %s← your deployment%s\n' "Lucciola"       "$c_ember" "$booted_ver" "$c_reset" "$c_dim" "$c_reset"
+[ -n "$staged_ver" ] && \
+printf '  %-15s %s   %s(applies at next boot)%s\n' "Staged"        "$staged_ver" "$c_dim" "$c_reset"
+printf '  %-15s %s   %s\n'                          "Latest :${TAG}" "$latest_ver" "$verdict"
+printf '  %-15s Fedora %s → %s %s → Lucciola\n' "Chain"         "$fedora_ver" "$base_name" "$base_ver"
+kdef=EEVDF; grep -q '^CONFIG_SCHED_BORE=y' "/usr/lib/modules/$(uname -r)/config" 2>/dev/null && kdef=BORE
+printf '  %-15s %s  %s(CachyOS / %s)%s\n'         "Kernel"         "$kernel" "$c_dim" "$kdef" "$c_reset"
+if [ "$uupd_result" = "timeout" ]; then
+  printf '  %-15s %slast unattended run hung and was killed; retries daily at 04:00%s\n' "Updates" "$c_ylw" "$c_reset"
+fi
+if [ -n "$blocked_apps" ]; then
+  printf '  %-15s %s%s%s excluded from unattended updates %s(ujust lucciola-update-unblock)%s\n' "Excluded" "$c_ylw" "$blocked_apps" "$c_reset" "$c_dim" "$c_reset"
+fi
+printf '\n'
+case "$state" in
+  current)  printf "  You're current — nothing to do.\n" ;;
+  staged)   printf "  The latest is already staged: reboot when it suits you to finish updating.\n" ;;
+  behind)   printf "  Run %sujust margine-update%s to stage the latest for next boot.\n" "$c_ember" "$c_reset" ;;
+  noremote) printf "  Couldn't reach the registry to compare — check your network.\n" ;;
+  nolocal)  printf "  Couldn't read the booted image digest locally — compare skipped (deployment is fine).\n" ;;
+  *)        printf "  Couldn't compare deployment vs latest.\n" ;;
+esac
+printf '\n'
+
+# `ujust lucciola-update` needs the verdict, not just the text: with
+# MARGINE_STATUS_EXIT_STATE=1 the exit code carries it. Without the
+# variable this stays a read-only report that always exits 0.
+if [ "${MARGINE_STATUS_EXIT_STATE:-0}" = "1" ]; then
+  case "$state" in
+    current) exit 0 ;;
+    staged)  exit 10 ;;
+    behind)  exit 20 ;;
+    *)       exit 30 ;;
+  esac
+fi

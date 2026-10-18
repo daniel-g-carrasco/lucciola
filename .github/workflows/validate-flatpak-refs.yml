@@ -1,6 +1,6 @@
 name: Validate Flatpak refs
 
-# The AI layer (ujust margine-ai -> Alpaca) and the gaming layer are
+# The AI layer (ujust lucciola-ai -> Alpaca) and the gaming layer are
 # pure-Flatpak — there's no rpm depsolve to dry-run the way
 # gaming-native-packages.txt is validated. The rot to catch instead is a
 # Flatpak being renamed or delisted on Flathub, which would make the recipe's
@@ -19,7 +19,7 @@ on:
       - "build_files/60-custom.just"
       - ".github/scripts/validate-flatpak-refs.sh"
   schedule:
-    - cron: "23 8 * * 1" # Monday morning, alongside check-upstream-pins
+    - cron: "23 8 * * 1" # Monday morning
   workflow_dispatch:
 
 permissions:

@@ -24,7 +24,7 @@ base:
     display_manager: greetd
     greeter: noctalia-greeter   # built from a pinned upstream tag (Containerfile greeter-rpm stage)
     pam_service: greetd         # /usr/lib/pam.d/greetd, Fedora's, plus pam_oo7 (password) and pam_env lines
-    autologin: greetd initial_session   # ujust margine-autologin
+    autologin: greetd initial_session   # ujust lucciola-autologin
     fallback: gdm               # greetd.service OnFailure=
   architecture: x86_64
   update_engine: bootc
@@ -69,12 +69,8 @@ base:
         source: copr:bieszczaders/kernel-cachyos
       terminal:
         action: inherit Bluefin default (Ptyxis); no override
-      branding_extensions_removed:
-        - logomenu@aryan_k  # removed from the image entirely (2026-06-16); Bazaar+Gradia are functional and stay enabled
-      tiling_extension:
-        action: install-user-extensions --apply (Tiling Shell from EGO)
       configure_user_state:
-        action: configure-gnome-{keybindings,extensions,app-folders,appearance,default-applications}
+        action: configure-{default-applications,zen-browser,darktable-import} (ujust lucciola-bootstrap, by hand); configure-home-layout only on purpose
 
 updates:
   orchestrator: uupd
@@ -98,9 +94,9 @@ updates:
     automatic: false
     reason: requires-hardware-runbook
   validators_on_demand:
-    # The 7 validators shipped in the image as /usr/bin/margine-validate-*
+    # The 7 validators shipped in the image as /usr/bin/lucciola-validate-*
     # (fetched by margine-image 40-spec-scripts; run together by
-    # `ujust margine-doctor`). Kept in sync with that fetch list —
+    # `ujust lucciola-doctor`). Kept in sync with that fetch list:
     # this list rotted at 4 entries while the image shipped 7
     # (caught 2026-06-12).
     - scripts/validate-margine-system
@@ -178,6 +174,7 @@ storage:
     var: writable
     home: /var/home
     home_cache: /var/home/<user>/.cache
+    # Margine's layout, opt-in in Lucciola (see home: below)
     home_dev: /var/home/<user>/dev
     home_scratch: /var/home/<user>/scratch
     data: /var/home/<user>/data
@@ -252,30 +249,26 @@ host_packages:
   baseline:
     # ---------------------------------------------------------------------
     # creator_tier: shared userland tools that benefit BOTH creator
-    # workflows and gaming. Promoted from the opt-in gaming layer into the
-    # base on 2026-06-03 (scx-scheds) and 2026-06-05 (mangohud + goverlay
-    # + steam-devices). margine-image installs them via the same RPMFusion
-    # transient block as the codec replacement; gaming variant inherits.
-    # See margine-image/build_files/build.sh "Gaming-tier userland tools
-    # that ALSO benefit creators" section and the 2026-06-05 audit.
+    # workflows and gaming. scx-scheds since 2026-06-03, steam-devices
+    # since 2026-06-05. mangohud and goverlay were here from 2026-06-05 to
+    # 2026-10-18; they moved to the opt-in gaming layer (ujust
+    # margine-gaming, ujust lucciola-gaming-native), see gaming_runtime.
     # ---------------------------------------------------------------------
     creator_tier:
       install:
         - scx-scheds         # sched_ext schedulers (CachyOS addons COPR); pro-audio + interactive
-        - mangohud           # Vulkan/OpenGL overlay (FPS/CPU/GPU/RAM/temp) — opt-in per-app
-        - goverlay           # GUI configurator for mangohud
         - steam-devices      # udev rules for controllers/jog wheels (creator + gaming)
       source_notes: |
         scx-scheds comes from copr:bieszczaders/kernel-cachyos-addons
         (same maintainer as the kernel COPR; released as a pair).
-        mangohud, goverlay, steam-devices come from RPMFusion (transient
-        enable at image-build time, scrubbed at end). See
-        margine-image/build_files/custom-kernel/install.sh +
-        build_files/build.sh.
+        steam-devices comes from Fedora. See
+        build_files/custom-kernel/install.sh.
     rpmfusion:
+      # Free only, at build time, for v4l2loopback's akmod (custom-kernel);
+      # nonfree is no longer enabled anywhere (2026-10-18).
       enable_free: true
-      enable_nonfree: true
-      install_release_rpms_from: https://mirrors.rpmfusion.org/{free,nonfree}/fedora/rpmfusion-{free,nonfree}-release-$(rpm -E %fedora).noarch.rpm
+      enable_nonfree: false
+      install_release_rpms_from: https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
     codec_replacement:
       override_remove:
         - ffmpeg-free
@@ -331,7 +324,8 @@ host_packages:
           - mesa-va-drivers       does not exist as separate package on F44
           - mesa-vdpau-drivers    does not exist on F44 (VDPAU deprecated)
     media_diagnostics:
-      - mesa-demos
+      # mesa-demos (glxinfo, eglinfo) left the image on 2026-10-18; the
+      # diagnostics use them only when present.
       - mesa-libGLU
       - vulkan-tools
       - libva-utils
@@ -342,15 +336,6 @@ host_packages:
       - pipewire-alsa
       - wireplumber
       - alsa-utils
-    virtualization:
-      - libvirt
-      - libvirt-nss
-      - qemu-kvm
-      - virt-manager
-      - virt-viewer
-      - edk2-ovmf
-      - swtpm
-      - dnsmasq
     hardware_diagnostics:
       - lm_sensors
       - powertop
@@ -362,40 +347,16 @@ host_packages:
       - smartmontools
     gnome_tools:
       - gnome-tweaks
-      - libappindicator-gtk3
-      - gnome-shell-extension-appindicator
-      - gnome-shell-extension-gsconnect
       - nautilus-python
       - adw-gtk3-theme
       - showtime
-    gnome_tools_shipped_note: >
-      dash-to-dock is NOT an RPM in the image: the Bluefin base bakes it
-      from upstream as an unpackaged extension
-      (/usr/share/gnome-shell/extensions/dash-to-dock@micxgx.gmail.com,
-      owned by no package; same on bluefin-dx and on plain Bluefin,
-      checked 2026-08-25). validate-margine-system checks it by UUID and
-      gsettings schema, which is the right test. It used to be listed
-      above as gnome-shell-extension-dash-to-dock, which only proved the
-      Fedora package exists in the repos, never that the image had it.
-      gnome-shell-extension-workspace-indicator was listed too and the
-      image has never shipped it (no RPM, no extension directory).
     gnome_tools_note: >
-      Tiling extension: we use o-tiling (o-tiling@oliwebd.github.com),
-      not Forge or Tiling Shell. Forge is marked "Needs a new maintainer"
-      upstream and its gsettings schema breaks between releases. Tiling
-      Shell was Margine's default until 2026-06-02 but its ghost-border
-      bug at v18 was unpleasant; o-tiling (binary-tree auto-split, fork
-      of System76's pop-shell) is closer to Hyprland muscle memory.
-      o-tiling is NOT on extensions.gnome.org, so it's installed
-      user-level from a pinned upstream release zip by
-      scripts/install-user-extensions. See docs/17-keyboard-bindings.md.
-
-      The other extensions are inspired by Bluefin's
-      zz0-bluefin-modifications.gschema.override: blur-my-shell adds the
-      Bluefin-style transparent/blurred top bar and overview; dash-to-dock
-      gives a fixed semi-transparent dock with running-app dots; just-perfection
-      provides polished GUI controls for hiding/customising shell elements
-      (search dialog, hot corners, activities button, etc.).
+      No GNOME Shell extension is declared or shipped (2026-10-18): GNOME
+      is Lucciola's stock fallback session, with only the extensions
+      Fedora's gnome-shell-extensions package brings for GNOME Classic.
+      Margine's set (o-tiling, hide-cursor, Dash to Dock, AppIndicator,
+      GSConnect, Caffeine, the Smile, Gradia and Bazaar companions) left
+      with its Shell defaults and keybindings.
     creative_apps_note: >
       darktable is installed as a host package (not Flatpak) so it picks
       up the host OpenCL ICD automatically. With ROCm (AMD) or
@@ -444,10 +405,23 @@ host_packages:
       - nautilus
       - gnome-system-monitor
       - gnome-bluetooth
+      - zenity          # Noctalia, distrobox-export, gnome-session; came with the gaming bake until 2026-10-18
       # Fedora 45's base dropped these; Margine kept them (15-devstack).
       - NetworkManager-ssh-gnome
       - nm-connection-editor
   optional_after_validation:
+    # Layered on demand by `ujust lucciola-vm` (in the image until 2026-10-18).
+    virtualization:
+      - libvirt
+      - libvirt-nss
+      - qemu-kvm
+      - virt-manager
+      - virt-viewer
+      - virt-install
+      - edk2-ovmf
+      - swtpm
+      - dnsmasq
+      - podman-machine
     intel_gpu_extras:
       - libva-intel-media-driver
       - intel-compute-runtime
@@ -465,6 +439,10 @@ host_packages:
       - lsp-plugins-ladspa
       - lsp-plugins-vst3
     gaming_runtime:
+      # Layered by ujust lucciola-gaming (gamescope, mangohud, vkBasalt,
+      # goverlay); gamemode comes with the base, steam-devices with the image.
+      # ujust lucciola-gaming-native layers its own list,
+      # /usr/share/margine/gaming-native-packages.txt.
       desktop_host_helpers:
         - gamescope
         - mangohud
@@ -494,17 +472,17 @@ flatpaks:
     # This list had rotted to 13 entries (one with a wrong id:
     # org.mozilla.Thunderbird vs the shipped thunderbird_esr) by
     # 2026-06-12; realigned during the code-quality review.
+    # Not preinstalled since 2026-10-18: com.visualstudio.code (`ujust
+    # margine-vscode` layers the RPM), com.bitwarden.desktop,
+    # org.gnome.Weather, org.gnome.Maps, com.rafaelmardojai.Blanket,
+    # de.haeckerfelix.Fragments. Installed systems keep them.
     internet:
       - app.zen_browser.zen
-      - de.haeckerfelix.Fragments
     productivity:
-      - com.bitwarden.desktop
       - org.mozilla.thunderbird_esr
       - org.libreoffice.LibreOffice
-      - com.mattjakeman.ExtensionManager
       - com.github.jeromerobert.pdfarranger  # merge, split, reorder PDF pages (2026-09-19)
       - com.github.johnfactotum.Foliate  # e-book reader: EPUB, MOBI, FB2, CBZ (2026-10-09)
-      - com.visualstudio.code  # VS Code (2026-10-10); `ujust margine-vscode` layers the RPM instead
     gnome_core:
       # Silverblue ships these as RPMs; Bluefin DX strips them; Margine
       # restores them as Flatpaks for a complete GNOME desktop without
@@ -513,8 +491,6 @@ flatpaks:
       - org.gnome.Calendar
       - org.gnome.clocks
       - org.gnome.Contacts
-      - org.gnome.Weather
-      - org.gnome.Maps
       - org.gnome.TextEditor
       - org.gnome.baobab
       - org.gnome.Characters
@@ -529,7 +505,7 @@ flatpaks:
       - org.gimp.GIMP
       - org.inkscape.Inkscape
       - com.github.PintaProject.Pinta
-      - be.alexandervanhee.gradia  # screenshot annotation; pairs with the gradia-integration extension (2026-09-19)
+      - be.alexandervanhee.gradia  # screenshot annotation (2026-09-19)
       - com.github.huluti.Curtail  # image compression (2026-09-19)
       - org.darktable.Darktable
       - io.gitlab.adhami3310.Impression
@@ -539,7 +515,6 @@ flatpaks:
       - com.obsproject.Studio
       - io.github.wartybix.Constrict  # video compression to a target size (2026-09-19)
       - com.github.wwmm.easyeffects
-      - com.rafaelmardojai.Blanket
     system_utilities:
       - com.ranfdev.DistroShelf
       - com.github.tchx84.Flatseal
@@ -548,7 +523,6 @@ flatpaks:
       - io.missioncenter.MissionCenter
       - org.gnome.DejaDup
       - org.gnome.Firmware
-      - it.mijorus.smile
       - net.sapples.LiveCaptions  # on-device captions for any audio; floats over the video (2026-09-22)
       - io.github.kolunmi.Bazaar  # the app store; in Margine's own lists since 2026-10-10 (it only came from Bluefin's bazaar.preinstall)
     documentation:
@@ -562,7 +536,7 @@ flatpaks:
     # keeps that as the default IDE. See docs/16-developer-toolbox.md.
   optional_apps:
     gaming:
-      # Installed by `ujust margine-gaming` (Flatpak path; the native
+      # Installed by `ujust lucciola-gaming` (Flatpak path; the native
       # path swaps Steam/Lutris/RetroArch for layered RPMs).
       - com.valvesoftware.Steam
       - net.lutris.Lutris
@@ -627,212 +601,12 @@ toolbox:
       note: Single-binary prompt; can also come from brew if installed
 
 gnome:
-  settings:
-    org.gnome.desktop.interface:
-      color-scheme: prefer-dark
-      accent-color: yellow
-      gtk-theme: adw-gtk3-dark
-      icon-theme: Adwaita
-      enable-hot-corners: false
-      show-battery-percentage: true
-      clock-show-weekday: true
-      font-antialiasing: rgba
-      ui-font-candidates:
-        - IBM Plex Sans 10
-        - Atkinson Hyperlegible Next 10
-      monospace-font-candidates:
-        - JetBrains Mono 11
-        - IBM Plex Mono 11
-        - Source Code Pro 11
-    org.gnome.desktop.wm.preferences:
-      button-layout: ":minimize,maximize,close"
-      # Focus follows mouse (Hyprland muscle memory). `sloppy` keeps
-      # focus when pointer leaves a window (vs `mouse` which removes
-      # it). auto-raise=false so hover doesn't reorder window stack.
-      focus-mode: sloppy
-      auto-raise: false
-    org.gnome.desktop.peripherals.keyboard:
-      numlock-state: true
-    org.gnome.mutter:
-      center-new-windows: true
-      check-alive-timeout: 20000
-    org.gtk.Settings.FileChooser:
-      sort-directories-first: true
-    org.gtk.gtk4.Settings.FileChooser:
-      sort-directories-first: true
-    org.gnome.desktop.sound:
-      allow-volume-above-100-percent: false
-    org.gnome.shell.extensions.dash-to-dock:
-      note: >
-        Captured from Daniel's reference deployment (2026-06-16): a fully-
-        transparent fixed bottom dock, 36px icons, default running indicator.
-        MUST stay in lockstep with margine-image
-        build_files/30-gnome-defaults/dconf/01-margine-dash-to-dock —
-        configure-gnome-appearance --apply writes these to the user's dconf,
-        so a stale value here RESETS the dock on the next margine-bootstrap.
-        Host-specific keys (preferred-monitor / preferred-monitor-by-connector)
-        are deliberately NOT declared — they bind to one machine's outputs.
-        The hot-keys=false override is a keybinding-collision fix (NOT
-        cosmetic): Dash-to-Dock binds Super+1..9 to launch dash slots, which
-        collides with Margine's Super+1..0 workspace navigation; disabling it
-        lets configure-gnome-keybindings' workspace binds win cleanly.
-      dock-fixed: true
-      dock-position: BOTTOM
-      extend-height: false
-      height-fraction: 0.9
-      force-straight-corner: false
-      custom-theme-shrink: true
-      disable-overview-on-startup: true
-      isolate-locations: true
-      transparency-mode: DYNAMIC
-      animation-time: 0.15
-      background-color: 'rgb(40,40,40)'
-      background-opacity: 0.0
-      custom-background-color: false
-      customize-alphas: true
-      max-alpha: 0.0
-      min-alpha: 0.0
-      dash-max-icon-size: 36
-      icon-size-fixed: true
-      show-icons-emblems: true
-      dance-urgent-applications: false
-      running-indicator-style: DEFAULT
-      apply-custom-theme: false
-      hot-keys: false
-    org.gnome.shell.extensions.just-perfection:
-      note: >
-        Just Perfection lets you trim shell elements (top-bar menus,
-        accessibility icon, weather, etc.) without writing custom CSS.
-        Keys here are verified against the v36 schema; app-menu and
-        hot-corner are handled elsewhere (the app menu doesn't exist in
-        GNOME 48+, and hot corners are off via
-        org.gnome.desktop.interface enable-hot-corners=false).
-      activities-button: true
-      clock-menu-position: 0
-      world-clock: false
-      weather: false
-      panel-in-overview: true
-      search: true
-      accessibility-menu: false
-      show-apps-button: true
-      dash-app-running: true
-      double-super-to-appgrid: false
-  gtk4_css_override: false
-  hyprland_theme_artifacts: false
-  extensions:
-    note: >
-      Enabled extensions list. Fedora-packaged ones are installed by
-      scripts/apply-host-layer (rpm-ostree). Tiling Shell is installed
-      user-level by scripts/install-user-extensions (zip from
-      extensions.gnome.org into ~/.local/share/gnome-shell/extensions/).
-      All enabled by scripts/configure-gnome-extensions.
-    enable:
-      - appindicatorsupport@rgcjonas.gmail.com
-      - bazaar-integration@kolunmi.github.io
-      - dash-to-dock@micxgx.gmail.com
-      - gradia-integration@alexandervanhee.github.io
-      - gsconnect@andyholmes.github.io
-      # blur-my-shell, search-light and logomenu are REMOVED from the image
-      # entirely (2026-06-16, margine-image build-margine-extensions.sh) — not
-      # merely absent from this list. blur janked the 120Hz HiDPI iGPU (its own
-      # transitions AND o-tiling animations) + 3 unfixed GNOME-50 bugs;
-      # search-light is the GNOME-50 crash class (GNOME-native Super /
-      # Super+Space search replaces it); logomenu is branding we don't use.
-      # A user who wants one back installs it from Extensions Manager. Keep this
-      # list in lockstep with margine-image zz1 enabled-extensions.
-      # Tiling Shell removed entirely (2026-06-02). o-tiling is the
-      # Margine default tiling engine. To A/B compare Tiling Shell,
-      # install it from Extensions Manager (EGO ID 7065).
-      - o-tiling@oliwebd.github.com
-      - hide-cursor@elcste.com
-      - caffeine@patapon.info     # daniel asked for a "keep screen awake" toggle; awake@vixalien.com is upstream-deprecated, points users to Caffeine
-    installed_but_not_enabled_note: >
-      Nothing today. workspace-indicator@gnome-shell-extensions.gcampax.github.com
-      (Fedora's numeric top-bar workspace indicator) used to be listed
-      here as "installed but not enabled", but the image does not ship
-      it (checked 2026-08-25: no RPM, no extension directory). A user who
-      wants the current workspace number in the top bar layers
-      gnome-shell-extension-workspace-indicator or installs it from
-      Extensions Manager; configure-gnome-extensions leaves it alone.
-    user_install_note: >
-      These extensions are NOT in Fedora 44 repos. install-user-extensions
-      installs each entry from either extensions.gnome.org (when ego_id
-      is set) or directly from a git repo (when git_url is set — the
-      same approach Bluefin uses via git submodules). For both flows the
-      schema is copied into ~/.local/share/glib-2.0/schemas/ and
-      compiled, so the gsettings CLI and GNOME Shell both find it.
-
-      The git source is preferred over EGO when the upstream is more
-      current than the published EGO release — at the time of writing,
-      search-light's last EGO upload (v42) supports up to GNOME Shell
-      49, while the upstream master (v101) supports 48-50. Bluefin uses
-      git submodule for the same reason.
-    removed_user_install_note: >
-      UUIDs that used to be in user_install but are no longer Margine
-      defaults. install-user-extensions --apply removes any of these
-      it finds in ~/.local/share/gnome-shell/extensions/, so users who
-      upgrade a Margine system pick up the removal without manual
-      cleanup. Add an entry (don't just delete from user_install)
-      whenever a default extension is dropped.
-    removed_user_install:
-      - uuid: tilingshell@ferrarodomenico.com
-        removed_at: 2026-06-02
-        reason: >
-          Superseded by o-tiling. User does not want Tiling Shell
-          preinstalled. Re-installable via Extensions Manager (EGO 7065).
-      # 2026-06-03 PR A — These three were originally installed per-user
-      # at first-login via install-user-extensions. That had three
-      # failure modes that all bit hard on the 2026-06-03 fresh-VM
-      # smoke test:
-      #   1. Race with flatpak-preinstall.service at first login.
-      #   2. ~/.local/share/gnome-shell/extensions/search-light shadowed
-      #      Bluefin's own /usr/share/.../search-light (older user-side
-      #      version didn't support GNOME Shell 50.1, GNOME silently
-      #      skipped the system one — "will not be loaded" in journal).
-      #   3. Silent failure if the user logged in before the autostart
-      #      bootstrap completed.
-      # Now installed system-wide at margine-image build time by
-      # build_files/build-margine-extensions.sh — exactly the Bluefin/
-      # Bazzite pattern. Listed here as removed_user_install so any
-      # existing Margine system that still has them user-side gets
-      # them pruned on next install-user-extensions --apply, removing
-      # the shadowing problem on upgrade. The system-wide copy stays.
-      - uuid: search-light@icedman.github.com
-        removed_at: 2026-06-03
-        reason: >
-          Bluefin DX already installs search-light system-wide from
-          upstream git (newer than EGO v42). Margine's user-side install
-          shadowed Bluefin's copy — see "Extension search-light already
-          installed in ~/.local — /usr/share will not be loaded" in
-          journalctl. Removed from user_install; Bluefin's system copy
-          was the source of truth. Update 2026-06-16: search-light is now
-          removed from the image system-wide too (build-margine-extensions.sh
-          deletes the Bluefin-baked copy — GNOME-50 crash class, GNOME-native
-          search replaces it). This entry still prunes any stale user-side
-          copy on upgrade.
-      - uuid: hide-cursor@elcste.com
-        removed_at: 2026-06-03
-        reason: >
-          Moved to system-wide install in margine-image's
-          build-margine-extensions.sh (EGO id 6727). Lives in
-          /usr/share/gnome-shell/extensions/hide-cursor@elcste.com/
-          and is enabled by zz1-margine.gschema.override.
-      - uuid: o-tiling@oliwebd.github.com
-        removed_at: 2026-06-03
-        reason: >
-          Moved to system-wide install in margine-image's
-          build-margine-extensions.sh (zip from GitHub release v2.8.8).
-          Lives in /usr/share/gnome-shell/extensions/o-tiling@oliwebd.
-          github.com/ and is enabled by zz1-margine.gschema.override.
-    user_install:
-      # Empty as of 2026-06-03 PR A. All extensions Margine adds on top
-      # of Bluefin DX are now installed system-wide at OCI build time
-      # via margine-image's build-margine-extensions.sh — Bluefin/
-      # Bazzite pattern. See removed_user_install above for what moved.
-      # Leaving an empty list (rather than removing the key) so the
-      # install-user-extensions script continues to parse without
-      # change.
-      []
+  note: >
+    GNOME is Lucciola's stock fallback session (2026-10-18). The sections
+    that described Margine's GNOME (settings, extensions, workspaces,
+    keybindings, app folders) went with the configure-gnome-* helpers
+    that applied them; Margine OS keeps them in its own declarations.
+    What stays is what the remaining helpers read.
   default_applications:
     note: >
       Applied by scripts/configure-default-applications. Sets MIME
@@ -849,293 +623,12 @@ gnome:
     text_editor: org.gnome.TextEditor.desktop
     archive_manager: org.gnome.FileRoller.desktop
     terminal_emulator: org.gnome.Ptyxis.desktop
-  workspaces:
-    note: >
-      STATIC 5-workspace model (Hyprland-style), with native SUPER+1..5
-      direct-jump bindings. Switched from dynamic on 2026-06-10: with
-      dynamic workspaces, native move-to-workspace-N bindings silently do
-      NOTHING when workspace N does not exist yet, so SUPER+SHIFT+N felt
-      broken. A static count pre-creates them all, matching the
-      workspace-names below and the Hyprland muscle memory. FIVE, not
-      ten: Daniel's standing preference, and what the image's gschema
-      override ships; this note said 10 for two months while count was
-      already 5. One more thing dynamic mode leaves behind: GNOME rewrites
-      num-workspaces in the user's dconf as it grows and shrinks them, so
-      a host that ever ran dynamic can carry a stale 8 that shadows the
-      image default until `gsettings reset` clears it.
-      Applied by scripts/configure-gnome-keybindings.
-    dynamic: false
-    # 5, not 10: static workspaces are all pre-created and always visible
-    # in the overview/pager, and a permanent wall of 10 felt like clutter
-    # (project lead, 2026-06-10). SUPER+[SHIFT+]6..0 bindings stay
-    # declared below — they are harmless no-ops until the count is
-    # raised again.
-    count: 5
-    names: ['1', '2', '3', '4', '5']
-  keybindings:
-    note: >
-      Hyprland-style keybindings ported from
-      margine-os-personal/files/home/.config/hypr/conf.d/60-binds.conf.
-      Mapped to GNOME native (org.gnome.desktop.wm.keybindings,
-      org.gnome.shell.keybindings, org.gnome.settings-daemon.plugins.media-keys),
-      custom-keybindings (for app-launcher slots), and Tiling Shell
-      extension keybindings (for tiling actions; see `tilingshell:`
-      block below). Applied by scripts/configure-gnome-keybindings.
-      Overrides vs the Hyprland source:
-        - SUPER+E      → file manager (Nautilus), instead of SUPER SHIFT+F
-        - terminal     = Ptyxis (Bluefin's default; no kitty override)
-      Skipped (no GNOME equivalent or out of scope):
-        - SUPER+K      Hyprland binds help (use GNOME Settings → Keyboard)
-        - SUPER SHIFT+P  restart waybar (waybar not present)
-        - SUPER+P      pseudotile (Hyprland-specific concept)
-        - SUPER+S      scratchpad (Forge has no direct equivalent)
-    workspace:
-      # Super+Tab / Super+Shift+Tab intentionally NOT mapped to workspace
-      # navigation: they're the GNOME default switch-applications chord
-      # (cycle through open application windows) and most users expect
-      # that. For workspace switching use Super+1..0 direct-jump below,
-      # or the GNOME default Super+Page_Up/Down for next/prev.
-      switch_to_1:        '<Super>1'
-      switch_to_2:        '<Super>2'
-      switch_to_3:        '<Super>3'
-      switch_to_4:        '<Super>4'
-      switch_to_5:        '<Super>5'
-      switch_to_6:        '<Super>6'
-      switch_to_7:        '<Super>7'
-      switch_to_8:        '<Super>8'
-      switch_to_9:        '<Super>9'
-      switch_to_10:       '<Super>0'
-      move_window_to_1:   '<Super><Shift>1'
-      move_window_to_2:   '<Super><Shift>2'
-      move_window_to_3:   '<Super><Shift>3'
-      move_window_to_4:   '<Super><Shift>4'
-      move_window_to_5:   '<Super><Shift>5'
-      move_window_to_6:   '<Super><Shift>6'
-      move_window_to_7:   '<Super><Shift>7'
-      move_window_to_8:   '<Super><Shift>8'
-      move_window_to_9:   '<Super><Shift>9'
-      move_window_to_10:  '<Super><Shift>0'
-    window:
-      close:              '<Super>w'
-      toggle_fullscreen:  '<Super>f'
-      always_on_top:      '<Super>o'
-      # GNOME's default minimize chord <Super>h is taken by o-tiling
-      # focus-left, and <Super>Down is unmaximize (not minimize), so the
-      # minimize action moves to a free chord.
-      minimize:           '<Super>m'
-    shell:
-      # Super+Space opens GNOME's native searchable app-grid (it used to be
-      # search-light's chord; search-light is no longer enabled). Super alone
-      # = overview (native overlay-key), which also searches.
-      toggle_application_view: ['<Super>space', '<Super>r']
-      toggle_overview:    '<Super><Shift>space'
-      toggle_message_tray: '<Super>n'
-      # Every screenshot chord has a Print-free twin: compact keyboards
-      # (65%, 75%, most externals) have no Print key at all, or hide it
-      # behind an Fn layer that differs per model, and a shortcut nobody
-      # can press is a feature nobody has.
-      show_screenshot_ui: ['Print', '<Super><Shift>p']
-      screenshot_window:  ['<Ctrl>Print', '<Super><Shift>w']
-      # NB: GNOME's own `screenshot` (silent full-screen capture) also
-      # defaults to <Shift>Print and would win over the custom binding
-      # that opens Gradia; configure-gnome-keybindings clears it.
-      show_screen_recording_ui: ['<Super>Print', '<Super><Shift>r']
-    media_keys:
-      screensaver:        '<Super><Ctrl>l'
-    custom:
-      - name: terminal
-        binding: '<Super>Return'
-        command: 'ptyxis --new-window'   # without it Ptyxis only raises the window it already has
-      - name: browser
-        binding: '<Super><Shift>Return'
-        command: 'flatpak run app.zen_browser.zen'
-      - name: file_manager
-        binding: '<Super>e'
-        # --new-window so repeated Super+E open NEW windows instead of just
-        # re-focusing the running single-instance Nautilus (user-reported).
-        command: 'nautilus --new-window'
-      - name: btop
-        binding: '<Super><Ctrl>t'
-        command: 'ptyxis -- btop'
-      - name: session_actions_menu
-        binding: '<Super>Escape'
-        command: 'gnome-session-quit --logout'
-      - name: screenshot_region
-        # Region capture straight into Gradia for annotation. Until
-        # 2026-09-19 this ran `gnome-screenshot -ac`, a binary the image
-        # does not carry, so the key did nothing. Full-screen and window
-        # captures stay with GNOME Shell (Print, Ctrl+Print); the
-        # gradia-integration extension adds "annotate" to those too.
-        binding: '<Shift>Print'
-        command: 'flatpak run be.alexandervanhee.gradia --screenshot=INTERACTIVE'
-      - name: screenshot_region_alt
-        # Same capture for keyboards without a Print key (a = annotate).
-        binding: '<Super><Shift>a'
-        command: 'flatpak run be.alexandervanhee.gradia --screenshot=INTERACTIVE'
-      - name: smile
-        # Emoji picker. NB: bootstrap REPLACES the whole
-        # custom-keybindings path list, which used to shadow the
-        # distro-level margine-smile entry shipped by margine-image's
-        # 07-margine-custom-keybindings dconf file — Super+period went
-        # dead after the first `ujust margine-bootstrap`. Keeping the
-        # slot here makes the binding survive bootstrap.
-        binding: '<Super>period'
-        command: 'flatpak run it.mijorus.smile'
-    o_tiling:
-      # o-tiling keybindings (org.gnome.shell.extensions.o-tiling).
-      # Binary-tree auto-split engine (Hyprland/i3-style).
-      #
-      # MUST stay in sync with margine-image's
-      # build_files/30-gnome-defaults/dconf/03-margine-o-tiling: that dconf
-      # file sets these as system DEFAULTS (every boot, unconditional) and
-      # this block re-applies them to USER dconf at `ujust margine-bootstrap`.
-      # If the two disagree, bootstrap silently RE-BREAKS the keybindings.
-      #
-      # o-tiling's UPSTREAM defaults shadow GNOME-native + Margine custom
-      # shortcuts; the binding state of an installed system is exactly what
-      # these set. GNOME/Margine win; o-tiling keeps every feature on a
-      # collision-free chord:
-      #   Super+hjkl         focus neighbour (Hyprland parity)
-      #   Super+arrows       move focused window in layout (gaps kept)
-      #   Super+Ctrl+arrows  swap with neighbour (o-tiling default, free)
-      #   Super+Ctrl+Return  adjustment mode  (was Super+Return = terminal)
-      #   Super+Shift+t      toggle auto-tiling (was Super+t; accidental
-      #                      whole-session toggle, user-reported)
-      #   Super+Shift+f      float window     (was Super+f = fullscreen)
-      #   Super+Shift+s      stacking         (was Super+s = quick-settings)
-      # Dropped the duplicate Super+Alt+arrows from focus-* so they no longer
-      # shadow wm.switch-to-workspace-left/right + shell.shift-overview-up/down.
-      focus-left:              '<Super>h'
-      focus-right:             '<Super>l'
-      focus-up:                '<Super>k'
-      focus-down:              '<Super>j'
-      tile-enter:              ['<Super><Ctrl>Return', '<Super><Ctrl>KP_Enter']
-      toggle-tiling:           '<Super><Shift>t'
-      toggle-floating:         '<Super><Shift>f'
-      toggle-stacking-global:  '<Super><Shift>s'
-      # Super+arrows MOVE the focused window within the tiled layout, gaps
-      # preserved (user-reported 2026-06-18: the gapless GNOME built-ins ate
-      # these). MUST be tile-move-*-global — that's o-tiling's registered
-      # GLOBAL move action (system/keybindings.js). tile-swap-* is only
-      # handled inside interactive tile mode, so binding it globally is a
-      # silent no-op. The GNOME built-ins that previously consumed Super+arrows
-      # (mutter toggle-tiled-left/right, wm maximize/unmaximize) are cleared in
-      # the 03-margine-o-tiling dconf file.
-      tile-move-left-global:   '<Super>Left'
-      tile-move-right-global:  '<Super>Right'
-      tile-move-up-global:     '<Super>Up'
-      tile-move-down-global:   '<Super>Down'
-  app_folders:
-    naming_note: >
-      App folders in the GNOME Activities grid. Margine takes a
-      "frequent apps top-level, batch tools in folders" approach:
-      high-frequency apps (Zen, Thunderbird, Bitwarden, Nautilus,
-      Ptyxis, VS Code, Apostrophe, Calendar, Settings) are
-      INTENTIONALLY not in any folder, so they appear at the top of
-      the grid and are 1 click away. Lower-frequency tools are
-      grouped into 6 small, themed folders.
-    list:
-      - id: Office
-        name: Office
-        apps:
-          - org.libreoffice.LibreOffice.desktop
-          - org.libreoffice.LibreOffice.writer.desktop
-          - org.libreoffice.LibreOffice.calc.desktop
-          - org.libreoffice.LibreOffice.impress.desktop
-          - org.libreoffice.LibreOffice.draw.desktop
-          - org.libreoffice.LibreOffice.base.desktop
-          - org.libreoffice.LibreOffice.math.desktop
-          - com.github.jeromerobert.pdfarranger.desktop
-        categories:
-          - Office
-      - id: Graphics
-        name: Graphics
-        apps:
-          - org.gimp.GIMP.desktop
-          - org.inkscape.Inkscape.desktop
-          - com.github.PintaProject.Pinta.desktop
-          - be.alexandervanhee.gradia.desktop
-          - com.github.huluti.Curtail.desktop
-        categories:
-          - Graphics
-          - 2DGraphics
-          - VectorGraphics
-          - RasterGraphics
-      - id: Photography
-        name: Photography
-        apps:
-          - org.darktable.Darktable.desktop
-          - org.gnome.Loupe.desktop
-        categories:
-          - Photography
-      - id: Audio
-        name: Audio
-        apps:
-          - com.github.neithern.g4music.desktop
-          - org.audacityteam.Audacity.desktop
-          - com.github.wwmm.easyeffects.desktop
-        categories:
-          - Audio
-          - Music
-      - id: Video
-        name: Video
-        apps:
-          - com.obsproject.Studio.desktop
-          - org.gnome.Showtime.desktop
-          - io.github.wartybix.Constrict.desktop
-        categories:
-          - Video
-          - AudioVideo
-      # The previous single "System & Utilities" folder held 11 apps of
-      # three semantically distinct kinds (Daniel 2026-06-07). Split
-      # along the user's cognitive intent rather than software type:
-      #
-      #   Apps   — "I want to install / configure another app"
-      #   Dev    — "I want to write or build code"
-      #   System — "I want to inspect or tweak the OS"
-      #   Utilities — "I have a one-off task and then I close this"
-      #
-      # Each folder maps to a distinct mental situation. The user opens
-      # only one of them at a time. Bazaar stays the only app store on
-      # the image — org.gnome.Software was retired 2026-06-07.
-      - id: Apps
-        name: Apps
-        apps:
-          - io.github.kolunmi.Bazaar.desktop
-          - com.mattjakeman.ExtensionManager.desktop
-          - com.github.tchx84.Flatseal.desktop
-          - io.github.flattool.Warehouse.desktop
-          - io.github.flattool.Ignition.desktop
-      - id: Dev
-        name: Dev
-        apps:
-          - com.visualstudio.code.desktop      # VS Code (Flatpak)
-          - code.desktop                       # VS Code RPM, when layered with ujust margine-vscode
-          - com.ranfdev.DistroShelf.desktop    # distrobox GUI
-      - id: System
-        name: System
-        apps:
-          - io.missioncenter.MissionCenter.desktop
-          - org.gnome.Firmware.desktop
-          - page.tesk.Refine.desktop
-          - org.gnome.DejaDup.desktop
-          - org.gnome.Logs.desktop
-          - org.gnome.baobab.desktop
-      - id: Utilities
-        name: Utilities
-        apps:
-          - it.mijorus.smile.desktop
-          - net.sapples.LiveCaptions.desktop
-          - io.gitlab.adhami3310.Impression.desktop
-          - org.gnome.FileRoller.desktop
-          - org.gnome.Characters.desktop
-          - de.haeckerfelix.Fragments.desktop
-          - org.gnome.font-viewer.desktop
-        categories:
-          - Utility
-          - Accessibility
 
 home:
+  # Margine's layout. Opt-in in Lucciola since 2026-10-18: new accounts
+  # keep the standard XDG folders; lucciola-configure-home-layout --apply
+  # (the only reader of this section) sets it on purpose, and
+  # `ujust lucciola-home-stock` goes back.
   roots:
     - data
     - dev
@@ -1213,17 +706,17 @@ gaming_runtime:
     steam_gaming_mode_default: false
     split_lock_override_default: false
     nvidia_gaming_default: false
-    default_image_includes_gaming: false  # opt-in via `ujust margine-gaming`
+    default_image_includes_gaming: false  # opt-in via `ujust lucciola-gaming`
   opt_in:
     # Two variants, both opt-in, both reversible. Pick by use case.
     default:
-      command: ujust margine-gaming
-      rollback_command: ujust margine-gaming-remove
+      command: ujust lucciola-gaming
+      rollback_command: ujust lucciola-gaming-remove
       delivery: flatpak_for_launchers_plus_rpm_for_gamescope_vkbasalt
       good_for: occasional gaming, no rpm-ostree upgrade overhead
     native:
-      command: ujust margine-gaming-native
-      rollback_command: ujust margine-gaming-native-remove
+      command: ujust lucciola-gaming-native
+      rollback_command: ujust lucciola-gaming-native-remove
       delivery: rpm_for_steam_lutris_retroarch_plus_flatpak_for_the_rest
       good_for: anti-cheat (EAC/BattlEye), VR, Steam Link, NVIDIA + Mesa-git side-by-side
       cost: +30-60s per bootc upgrade to re-apply the layer
@@ -1233,14 +726,14 @@ gaming_runtime:
     inspired_by: >
       Bazzite (ublue-os/bazzite). Margine ships a SINGLE image
       `margine:stable` and reaches the gaming stack via the opt-in
-      `ujust margine-gaming` recipe (Margine Gaming OCI variant was
+      `ujust lucciola-gaming` recipe (Margine Gaming OCI variant was
       retired 2026-06-06). The base creator tier already carries
       scx-scheds + mangohud + goverlay + steam-devices (see
       host_packages.baseline.creator_tier above, promoted on
       2026-06-03/05); the ujust layer only adds gamescope + vkBasalt
       on top, plus the Flatpak gaming launchers. No umu-launcher
       (complex packaging), no Bazzite KDE/Deck-specific bits.
-      A second variant `ujust margine-gaming-native` (added 2026-06-07)
+      A second variant `ujust lucciola-gaming-native` (added 2026-06-07)
       layers Steam + Lutris + RetroArch as native RPMs for users
       needing maximum Proton/Wine compatibility — same trade-off
       RakuOS chose with its "Native Gaming. Not Flatpak." stance,
@@ -1285,10 +778,10 @@ ai_workflow:
   # local-LLM serving) and the broader 2026 trend of locally-hosted,
   # privacy-friendly LLMs replacing some SaaS-only workflows for
   # writers / coders / creators (Margine's ICP).
-  default_image_includes_ai: false  # opt-in via `ujust margine-ai`
+  default_image_includes_ai: false  # opt-in via `ujust lucciola-ai`
   opt_in:
-    command: ujust margine-ai
-    rollback_command: ujust margine-ai-remove
+    command: ujust lucciola-ai
+    rollback_command: ujust lucciola-ai-remove
     recipe_file: /usr/share/ublue-os/just/99-margine.just
     source_in_image_repo: build_files/60-custom.just
     gui:

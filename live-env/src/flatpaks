@@ -9,9 +9,7 @@
 # written by build_files/build.sh. Kept in sync manually for now.
 app.zen_browser.zen
 org.mozilla.thunderbird_esr
-com.bitwarden.desktop
 org.libreoffice.LibreOffice
-com.mattjakeman.ExtensionManager
 org.gnome.Snapshot
 org.gnome.Showtime
 org.gnome.Papers
@@ -21,8 +19,6 @@ org.gnome.Calculator
 org.gnome.Calendar
 org.gnome.clocks
 org.gnome.Contacts
-org.gnome.Weather
-org.gnome.Maps
 org.gnome.TextEditor
 org.gnome.baobab
 org.gnome.Characters
@@ -31,10 +27,8 @@ org.gnome.font-viewer
 org.gnome.gitlab.somas.Apostrophe
 com.github.PintaProject.Pinta
 # Gradia — screenshot annotation (arrows, text, censor, backgrounds).
-# The gradia-integration GNOME extension inherited from Bluefin DX hooks
-# it into the Print flow, but nobody installed the app itself, so the
-# extension ran empty and Shift+Print pointed at a gnome-screenshot that
-# is not on the image. Baked here so both work out of the box.
+# Baked since Margine paired it with the gradia-integration GNOME
+# extension (gone since 2026-10-18); the app works without it.
 be.alexandervanhee.gradia
 # Curtail — lossless/lossy image compression before sharing.
 com.github.huluti.Curtail
@@ -56,8 +50,6 @@ com.github.wwmm.easyeffects
 # min instead of instant — acceptable for a DAW that's not in the
 # first-5-minute critical path).
 com.github.neithern.g4music
-com.rafaelmardojai.Blanket
-de.haeckerfelix.Fragments
 # DistroShelf — pet-container manager (distrobox GUI). Bluefin DX
 # installs it via /usr/share/ublue-os/homebrew/system-flatpaks.Brewfile
 # at first boot. Margine does not go through brew for system Flatpaks
@@ -75,4 +67,3 @@ io.gitlab.adhami3310.Impression    # USB / image writer
 io.missioncenter.MissionCenter     # task manager (System Monitor alt)
 org.gnome.DejaDup                  # backup tool
 org.gnome.Firmware                 # firmware updater (fwupd GUI)
-it.mijorus.smile                   # emoji picker

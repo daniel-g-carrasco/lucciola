@@ -1,5 +1,5 @@
 [Unit]
-Description=Margine: explain the Secure Boot key prompt before the next restart
+Description=Lucciola: explain the Secure Boot key prompt before the next restart
 After=graphical-session.target
 PartOf=graphical-session.target
 

@@ -8,7 +8,7 @@
 #   FROM ghcr.io/ublue-os/silverblue-main:44  (Universal Blue main: Fedora Silverblue 44)
 #   + custom kernel from CachyOS COPR (signed with our MOK)
 #   + the Margine OS layer (build_files/: update flow, Secure Boot and TPM
-#     tooling, branding, curated GNOME settings, Flatpaks)
+#     tooling, branding, the GTK defaults, Flatpaks)
 #   + the Lucciola layer (lucciola/: niri, Noctalia, the Lucciola session;
 #     GNOME stays as a stock fallback session)
 #
@@ -50,6 +50,12 @@ COPY build_files /
 # time via the installer/ working dir. The gaming variant was retired
 # 2026-06-06 so there is no installer/flatpaks-gaming any more.
 COPY installer/flatpaks-base    /installer-flatpaks-base
+# Lucciola's brand (logos, wallpaper, the Plymouth theme), for 50-branding.
+# In ctx rather than a stage of its own because the boot splash must be in
+# place before 50-branding writes the initramfs, in the same RUN as the
+# kernel; an asset change costs that layer's cache, like any other
+# build_files change does.
+COPY lucciola/assets            /lucciola-assets
 
 # lucciola/build.sh gets a context stage of its own, not a place in ctx:
 # the kernel RUN below mounts the whole ctx, and an edit to the Lucciola
@@ -77,11 +83,15 @@ COPY lucciola/build.sh /build.sh
 # the sha256 of https://github.com/noctalia-dev/noctalia-greeter/archive/refs/tags/v<version>.tar.gz
 # (the ARGs at the top), check the spec's BuildRequires against the tag's
 # meson.build, test-boot. v1.6.0 is commit
-# 44337ecba043749c29de6f3d563315b91987a908 (a signed tag).
+# 44337ecba043749c29de6f3d563315b91987a908 (a signed tag). On top of the
+# tag the spec applies one patch (PAM results in words, the .patch file in
+# lucciola/greeter/ says why) and puts Lucciola's mark in place of the
+# Noctalia logo; check that the patch still applies when the tag moves.
 FROM ${BASE_IMAGE} AS greeter-rpm
 ARG NOCTALIA_GREETER_VERSION
 ARG NOCTALIA_GREETER_SHA256
 COPY lucciola/greeter/ /src/
+COPY lucciola/assets/lucciola-mark.svg /src/
 RUN --mount=type=cache,dst=/var/cache \
     --mount=type=tmpfs,dst=/tmp \
     env NOCTALIA_GREETER_VERSION="${NOCTALIA_GREETER_VERSION}" \
@@ -126,27 +136,12 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     /ctx/custom-kernel/install.sh \
  && /ctx/build.sh
 
-# ----- Margine GNOME extensions: bake o-tiling + hide-cursor system-wide -----
-# Replaces the old per-user "install at first login via autostart"
-# pattern (margine-install-user-extensions) that was racy, shadowed
-# Bluefin's own search-light, and silently failed if the user logged
-# in before flatpak-preinstall.service had network. Bluefin + Bazzite
-# do this exact thing — extensions live in /usr/share/gnome-shell/
-# extensions/<uuid>/ at build time, dconf enables them, GDM picks them
-# up on first login with zero per-user state.
-RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
-    --mount=type=cache,dst=/var/cache \
-    --mount=type=cache,dst=/var/log \
-    --mount=type=tmpfs,dst=/tmp \
-    /ctx/build-margine-extensions.sh
-
 # ----- Lucciola: niri + Noctalia, GNOME kept stock as the fallback session -----
 # What used to be the second build FROM the published Margine image
 # (lucciola/Containerfile until 2026-10), now a step of this one: the
-# Lucciola files, then lucciola/build.sh, which installs niri and Noctalia,
-# removes the GNOME extensions and Shell defaults the steps above added, and
-# sets the public name. It still assumes it runs on the finished Margine
-# tree, so it stays after every Margine step.
+# Lucciola files, then lucciola/build.sh, which installs niri, Noctalia and
+# the greetd login screen and sets the public name. It still assumes it runs
+# on the finished Margine tree, so it stays after every Margine step.
 # Bump only together with a test boot: see the comment in lucciola/build.sh.
 # Version and release only: build.sh adds the base's Fedora tag (.fc44, .fc45).
 ARG NOCTALIA_VR=5.3.0-1

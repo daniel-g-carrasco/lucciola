@@ -64,14 +64,19 @@ KDL
   mkdir -p "${ws_marker%/*}"
   : > "$ws_marker"
 fi
-# Screenshots go where GNOME saves them in Margine: the Pictures folder of
-# user-dirs.dirs (~/data/media/photos with the Margine layout), then GNOME
+# Screenshots go where GNOME saves them: the XDG Pictures folder of
+# user-dirs.dirs (~/Pictures on a new account, translated with the locale;
+# whatever a user or an older Margine layout set it to otherwise), then GNOME
 # Shell's own translated folder and file names ("Screenshots/Screenshot From
 # ..."). niri expands only "~" in screenshot-path, so the path is computed
 # here and written to a file the system niri config includes; rewritten
 # only when it changes. A screenshot-path in lucciola.kdl still wins.
+# xdg-user-dirs.service writes user-dirs.dirs before niri.service starts; a
+# session started without it (niri run by hand) gets it here, the same way.
+dirs_file="${XDG_CONFIG_HOME:-$HOME/.config}/user-dirs.dirs"
+[ -e "$dirs_file" ] || xdg-user-dirs-update >/dev/null 2>&1 || true
 pictures="$(xdg-user-dir PICTURES 2>/dev/null)"
-[ -n "$pictures" ] || pictures="$HOME"
+[ -n "$pictures" ] || pictures="$HOME/Pictures"
 shots_dir="$(gettext -d gnome-shell Screenshots 2>/dev/null)"
 [ -n "$shots_dir" ] || shots_dir=Screenshots
 shots_name="$(gettext -d gnome-shell 'Screenshot From %s' 2>/dev/null)"

@@ -6,15 +6,14 @@
 # screen (step 5), and checks the result.
 #
 # Written when Lucciola was a second build FROM the published Margine image,
-# and kept as it was when the two builds became one (2026-10), so the image
-# stays the same. Several steps undo or redo what the Margine steps just did,
-# and are for the slimming that follows to fold into those steps instead:
-#   2b  removes the GNOME extensions build-margine-extensions.sh bakes and
-#       the base's extension RPMs, the Shell sections of the
-#       30-gnome-defaults overrides, its dconf defaults, and the
-#       first-boot autostart entries from system_files;
-#   2d  takes Smile out of the preinstall list 20-flatpaks writes;
-#   3   rewrites the os-release 10-os-identity writes;
+# and kept as it was when the two builds became one (2026-10). Until
+# 2026-10-18 it also undid Margine's GNOME customisation (extensions, Shell
+# defaults, dconf keyfiles, first-login autostarts, Smile and Extension
+# Manager); the Margine steps no longer add any of it, and 2b only checks
+# that GNOME arrives stock. Still redoing a Margine step:
+#   3   rewrites the os-release public identity, which 10-os-identity
+#       writes as Lucciola's already since 2026-10-18 (the initramfs needs
+#       it there): a no-op that checks it;
 #   the closing dnf clean repeats what 99-cleanup.sh does anyway.
 set -euo pipefail
 
@@ -70,90 +69,51 @@ rm -f "$src"
 log "session entry: $(grep -E '^(Name|Exec|DesktopNames)=' /usr/share/wayland-sessions/lucciola.desktop | tr '\n' ' ')"
 
 # 2b. GNOME stays stock. Lucciola keeps GNOME as a fallback session only,
-#     and stock: without the extensions Margine adds (its own builds and
-#     the ones the base image ships as RPMs), without the Shell,
-#     window-manager and settings-daemon defaults that go with them
-#     (enabled extensions, favourites, workspaces, focus mode, keybindings)
-#     and without the first-login bootstrap of a GNOME session. Whole
-#     sections of the gschema overrides are dropped or kept: the ones that
-#     also serve the GTK applications of a Lucciola session (fonts, accent
-#     colour, wallpaper, file chooser, Ptyxis, Nautilus, virt-manager)
-#     stay. GNOME's own gnome-shell-extensions package (the Classic session
-#     set) is part of stock GNOME and stays.
-log "GNOME stays stock: removing the extensions and the Shell defaults"
-mapfile -t ext_rpms < <(rpm -qa --qf '%{NAME} %{SOURCERPM}\n' 'gnome-shell-extension-*' \
-  | awk '$2 !~ /^gnome-shell-extensions-/ { print $1 }')
-if (( ${#ext_rpms[@]} )); then
-  log "  RPM extensions: ${ext_rpms[*]}"
-  dnf5 -y --setopt=clean_requirements_on_remove=False remove "${ext_rpms[@]}"
-  rpm -q gnome-shell gdm gnome-control-center >/dev/null || { echo "ERROR: removing the extensions took GNOME with them" >&2; exit 1; }
-fi
+#     and stock: no Shell extension besides the GNOME Classic set Fedora's
+#     gnome-shell-extensions package ships, no override that enables one,
+#     no Shell, mutter, window-manager or settings-daemon defaults in our
+#     gschema overrides or the dconf database, no first-login autostart.
+#     The Margine steps stopped adding them on 2026-10-18 (the zz1 override
+#     keeps what GTK applications read: accent colour, wallpaper,
+#     virt-manager); this fails the build if one comes back, from them or
+#     from the base.
+log "checking that GNOME is stock"
+bad=()
 for d in /usr/share/gnome-shell/extensions/*/; do
-  d="${d%/}"
   [[ -d "$d" ]] || continue   # the glob itself, when the directory is empty
-  rpm -qf "$d" >/dev/null 2>&1 && continue
-  rm -rf "$d"
-  log "  removed $(basename "$d")"
+  srpm="$(rpm -qf --qf '%{SOURCERPM}' "${d%/}" 2>/dev/null || true)"
+  [[ "$srpm" == gnome-shell-extensions-* ]] || bad+=("extension $(basename "$d") (${srpm:-owned by no package})")
 done
+while read -r name srpm; do
+  [[ "$srpm" == gnome-shell-extensions-* ]] || bad+=("extension package $name")
+done < <(rpm -qa --qf '%{NAME} %{SOURCERPM}\n' 'gnome-shell-extension-*')
 for f in /usr/share/glib-2.0/schemas/org.gnome.shell.extensions.*.gschema.xml; do
   [[ -e "$f" ]] || continue
-  rpm -qf "$f" >/dev/null 2>&1 || rm -f "$f"
+  rpm -qf "$f" >/dev/null 2>&1 || bad+=("schema owned by no package: $f")
 done
-# A section goes with the comment lines right above it. Bluefin's zz0 exists
-# only on a Bluefin base (Margine built on one until 2026-10-11).
-python3 - /usr/share/glib-2.0/schemas/zz0-bluefin-modifications.gschema.override \
-          /usr/share/glib-2.0/schemas/zz1-margine.gschema.override <<'PY'
-import os, re, sys
-drop = re.compile(r'^\[org\.gnome\.(shell|mutter|desktop\.wm|desktop\.app-folders'
-                  r'|desktop\.search-providers|desktop\.peripherals|settings-daemon)[.\]:]')
-for path in sys.argv[1:]:
-    if not os.path.exists(path):   # a base without Bluefin has no zz0
-        continue
-    out, pending, keep = [], [], True
-    for line in open(path):
-        if line.startswith('['):
-            keep = not drop.match(line)
-            if keep:
-                out += pending + [line]
-            pending = []
-        elif not line.strip() or line.lstrip().startswith('#'):
-            pending.append(line)
-        elif keep:
-            out += pending + [line]
-            pending = []
-        else:
-            pending = []
-    if keep:
-        out += pending
-    open(path, 'w').write(''.join(out).lstrip('\n'))
-PY
-rm -f /usr/share/glib-2.0/schemas/zz1-bluefin-extensions.gschema.override
-out="$(glib-compile-schemas /usr/share/glib-2.0/schemas 2>&1)" || { echo "$out" >&2; exit 1; }
-if grep -q 'org\.gnome\.shell' <<<"$out"; then
-  echo "$out" >&2; echo "ERROR: an override still names a removed Shell schema" >&2; exit 1
-fi
-# dconf defaults: every file that sets a Shell, mutter, window-manager or
-# settings-daemon path goes (the authselect one does not).
+gnome_section='org[./]gnome[./](shell|mutter|desktop[./]wm|desktop[./]app-folders|desktop[./]search-providers|desktop[./]peripherals|settings-daemon)'
+for f in /usr/share/glib-2.0/schemas/zz*.gschema.override; do
+  [[ -e "$f" ]] || continue
+  if grep -qE "^\[${gnome_section}([].:])" "$f"; then bad+=("$f sets GNOME Shell or window-manager defaults"); fi
+  if grep -q 'enabled-extensions' "$f"; then bad+=("$f enables extensions"); fi
+done
 for f in /etc/dconf/db/distro.d/*; do
   [[ -f "$f" ]] || continue
-  if grep -q -E '^\[org/gnome/(shell|mutter|desktop/wm|desktop/app-folders|desktop/search-providers|desktop/peripherals|settings-daemon)(/|\])' "$f"; then
-    rm -f "$f"
-    log "  removed dconf $(basename "$f")"
-  fi
+  if grep -qE "^\[${gnome_section}(/|\])" "$f"; then bad+=("dconf $f sets GNOME Shell or window-manager defaults"); fi
 done
-dconf update
-rm -f /etc/xdg/autostart/margine-first-boot.desktop /etc/xdg/autostart/margine-first-boot-status.desktop
-for d in /usr/share/gnome-shell/extensions/*/; do
-  [[ -d "$d" ]] || continue
-  rpm -qf "${d%/}" >/dev/null 2>&1 || { echo "ERROR: unowned extension survived: $d" >&2; exit 1; }
+for f in /etc/xdg/autostart/margine-first-boot*.desktop; do
+  if [[ -e "$f" ]]; then bad+=("first-login autostart $f"); fi
 done
-if grep -l 'enabled-extensions' /usr/share/glib-2.0/schemas/zz*.gschema.override 2>/dev/null; then
-  echo "ERROR: an override still enables extensions" >&2; exit 1
+if (( ${#bad[@]} )); then
+  printf 'ERROR: GNOME is not stock: %s\n' "${bad[@]}" >&2
+  exit 1
 fi
-for f in /etc/dconf/db/distro.d/*margine* /etc/dconf/db/distro.d/*shell*; do
-  [[ -e "$f" ]] && { echo "ERROR: Margine's GNOME dconf defaults survived: $f" >&2; exit 1; }
-done
-log "GNOME extensions left: $(ls /usr/share/gnome-shell/extensions/ 2>/dev/null | tr '\n' ' ')"
+# Every override still compiles cleanly against the schemas in the image.
+out="$(glib-compile-schemas --dry-run /usr/share/glib-2.0/schemas 2>&1)" || { echo "$out" >&2; exit 1; }
+if grep -q 'zz1-margine' <<<"$out"; then
+  echo "$out" >&2; echo "ERROR: zz1-margine.gschema.override names a schema or key the image does not have" >&2; exit 1
+fi
+log "GNOME extensions: $(ls /usr/share/gnome-shell/extensions/ 2>/dev/null | tr '\n' ' ')"
 
 # 2c. Lucciola is the session a new user gets. accounts-daemon fills a
 #     user's record from these templates the first time it sees the user.
@@ -169,32 +129,12 @@ for t in standard administrator; do
   grep -q '^Session=lucciola$' "$f" || { echo "ERROR: $f not rewritten" >&2; exit 1; }
 done
 
-# 2d. Flatpaks for the GNOME that 2b takes apart are not preinstalled.
-#     Emoji: Noctalia's launcher has an emoji picker (Mod+Period opens it
-#     on "/emo"), so Margine's Smile, an emoji picker for GNOME paired with
-#     a Shell extension 2b removes, is not needed. Extension Manager has no
-#     Shell extensions left to manage. Only new installs change: an install
-#     that already has them keeps them; Bazaar removes them.
-pre=/usr/share/flatpak/preinstall.d/margine-defaults.preinstall
-bake=/usr/share/margine/installer-flatpaks-base
-for app in it.mijorus.smile com.mattjakeman.ExtensionManager; do
-  rx="${app//./\\.}"
-  grep -q "^\[Flatpak Preinstall ${rx}\]$" "$pre" || { echo "ERROR: $app is no longer in $pre: drop it from step 2d" >&2; exit 1; }
-  python3 - "$pre" "$app" <<'PY'
-import re, sys
-p, app = sys.argv[1], sys.argv[2]
-s = open(p).read()
-s = re.sub(r"\[Flatpak Preinstall " + re.escape(app) + r"\]\n(?:[^\[\n].*\n)*\n?", "", s)
-open(p, "w").write(s)
-PY
-  sed -i -E "/^${rx}([[:space:]]|$)/d" "$bake"
-  if grep -q "$rx" "$pre" "$bake"; then echo "ERROR: $app still preinstalled" >&2; exit 1; fi
-done
-log "Smile and Extension Manager left out of the preinstalled Flatpaks (no GNOME Shell extensions here)"
-
-# 3. Identity. Only the public name changes: ID, VARIANT_ID and the rest stay
-#    Margine's, because the tooling underneath (validators, status, update
-#    helpers) is Margine's and keys on them.
+# 3. Identity. The public name, the logo (50-branding installs
+#    lucciola-logo, the firefly on its tile) and the terminal accent (beige
+#    #e6d5bf, the firefly's colour, where systemd prints the name at boot)
+#    change: ID, VARIANT_ID and the rest stay Margine's, because the
+#    tooling underneath (validators, status, update helpers) is Margine's
+#    and keys on them.
 fedora_ver="$(rpm -E %fedora)"
 build_date="$(date -u +%Y%m%d)"
 sed -i \
@@ -202,8 +142,13 @@ sed -i \
   -e "s/^VERSION=.*/VERSION=\"${fedora_ver} (Lucciola)\"/" \
   -e "s/^PRETTY_NAME=.*/PRETTY_NAME=\"Lucciola ${fedora_ver} (${build_date})\"/" \
   -e 's/^VARIANT=.*/VARIANT="Lucciola"/' \
+  -e 's/^LOGO=.*/LOGO=lucciola-logo/' \
+  -e 's/^ANSI_COLOR=.*/ANSI_COLOR="0;38;2;230;213;191"/' \
   /usr/lib/os-release
 grep -q '^NAME="Lucciola"$' /usr/lib/os-release || { echo "ERROR: os-release not rewritten" >&2; exit 1; }
+grep -qx 'LOGO=lucciola-logo' /usr/lib/os-release || { echo "ERROR: os-release LOGO not rewritten" >&2; exit 1; }
+[[ -s /usr/share/icons/hicolor/scalable/apps/lucciola-logo.svg ]] \
+  || { echo "ERROR: os-release names lucciola-logo, but the icon is not installed (50-branding)" >&2; exit 1; }
 
 # 4. Checks: the shipped niri config must parse (includes resolved), and the
 #    helpers must be there and executable.

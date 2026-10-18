@@ -9,7 +9,7 @@
 # Why this works where policies.json did not: the Zen Flatpak's policy
 # path lives in read-only /app, but the profile's extensions/ dir is
 # user-writable and Firefox/Zen load a correctly-named signed XPI from
-# there. This is the same mechanism `ujust margine-netflix-1080p` uses.
+# there. This is the same mechanism `ujust lucciola-netflix-1080p` uses.
 #
 # Requires Zen to have been launched at least once so the profile exists
 # (if none, log and skip; margine-bootstrap re-runs this).
@@ -51,6 +51,8 @@ echo "Profile: $PROFILE"
 USER_JS="$PROFILE/user.js"
 EXT_DEST="$PROFILE/extensions/${UBLOCK_ID}.xpi"
 
+# The block markers keep the script's old name (margine-configure-zen-browser):
+# they are in users' user.js files, which find and replace the block by them.
 prefs=$(cat <<'EOF'
 // margine-configure-zen-browser — managed block
 // Default search engine: DuckDuckGo (Margine preference).

@@ -1,5 +1,5 @@
 [Unit]
-Description=Margine: follow the image on the signature-checked transport
+Description=Lucciola: follow the image on the signature-checked transport
 Documentation=file:///usr/libexec/margine/signed-origin
 ConditionPathExists=/run/ostree-booted
 Wants=network-online.target

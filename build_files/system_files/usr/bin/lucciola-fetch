@@ -1,0 +1,4 @@
+#!/usr/bin/sh
+# lucciola-fetch: fastfetch with Lucciola's logo and colours + module set
+# (margine-fetch is a link to it).
+exec fastfetch --config /usr/share/fastfetch/margine.jsonc "$@"

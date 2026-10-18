@@ -5,7 +5,7 @@
 #
 # Runs AUTOMATICALLY at boot via margine-grub-hidpi.service (so a new baked
 # GRUB config lands after an image update with no manual step) and on demand
-# via `ujust margine-grub-hidpi`.
+# via `ujust lucciola-grub-hidpi`.
 #
 # WHY a per-install step exists at all: the OS image is immutable, but the
 # BOOTLOADER lives on /boot (+ the ESP), which bootc/bootupd write at INSTALL
@@ -22,7 +22,7 @@ set -euo pipefail
 QUIET=0; [[ "${1:-}" == "--quiet" ]] && QUIET=1
 say() { [[ "$QUIET" -eq 1 ]] || printf '%s\n' "$*"; }
 
-[[ "$(id -u)" -eq 0 ]] || { echo "ERROR: must run as root (use: ujust margine-grub-hidpi)"; exit 1; }
+[[ "$(id -u)" -eq 0 ]] || { echo "ERROR: must run as root (use: ujust lucciola-grub-hidpi)"; exit 1; }
 
 SRC=/usr/lib/bootupd/grub2-static
 FONT_SRC="$SRC/fonts/margine.pf2"

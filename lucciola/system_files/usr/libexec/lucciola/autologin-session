@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 # Lucciola: the autologin session. greetd's [initial_session] (written by
-# `ujust margine-autologin on`) runs this as the user, after PAM has opened
+# `ujust lucciola-autologin on`) runs this as the user, after PAM has opened
 # the session, through `sh -c`.
 #
 # A greeter tells greetd which session to start and with which environment;

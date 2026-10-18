@@ -183,7 +183,7 @@ for (( i = 1; i <= TIMEOUT; i++ )); do
     exit 1
   fi
   if [[ -n "$BOOT_OK" ]] && (( GUI_WATCH )); then
-    # Two independent warn-only verdicts share one window: the Layer C
+    # Two independent verdicts share one window: the Layer C
     # GUI probe and the gaming-native dry-run. Break only once BOTH are
     # decided (or the deadline passes) so neither masks the other.
     [[ -z "$GUI_RESULT" ]] && grep -q "MARGINE-GUI-SMOKE: PASS" "$LOG" && GUI_RESULT=pass
@@ -241,16 +241,20 @@ if [[ -n "$BOOT_OK" ]]; then
     # (2026-09-02, after the RetroArch/retroarch depsolve broke
     # updates for gaming-native users while this was warn-only: "questo
     # tipo di cose NON deve ricapitare". A FAIL now blocks promotion;
-    # skip/timeout stay warnings so a stuck probe cannot wedge releases.)
+    # skip/timeout stay warnings so a stuck probe cannot wedge releases.
+    # Since 2026-10-18 the layer brings steam's whole 32-bit chain (the
+    # image no longer carries it) and a missing package list is a FAIL;
+    # build.yml resolves the same layer before the push, so a skip here
+    # is not the only check.)
     grep -E "MARGINE-GAMING-NATIVE" "$LOG" || true
     emit "gaming=${GAMING_RESULT:-none}"
     case "$GAMING_RESULT" in
       pass) echo "✓ Gaming-native layer resolves (rpm-ostree dry-run)" ;;
       fail)
-        echo "::error::Gaming-native layer does NOT resolve — every gaming-native rpm-ostree upgrade (and ujust margine-gaming-native) would fail to depsolve. GATING: not promoting. See serial log artifact."
+        echo "::error::Gaming-native layer does NOT resolve: every gaming-native rpm-ostree upgrade (and ujust lucciola-gaming-native) would fail to depsolve. GATING: not promoting. See serial log artifact."
         emit "passed=false"
         exit 1 ;;
-      skip) echo "::warning::Gaming-native check skipped (package list missing/empty in image)." ;;
+      skip) echo "::warning::Gaming-native check skipped (rpm-ostreed not ready or dry run timed out); build.yml's resolve check still ran." ;;
       *)    echo "::warning::Gaming-native check gave no verdict (probe skipped or stuck) — see inject step + serial log." ;;
     esac
   fi
