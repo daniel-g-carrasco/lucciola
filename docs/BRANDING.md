@@ -56,13 +56,13 @@ These five cut across almost every touchpoint below:
 | GRUB menu text + HiDPI font | `live-env/src/iso.yaml` + `…/grub2-static/configs.d/05_margine-gfxmode.cfg` | `Install Margine`, `grub2-mkfont`, `margine.pf2` |
 | GDM background / logo (Margine; Lucciola's fallback login screen) | `build_files/50-branding/install.sh` | `gdm.d/01-margine-background`, `login-screen` |
 | **Lucciola** login screen (Noctalia Greeter on greetd): look, logo, preselected session | `lucciola/system_files/usr/share/lucciola/greeter/{sync,greeter}.toml`, `lucciola/build.sh` (step 5) | `hide_logo`, `[appearance.palette]`, `last = "Lucciola"` |
-| Desktop wallpaper / accent / dock / workspaces | `build_files/50-branding/install.sh`, `build_files/30-gnome-defaults/install.sh` | `picture-uri`, `accent-color`, `favorite-apps`, `num-workspaces` |
+| Desktop wallpaper / accent colour (GTK; GNOME itself stock) | `build_files/50-branding/install.sh`, `build_files/30-gnome-defaults/install.sh` | `picture-uri`, `accent-color` |
 | Live ISO "Welcome to Margine" | `live-env/src/build.sh` | `Welcome to Fedora` (the sed targets) |
 | Anaconda installer **window icon** | `live-env/src/build.sh` | `AnacondaInstaller`, `_wmid in`, `StartupWMClass` |
 | Installer product/storage config | `live-env/src/anaconda/profile.d/margine.conf` | `variant_id`, `default_partitioning` |
 | "Secure Boot is disabled" notice | `live-env/src/build.sh` | `margine-live-sb-notice` |
 | MOK passphrase / enrollment | `build_files/custom-kernel/install.sh` | `margine`, `mok-enroll` |
-| First-login bootstrap + notification | `build_files/system_files/etc/xdg/autostart/margine-first-boot*.desktop` | `first-boot-bootstrap`, `first-boot-status` |
+| First-login bootstrap + notification (no autostart in Lucciola: `ujust margine-bootstrap` by hand) | `build_files/system_files/usr/libexec/margine/first-boot-bootstrap`, `…/usr/libexec/margine-first-boot-status` | `first-boot-bootstrap`, `first-boot-status` |
 | Update notifications | `build_files/system_files/usr/libexec/margine*` (units in `…/usr/lib/systemd/user/`) | `margine-notify` |
 | Notification icon on the lock screen | `build_files/system_files/usr/libexec/margine/margine-notify` | `app_icon`, `image-path` |
 | Margine System app (name/icon/id) | `…/applications/dev.margine.System.desktop` + `…/icons/hicolor/scalable/apps/dev.margine.System.svg` + `…/libexec/margine/system-gui` | `dev.margine.System`, `Margine System` |
@@ -266,15 +266,13 @@ starts when the greeter cannot come up, and keeps the dconf branding above).
 **Wallpaper** (`build_files/50-branding/install.sh`): gschema override
 `/usr/share/glib-2.0/schemas/zz1-margine.gschema.override` →
 `picture-uri[-dark]` = `/usr/share/backgrounds/margine/margine.png`. Named **zz1**
-so it loads *after* Bluefin's `zz0`. A compat symlink
+so it loads *after* the base's own overrides. A compat symlink
 `autumn-leaves.png → margine.png` keeps old user dconf working.
 
-**Accent / dock / workspaces** (`build_files/30-gnome-defaults/install.sh`):
-- `accent-color='yellow'` (GNOME 47/48+; safe no-op on older).
-- `favorite-apps` = 5-app dock (`zen, thunderbird, nautilus, bazaar, ptyxis`) — the
-  intentional 5-app set, not Bluefin's 10.
-- `num-workspaces=5` + `dynamic-workspaces=false` → **fixed 5 workspaces**
-  (standing preference; do not revert to 10/dynamic).
+**Accent** (`build_files/30-gnome-defaults/install.sh`): `accent-color='yellow'`,
+read by the GTK applications of the Lucciola session. GNOME is Lucciola's stock
+fallback session since 2026-10-18: no dock favourites, workspace count or other
+Shell default of Margine's (Margine OS keeps them in its own tree).
 
 **Gotcha:** after editing any `.gschema.override`, `glib-compile-schemas
 /usr/share/glib-2.0/schemas` must run (the build does this).
@@ -425,14 +423,16 @@ for the user-facing provenance/SB docs ([[handbook-sync-mechanism]]).
 All under `build_files/system_files/`. All autostart entries follow Golden Rules
 4 & 5 (no `X-GNOME-Autostart-Phase`; `Exec=` → a `/usr/libexec` wrapper).
 
-- **Bootstrap** (`etc/xdg/autostart/margine-first-boot.desktop` →
-  `usr/libexec/margine/first-boot-bootstrap`): runs `ujust margine-bootstrap
-  unattended` once (home layout, extensions, keybindings, defaults). Idempotent
-  marker `~/.config/margine/bootstrapped`.
-- **First-boot status** (`…/margine-first-boot-status.desktop` →
-  `usr/libexec/margine-first-boot-status`): notifies if `flatpak-preinstall.service`
-  is still installing the deferred heavy apps ("installing extra apps… ~5–15 min"),
-  and "Margine is ready" when done. Marker `~/.cache/margine/first-boot-notified`.
+- **Bootstrap** (`usr/libexec/margine/first-boot-bootstrap`): runs `ujust
+  margine-bootstrap unattended` (home layout, default applications, Zen,
+  darktable). Idempotent marker `~/.config/margine/bootstrapped`. Margine starts
+  it from a GNOME-only autostart entry; Lucciola ships no autostart for it
+  (2026-10-18), so in Lucciola it runs only by hand.
+- **First-boot status** (`usr/libexec/margine-first-boot-status`): notifies if
+  `flatpak-preinstall.service` is still installing the deferred heavy apps
+  ("installing extra apps… ~5–15 min"), and "Margine is ready" when done. Marker
+  `~/.cache/margine/first-boot-notified`. Same as the bootstrap: no autostart in
+  Lucciola.
 - **Upgrade notify** (`usr/lib/systemd/user/margine-upgrade-notify.service`):
   post-reboot **confirmation** — at login, if the booted deployment digest
   differs from the recorded one, toasts "Margine updated / Now running: …".

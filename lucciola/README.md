@@ -84,11 +84,12 @@ verified by the device, rollback, and every Margine fix. This layer adds:
   (preselected by the greeter until someone picks another; the
   AccountsService user templates for autologin and GDM), and the public
   name in os-release;
-- GNOME as a stock fallback session: the image drops every GNOME Shell
-  extension (Margine's and the base's), the Shell, window-manager and
-  settings-daemon defaults that go with them and the GNOME first-login
-  bootstrap. The defaults that also serve GTK applications under niri
-  (fonts, accent colour, file chooser, Ptyxis, Nautilus) stay.
+- GNOME as a stock fallback session: the build adds no GNOME Shell
+  extension (only Fedora's GNOME Classic set is there), none of Margine's
+  Shell, window-manager or settings-daemon defaults and no GNOME
+  first-login bootstrap (`build.sh` fails if one of them shows up), and
+  no wayland-scroll-factor. The defaults that also serve GTK applications
+  under niri (accent colour, wallpaper, virt-manager connections) stay.
 
 Images: `ghcr.io/daniel-g-carrasco/lucciola`, built by `.github/workflows/build.yml`
 as `:candidate` and promoted to `:stable` by `.github/workflows/smoke-boot.yml`,
