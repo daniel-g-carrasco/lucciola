@@ -8,9 +8,9 @@
 # Written when Lucciola was a second build FROM the published Margine image,
 # and kept as it was when the two builds became one (2026-10). Until
 # 2026-10-18 it also undid Margine's GNOME customisation (extensions, Shell
-# defaults, dconf keyfiles, first-login autostarts, Smile); the Margine
-# steps no longer add any of it, and 2b only checks that GNOME arrives
-# stock. Still redoing a Margine step:
+# defaults, dconf keyfiles, first-login autostarts, Smile and Extension
+# Manager); the Margine steps no longer add any of it, and 2b only checks
+# that GNOME arrives stock. Still redoing a Margine step:
 #   3   rewrites the os-release 10-os-identity writes;
 #   the closing dnf clean repeats what 99-cleanup.sh does anyway.
 set -euo pipefail
