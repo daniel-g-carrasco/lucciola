@@ -1,8 +1,9 @@
 # Native gaming layer — RPMs that `ujust margine-gaming-native` layers
-# via rpm-ostree. SINGLE SOURCE OF TRUTH: the recipe (60-custom.just)
-# and the smoke-boot dry-run check (.github/smoke/gui-probe.sh, via
-# /usr/share/margine/gaming-native-packages.txt in the image) both read
-# this exact list, so the CI check can never drift from what users get.
+# via rpm-ostree. SINGLE SOURCE OF TRUTH: the recipe (60-custom.just),
+# the build's resolve check (.github/scripts/gaming-native-resolve.sh) and
+# the smoke-boot dry-run check (.github/smoke/gui-probe.sh), via
+# /usr/share/margine/gaming-native-packages.txt in the image, all read
+# this exact list, so the CI checks can never drift from what users get.
 #
 # Lines starting with # and blank lines are ignored. One package per line.
 #
@@ -11,11 +12,18 @@
 # lowercase name left a dormant, ambiguous request in users' origins
 # that exploded on 2026-09-02 when libdnf preferred Fedora's retroarch.
 #
-# steam pulls the 32-bit (i686) graphics stack — that multilib edge is
-# the fragile one (i686 mesa/llvm must version-match the baked x86_64),
-# which is exactly what the smoke-boot dry-run guards on each build.
+# steam pulls the 32-bit (i686) graphics stack, about 200 packages, and
+# each i686 library must have exactly the version of its x86_64 twin in
+# the image. Until 2026-10-18 the image carried that chain already (the
+# gaming closure baked in custom-kernel); now the layer brings it, which
+# is the fragile edge both CI checks guard on each build.
+#
+# mangohud and goverlay came with the image until 2026-10-18; they are in
+# the layer now, so a native gamer keeps them.
 steam
 lutris
 RetroArch
 gamescope
 vkBasalt
+mangohud
+goverlay

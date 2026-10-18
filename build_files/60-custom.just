@@ -95,12 +95,12 @@ margine-gaming:
         - gamescope       (HDR / per-game compositor / scaling)
         - mangohud        (FPS / GPU / CPU overlay)
         - vkBasalt        (post-processing Vulkan layer)
-        - gamemode        (CPU governor + niceness during gameplay)
         - goverlay        (GUI configurator for MangoHud + vkBasalt)
+
+      Already in the image, nothing to install:
+        - gamemode        (CPU governor + niceness during gameplay)
         - steam-devices   (controller udev rules)
-        - input-remapper  (remap keyboard/mouse/gamepad without per-device drivers)
         - tuned, tuned-ppd (CPU governor switching balanced↔performance)
-        - rom-properties  (Nautilus column extension for ROM metadata)
 
     Notes:
       - GameMode auto-engages when Steam launches a game. No setup.
@@ -150,16 +150,17 @@ margine-gaming:
 
     echo
     echo "== Layering gaming-only host helpers (rpm-ostree) =="
-    # gamescope + vkBasalt are the only RPMs strictly gaming-only.
-    # Everything else (mangohud, goverlay, steam-devices, gamemode,
-    # input-remapper, tuned, tuned-ppd, scx-scheds) is already in
-    # base Margine — see custom-kernel/install.sh + build_files/build.sh.
-    # rom-properties-gtk was dropped in 2026-05 (no F44 build available).
+    # The gaming-only RPMs. steam-devices, gamemode, tuned, tuned-ppd and
+    # scx-scheds are already in the image. mangohud and goverlay were too
+    # until 2026-10-18; they are layered here now, so re-running this
+    # recipe brings them back on a system that had them from the image.
     # --idempotent: a re-run (common: "did it install?") must not abort
     # under set -e when the package is already layered.
     sudo rpm-ostree install --idempotent \
         gamescope \
-        vkBasalt
+        vkBasalt \
+        mangohud \
+        goverlay
 
     echo
     cat <<'EOF'
@@ -177,20 +178,27 @@ margine-gaming-remove:
     set -euo pipefail
 
     echo "This will:"
-    echo "  - rpm-ostree uninstall gamescope + vkBasalt (the only gaming-only RPMs)"
+    echo "  - rpm-ostree uninstall gamescope, vkBasalt, mangohud and goverlay"
     echo "  - flatpak uninstall the 7 gaming Flatpaks (Steam, Lutris, Heroic,"
     echo "    Bottles, Protontricks, ProtonPlus, RetroArch)"
     echo
-    echo "  NOT touched (kept — useful for non-gaming workflows too):"
-    echo "    mangohud, goverlay, steam-devices, gamemode, input-remapper,"
-    echo "    tuned, tuned-ppd, scx-scheds. All in base Margine."
+    echo "  NOT touched (part of the image, not of the layer):"
+    echo "    steam-devices, gamemode, tuned, tuned-ppd, scx-scheds."
     echo
     read -rp "Continue? [y/N] " ans
     case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
 
-    sudo rpm-ostree uninstall \
-        gamescope \
-        vkBasalt || true
+    # Only what is layered: rpm-ostree refuses the whole request when one
+    # name is not (mangohud and goverlay came with the image until
+    # 2026-10-18, so older layers lack them).
+    mapfile -t LAYERED < <(rpm-ostree status --json | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)["deployments"][0].get("requested-packages", [])))')
+    declare -A IS_LAYERED=()
+    for p in "${LAYERED[@]}"; do IS_LAYERED["$p"]=1; done
+    DROP=()
+    for p in gamescope vkBasalt mangohud goverlay; do
+        [[ -n "${IS_LAYERED[$p]:-}" ]] && DROP+=("$p")
+    done
+    (( ${#DROP[@]} )) && sudo rpm-ostree uninstall "${DROP[@]}"
 
     sudo flatpak uninstall --system -y \
         com.valvesoftware.Steam \
@@ -223,11 +231,14 @@ margine-gaming-native:
     This installs:
 
       Native RPMs (layered via rpm-ostree — requires reboot):
-        - steam              (Valve Steam client, RPM Fusion non-free)
+        - steam              (Valve Steam client, from negativo17, with its
+                              32-bit libraries: about 200 packages, a few
+                              hundred MB to download the first time)
         - lutris             (open-source game manager)
         - RetroArch          (multi-emulator front-end)
         - gamescope          (HDR / per-game compositor / scaling)
         - vkBasalt           (post-processing Vulkan layer)
+        - mangohud, goverlay (FPS / GPU / CPU overlay and its settings)
 
       Flatpaks (for launchers without an official RPM):
         - com.heroicgameslauncher.hgl   (Epic + GOG)
@@ -293,12 +304,12 @@ margine-gaming-native-remove:
     set -euo pipefail
 
     echo "This will:"
-    echo "  - rpm-ostree uninstall steam, lutris, RetroArch, gamescope, vkBasalt"
+    echo "  - rpm-ostree uninstall steam, lutris, RetroArch, gamescope, vkBasalt,"
+    echo "    mangohud, goverlay (and the 32-bit libraries steam brought)"
     echo "  - flatpak uninstall Heroic, Bottles, Protontricks, ProtonPlus"
     echo
-    echo "  NOT touched (kept — useful for non-gaming workflows too):"
-    echo "    mangohud, goverlay, steam-devices, gamemode, input-remapper,"
-    echo "    tuned, tuned-ppd, scx-scheds. All in base Margine."
+    echo "  NOT touched (part of the image, not of the layer):"
+    echo "    steam-devices, gamemode, tuned, tuned-ppd, scx-scheds."
     echo
     read -rp "Continue? [y/N] " ans
     case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
@@ -306,7 +317,17 @@ margine-gaming-native-remove:
     PKGLIST=/usr/share/margine/gaming-native-packages.txt
     [ -r "$PKGLIST" ] || { echo "Missing $PKGLIST — bad image?" >&2; exit 1; }
     mapfile -t GAMING_PKGS < <(grep -vE '^[[:space:]]*(#|$)' "$PKGLIST")
-    sudo rpm-ostree uninstall "${GAMING_PKGS[@]}" || true
+    # Only what is layered: rpm-ostree refuses the whole request when one
+    # name is not (a layer made before mangohud and goverlay joined the
+    # list lacks them).
+    mapfile -t LAYERED < <(rpm-ostree status --json | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)["deployments"][0].get("requested-packages", [])))')
+    declare -A IS_LAYERED=()
+    for p in "${LAYERED[@]}"; do IS_LAYERED["$p"]=1; done
+    DROP=()
+    for p in "${GAMING_PKGS[@]}"; do
+        [[ -n "${IS_LAYERED[$p]:-}" ]] && DROP+=("$p")
+    done
+    (( ${#DROP[@]} )) && sudo rpm-ostree uninstall "${DROP[@]}"
 
     sudo flatpak uninstall --system -y \
         com.heroicgameslauncher.hgl \

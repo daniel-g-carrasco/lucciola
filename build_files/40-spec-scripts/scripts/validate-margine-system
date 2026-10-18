@@ -665,17 +665,21 @@ hdr "9c. Gaming layer (opt-in — checks only run if the layer was installed)"
 # ---------------------------------------------------------------------------
 # Margine gaming layer = `ujust margine-gaming` (Margine Gaming OCI
 # variant + ISO retired 2026-06-06 in favour of this single opt-in
-# path). Installs ~2 layered RPMs (gamescope + vkBasalt, the only
-# strictly gaming-only ones — everything else like mangohud/goverlay/
-# steam-devices/gamemode is already in base) + 7 Flatpaks. Detection
-# via "any gaming-specific RPM layered on top of base" — the heuristic
-# is reliable now that none of those RPMs ship in base.
+# path). Layers gamescope, vkBasalt, mangohud and goverlay (steam-devices
+# and gamemode are in the image) + 7 Flatpaks. Detection via "any
+# gaming-specific RPM layered on top of base": reliable because none of
+# gamescope and vkBasalt ship in the image (vkBasalt did until 2026-10-18,
+# a leftover of the gaming closure, which made every system without the
+# layer report "gaming remnants").
 # Two installation paths exist (60-custom.just):
-#   ujust margine-gaming         → RPMs gamescope+vkBasalt, 7 Flatpaks
-#                                  (incl. Steam/Lutris/RetroArch as Flatpak)
-#   ujust margine-gaming-native  → RPMs steam+lutris+retroarch+gamescope+
-#                                  vkBasalt, 4 Flatpaks (the launchers
-#                                  without an official RPM)
+#   ujust margine-gaming         → RPMs gamescope+vkBasalt+mangohud+
+#                                  goverlay, 7 Flatpaks (incl. Steam/
+#                                  Lutris/RetroArch as Flatpak)
+#   ujust margine-gaming-native  → the RPMs of gaming-native-packages.txt
+#                                  (steam with its 32-bit chain, lutris,
+#                                  RetroArch, gamescope, vkBasalt,
+#                                  mangohud, goverlay), 4 Flatpaks (the
+#                                  launchers without an official RPM)
 # Until 2026-06-12 only the Flatpak path was modeled, so native users got
 # 3 false FAILs and partial states got 8 misleading ones.
 GAMING_CORE_RPMS=(gamescope vkBasalt)
@@ -749,7 +753,7 @@ if rpm -q steam >/dev/null 2>&1 || flatpak info --system com.valvesoftware.Steam
     if command -v "$bin" >/dev/null 2>&1; then
       ok "$bin on PATH"
     else
-      warn "$bin not on PATH — did you reboot after 'ujust margine-gaming'?"
+      warn "$bin not on PATH: reboot after 'ujust margine-gaming', or re-run it (mangohud and goverlay left the image on 2026-10-18 and are layered by the recipe since)"
     fi
   done
   # tuned daemon present + a profile is active
