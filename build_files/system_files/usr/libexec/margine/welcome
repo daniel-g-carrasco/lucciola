@@ -17,7 +17,7 @@
 //            staged-update-notify ("Update ready"), system-gui (Lucciola
 //            System: pkexec only for system-update and rpm-ostree rollback,
 //            restarts only when asked), margine-brew-upgrade.timer (weekly,
-//            only where the user installed Homebrew)
+//            only where Homebrew is installed: ujust lucciola-devmode)
 //   apps     flatpak-preinstall.service, margine-defaults.preinstall
 //   guide    guide-open, lucciola-guide.desktop (pinned in the dock)
 //   secure   mok-enroll status (section shown only while enrollment is pending)
@@ -358,10 +358,12 @@ const WelcomeWindow = GObject.registerClass(
           ["body"],
         ),
         label(
-          "Homebrew does not come with Lucciola. Apps come from Bazaar, and " +
-          `command-line tools go in a Toolbox (${cmd("toolbox create")}, then ` +
-          `${cmd("toolbox enter")}). If you install Homebrew yourself, Lucciola ` +
-          "upgrades its packages once a week and Lucciola System lists the ones waiting.",
+          "Homebrew does not come with Lucciola. It comes with the developer " +
+          `tools, VS Code included: ${cmd("ujust lucciola-devmode")}, then a restart. ` +
+          "Apps come from Bazaar, and command-line tools can also go in a Toolbox " +
+          `(${cmd("toolbox create")}, then ${cmd("toolbox enter")}). Once Homebrew ` +
+          "is in, Lucciola upgrades its packages once a week and Lucciola System " +
+          "lists the ones waiting.",
           ["body", "dim"],
         ),
         this._button("Open Lucciola System", "plain",

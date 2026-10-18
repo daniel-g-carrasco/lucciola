@@ -548,7 +548,7 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
     <h2 id="h-ready">day one</h2>
     <p>Lucciola starts with apps such as Zen Browser, Thunderbird, LibreOffice, GIMP, Inkscape, darktable and OBS Studio already installed. Bazaar, the app store, lets you easily install more from Flathub’s collection.</p>
     <p>Audio and video codecs such as H.264, H.265 (HEVC) and AAC come preinstalled, so common audio and video formats play right away.</p>
-    <p>For developers: Distrobox and Toolbox run tools in separate environments without changing the system.</p>
+    <p>For developers: Distrobox and Toolbox run tools in separate environments without changing the system, and one command adds VS Code and Homebrew.</p>
   </section>
 
   <section aria-labelledby="h-base">
@@ -705,6 +705,9 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
     <div class="cmd"><pre>toolbox create</pre><button type="button">Copy</button></div>
     <div class="cmd"><pre>toolbox enter</pre><button type="button">Copy</button></div>
     <p>Distrobox does the same with other distributions, such as Ubuntu or Arch.</p>
+    <p>One command adds the developer tools: VS Code, a C compiler, and Homebrew for command-line tools. It lists what it installs and asks first. Restart when it is done.</p>
+    <div class="cmd"><pre>ujust lucciola-devmode</pre><button type="button">Copy</button></div>
+    <p>Add <code>status</code> to see what is in place, or <code>remove</code> to take it away.</p>
   </section>
 
   <section id="g-updates" aria-labelledby="g-h-updates">
