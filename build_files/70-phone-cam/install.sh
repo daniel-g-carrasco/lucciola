@@ -7,10 +7,9 @@
 #     labeled "Margine Phone Cam". exclusive_caps=1 means apps only see
 #     a capture device while a producer is feeding it, so the idle node
 #     never clutters camera pickers.
-#   - scrcpy from the OFFICIAL release tarball, pinned by version+sha256
-#     (same pattern as the WSF release RPM). Not in Fedora proper (COPR
-#     only), and the release bundle ships the matching scrcpy-server,
-#     which MUST match the client version.
+#   - scrcpy from the OFFICIAL release tarball, pinned by version+sha256.
+#     Not in Fedora proper (COPR only), and the release bundle ships the
+#     matching scrcpy-server, which MUST match the client version.
 #   - adb from Fedora android-tools; gstreamer1-plugin-gtk4 for the
 #     GUI's embedded preview (Gtk4PaintableSink).
 #   - The GUI itself ships in system_files (usr/libexec/margine/
