@@ -1289,7 +1289,7 @@ lucciola-update-unblock APP="":
 # ROCm libraries on its library path, and an OpenCL ICD list holding ROCm
 # alone. Then darktable's settings are tuned for integrated GPUs (5% of RAM,
 # advantage 4: the X-Trans demosaic goes to the CPU, the rest stays on the
-# GPU). Measurements: docs/notes/2026-10-09-darktable-gpu-rocm.md;
+# GPU). Measurements: docs/history/margine/notes/2026-10-09-darktable-gpu-rocm.md;
 # `ujust lucciola-darktable-bench` repeats them on your own photos.
 # GPU (OpenCL) for darktable via ROCm on AMD: status / enable (default) / disable.
 [group('Apps')]

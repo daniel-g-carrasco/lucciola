@@ -30,7 +30,7 @@ GPU (2026-08-17, 2026-10-09). Per-device OpenCL line, fields:
     ring (Fujifilm RAF, Markesteijn demosaic, 2026-08-17).
   - ROCm devices on unified memory (--gpu-tune, used by
     `ujust lucciola-darktable-opencl`): unified_fraction 0.050 and advantage
-    4. Measured on a Radeon 760M (docs/notes/2026-10-09-darktable-gpu-rocm.md):
+    4. Measured on a Radeon 760M (docs/history/margine/notes/2026-10-09-darktable-gpu-rocm.md):
     the X-Trans demosaic is several times slower on the iGPU than on the CPU;
     with 5% of RAM it no longer fits on the device and runs on the CPU, while
     the other modules stay on the GPU; advantage 4 sends to the CPU the

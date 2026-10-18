@@ -448,7 +448,7 @@ idle-dim=false
 # end-of-install gnome-shell crash. DISPROVEN and removed: the re-test without
 # o-tiling crashed identically (root cause: upstream GnomeWallClock
 # use-after-free under Anaconda's localed-driven GSettings storm — see
-# docs/notes/2026-07-04-live-session-crash-during-install.md). o-tiling's own
+# docs/history/margine/notes/2026-07-04-live-session-crash-during-install.md). o-tiling's own
 # real bug (global.log removed in GNOME 50) is hotfixed at build in
 # build-margine-extensions.sh, so the live keeps the FULL zz1 extension set —
 # the live session is Margine's demo, and the tiling is part of its identity.

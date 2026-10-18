@@ -4,7 +4,7 @@
 # Replaces the prior 1416-line monolith with a thin dispatcher over
 # numbered per-section scripts under /ctx/<NN>-<area>/install.sh.
 # See 00-common.sh for shared helpers + global env, and audit §8 rec
-# #22 / docs/build-sh-decomposition.md for the rationale.
+# #22 / docs/history/margine/build-sh-decomposition.md for the rationale.
 set -euo pipefail
 . /ctx/00-common.sh
 

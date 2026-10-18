@@ -15,7 +15,7 @@
 # dracut-live, livesys-scripts, anaconda-live and anaconda-webui on top
 # of the finished image at ISO time, with Margine's own Anaconda profile.
 # An installed Margine has never carried an installer, and the spec
-# (docs/spec/06, "do not use the system Firefox RPM") ships Zen as a
+# (docs/history/margine/spec/06, "do not use the system Firefox RPM") ships Zen as a
 # Flatpak with org.mozilla.firefox as the Flatpak fallback. Decision
 # (2026-08-25): strip both on any base that brings them.
 #

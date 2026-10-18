@@ -68,7 +68,7 @@ podman build \
   -t localhost/lucciola .
 ```
 
-Lucciola grew out of Margine OS, and this repository keeps Margine's history. Margine's changelog is in [`docs/margine/CHANGELOG.md`](docs/margine/CHANGELOG.md).
+Lucciola grew out of Margine OS, and this repository keeps Margine's history. Margine's changelog is in [`docs/history/margine/CHANGELOG.md`](docs/history/margine/CHANGELOG.md).
 
 ## Credits
 

@@ -10,7 +10,7 @@
 # atan2, hypot and cbrt stay unresolved), so darktable silently falls back
 # to the CPU. The host's ROCm OpenCL builds all of them and supports the
 # Radeon 7040 iGPU (gfx1103) natively. Details and measurements:
-# docs/notes/2026-10-09-darktable-gpu-rocm.md.
+# docs/history/margine/notes/2026-10-09-darktable-gpu-rocm.md.
 #
 # Layout. In a sandbox with filesystems=host the host's /usr is /run/host/usr:
 #   /usr/lib64/margine/rocm-flatpak/
@@ -18,7 +18,7 @@
 #       name the host has for them (sonames included), plus an unversioned
 #       libamdocl64.so. Never the whole host /usr/lib64: on an app's
 #       LD_LIBRARY_PATH that shadows the runtime's own libraries and breaks
-#       the GUI (docs/notes/2026-07-06-blender-rocm-hip-shim.md).
+#       the GUI (docs/history/margine/notes/2026-07-06-blender-rocm-hip-shim.md).
 #   /usr/share/margine/rocm-flatpak/vendors/amdocl64.icd
 #       an OpenCL ICD for OCL_ICD_VENDORS, naming that unversioned link.
 # Relative links resolve the same on the host and under /run/host, and the

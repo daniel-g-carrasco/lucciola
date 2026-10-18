@@ -225,4 +225,4 @@ stable release is cut.
   scope for the new repository; the Margine scope stays.
 - No NVIDIA or LTS variant, and no ISO yet.
 - Margine's history up to this point is kept in
-  [docs/margine/CHANGELOG.md](docs/margine/CHANGELOG.md).
+  [docs/history/margine/CHANGELOG.md](docs/history/margine/CHANGELOG.md).
