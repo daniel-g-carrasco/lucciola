@@ -1,0 +1,20 @@
+#!/bin/sh
+# Drop LD_PRELOAD entries whose library no longer exists, before the user's
+# session starts. A tool that enabled itself through ~/.config/environment.d
+# (Wayland Scroll Factor on Margine OS writes LD_PRELOAD=/usr/lib64/...) keeps
+# that line after the library is gone, for example after moving to Lucciola,
+# which does not ship it: every program then prints "ld.so: object ... cannot
+# be preloaded". systemd runs this after the environment.d generator, with the
+# environment built so far; printing LD_PRELOAD here replaces it. Entries
+# without a slash are searched in the library path by ld.so and are kept.
+[ -n "${LD_PRELOAD:-}" ] || exit 0
+kept=""
+changed=0
+for entry in $(printf '%s' "$LD_PRELOAD" | tr ': ' '\n\n'); do
+  case "$entry" in
+    /*) if [ ! -e "$entry" ]; then changed=1; continue; fi ;;
+  esac
+  kept="${kept:+$kept:}$entry"
+done
+[ "$changed" = 1 ] && printf 'LD_PRELOAD=%s\n' "$kept"
+exit 0

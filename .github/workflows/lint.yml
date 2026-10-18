@@ -127,6 +127,11 @@ jobs:
         # See tests/session-start-welcome.test.sh.
         run: bash tests/session-start-welcome.test.sh
 
+      - name: Stale LD_PRELOAD guard
+        # The user environment generator drops LD_PRELOAD entries whose
+        # library is gone (Margine's Wayland Scroll Factor line after a move).
+        run: bash tests/drop-missing-preload.test.sh
+
       - name: Developer layer helper (ujust lucciola-devmode)
         # Reads the package list, picks what remove may drop, installs and
         # deletes Homebrew: tested on temp files with a fake installer.

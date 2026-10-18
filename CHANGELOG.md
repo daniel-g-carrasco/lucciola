@@ -7,6 +7,14 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-19)
+- **"ld.so: object ... cannot be preloaded" in every terminal after moving
+  from Margine.** Wayland Scroll Factor, which Margine ships, enables itself
+  with an `LD_PRELOAD` line in `~/.config/environment.d`; Lucciola does not
+  ship the library, so every program printed the error. A user environment
+  generator now drops `LD_PRELOAD` entries whose file is missing before the
+  session starts (from the next login).
+
 ### Added (the kernel reserve: Lucciola with Fedora's kernel)
 - **A second image, `:fedora-kernel`, the same Lucciola with Fedora's own
   kernel instead of the CachyOS one.** A bootc image carries one kernel,
