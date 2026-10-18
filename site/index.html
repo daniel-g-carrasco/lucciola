@@ -290,7 +290,9 @@ footer p { margin: 0; max-width: 62ch; }
    others. One page, because transitions between two documents work in few
    browsers and not inside every frame. */
 .view { display: grid; gap: clamp(56px, 8vw, 88px); }
-.view[hidden] { display: none; }
+/* Anything marked hidden stays hidden, whatever its display (the content
+   editor hides a block this way). */
+[hidden] { display: none !important; }
 /* A view that opens mid-page ("download" from the guide), or a name off screen: no
    flying wordmark, and the links slide with the page instead of flying off the top. */
 html[data-plain] .hero h1, html[data-plain] .ghero .word, html[data-plain] .top { view-transition-name: none; }

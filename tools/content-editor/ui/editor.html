@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lucciola editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&display=swap">
+<link rel="stylesheet" href="/ui/editor.css">
+<meta name="editor-token" content="__TOKEN__">
+</head>
+<body>
+<header class="bar">
+  <div class="brand">lucciola<span class="dot" aria-hidden="true"></span><span class="sub">editor</span></div>
+  <nav class="tabs" role="tablist">
+    <button type="button" role="tab" data-tab="site" aria-selected="true">Website</button>
+    <button type="button" role="tab" data-tab="welcome" aria-selected="false">Welcome window</button>
+  </nav>
+  <div class="tools" data-for="site">
+    <div class="seg" role="group" aria-label="Page">
+      <button type="button" data-view="home" aria-pressed="true">Home page</button>
+      <button type="button" data-view="guide" aria-pressed="false">Guide</button>
+    </div>
+    <button type="button" id="undo" title="Undo the last move, hide, copy or delete">Undo</button>
+  </div>
+  <div class="spacer"></div>
+  <span id="status" class="status" aria-live="polite"></span>
+  <button type="button" id="changes">Show changes</button>
+  <button type="button" id="propose">Propose changes</button>
+  <button type="button" id="save" class="primary" title="Ctrl+S">Save</button>
+</header>
+<p class="hint" id="hint"></p>
+
+<main>
+  <section id="tab-site" class="tab">
+    <iframe id="frame" src="/site" title="The website, editable"></iframe>
+  </section>
+  <section id="tab-welcome" class="tab" hidden>
+    <div class="form" id="wform"></div>
+    <div class="preview-wrap">
+      <p class="preview-label">How the window looks</p>
+      <div class="gwin">
+        <div class="ghead"><span class="gclose" aria-hidden="true">&#x2715;</span></div>
+        <div class="gpage" id="wpreview"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<dialog id="dlg">
+  <div class="dlg-head"><h2 id="dlg-title"></h2><button type="button" class="x" id="dlg-x" aria-label="Close">&#x2715;</button></div>
+  <div id="dlg-body"></div>
+  <div class="dlg-foot" id="dlg-foot"></div>
+</dialog>
+<div class="toast" id="toast" role="alert" hidden></div>
+
+<script src="/ui/editor.js"></script>
+</body>
+</html>

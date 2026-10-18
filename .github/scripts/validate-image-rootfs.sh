@@ -317,6 +317,11 @@ grep -qF 'const APP_ID = "dev.margine.Welcome";' "$ROOTFS/usr/libexec/margine/we
   || { echo "::error::A.4.bis the welcome window's app id no longer matches dev.margine.Welcome.desktop"; fail=1; }
 grep -qF -- '--first-login' "$ROOTFS/usr/libexec/lucciola/session-start" 2>/dev/null \
   || { echo "::error::A.4.bis session-start no longer opens the welcome window at the first login"; fail=1; }
+# Its texts and their order: the data file it reads, held to the same check
+# as the source in the lint workflow (a broken file shows a fallback page).
+check_nonempty "usr/share/lucciola/welcome/content.json" "A.4.bis"
+python3 "$(dirname "$0")/../../tools/content-editor/welcome_content.py" "$ROOTFS/usr/share/lucciola/welcome/content.json" >/dev/null \
+  || { echo "::error::A.4.bis the welcome window's texts (usr/share/lucciola/welcome/content.json) do not pass the check"; fail=1; }
 check_nonempty "usr/share/icons/hicolor/scalable/apps/margine-scheduler.svg" "A.4.bis"
 grep -qxF 'Icon=margine-scheduler' "$ROOTFS/usr/share/applications/margine-scheduler.desktop" || { echo "::error::A.4.bis scheduler launcher does not use margine-scheduler icon"; fail=1; }
 for f in usr/share/margine/offline-docs usr/share/applications/margine-documentation.desktop \

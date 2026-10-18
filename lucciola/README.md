@@ -73,7 +73,9 @@ This layer adds:
 - a welcome window at a new user's first Lucciola session
   (`/usr/libexec/margine/welcome`, GTK 4 and libadwaita in gjs, in the
   website's look): the keys first, then updates and Lucciola System,
-  Homebrew, apps, and the guide. session-start opens it until it has been
+  Homebrew, apps, and the guide. Its texts and their order are data,
+  `/usr/share/lucciola/welcome/content.json`, edited with `just edit`
+  (`tools/content-editor`). session-start opens it until it has been
   closed once (`~/.local/state/lucciola/welcome-due`, `welcome-seen`);
   accounts with Lucciola sessions from before it never see it unasked, and
   "Lucciola Welcome" in the launcher opens it any time;

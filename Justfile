@@ -408,3 +408,8 @@ format:
     fi
     mapfile -t SH < <(git ls-files '*.sh' | grep -v '^live-env/references/')
     shfmt --write "${SH[@]}"
+
+# Edit the website and welcome window texts in the browser (tools/content-editor)
+[group('Content')]
+edit *args:
+    python3 tools/content-editor/serve.py {{ args }}
