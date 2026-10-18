@@ -38,8 +38,8 @@ poweroff_vm() {
   systemctl poweroff
 }
 
-# gaming_check runs in the BACKGROUND (started below): its up-to-240s
-# rpm-ostree dry-run must never delay the GUI verdict. wait_gaming is
+# gaming_check runs in the BACKGROUND (started below): its rpm-ostree
+# dry-run (up to 420 s per attempt) must never delay the GUI verdict. wait_gaming is
 # called before every poweroff so the gaming verdict is still captured,
 # even when the GUI checks bail out early. Safe to call more than once.
 wait_gaming() { [[ -n "${GAMING_PID:-}" ]] && wait "$GAMING_PID" 2>/dev/null || true; }
@@ -47,22 +47,25 @@ fail() { out "MARGINE-GUI-SMOKE: FAIL $*"; wait_gaming; poweroff_vm; exit 0; }
 
 # ---- Gaming-native layer resolvability (independent of the GUI) ------------
 # `ujust margine-gaming-native` layers a multilib RPM set whose fragile
-# edge is steam's 32-bit graphics deps (i686 mesa/llvm must version-match
-# the baked x86_64). A dry-run resolves that exact transaction the way the
-# recipe would, WITHOUT applying it: a depsolve failure here is the
-# i686/x86_64 skew that broke `margine-gaming-native` for real. Package
-# set is read from the same file the recipe installs from (no drift).
-# Verdict is WARN-ONLY for now (parsed by qemu-boot-wait.sh).
+# edge is steam's 32-bit chain: about 200 i686 packages, layered since
+# 2026-10-18 together with the applications (the image no longer carries
+# them), each of which must fit the x86_64 packages of the image. A
+# dry-run resolves that exact transaction the way the recipe would,
+# WITHOUT applying it: a depsolve failure here is the i686/x86_64 skew
+# that broke `margine-gaming-native` for real. Package set is read from
+# the same file the recipe installs from (no drift). A FAIL blocks
+# promotion (qemu-boot-wait.sh); a missing or empty list is a FAIL too,
+# since the recipe cannot run without it.
 gaming_check() {
   local list=/usr/share/margine/gaming-native-packages.txt
   if [[ ! -r "$list" ]]; then
-    out "MARGINE-GAMING-NATIVE: SKIP (package list not found)"
+    out "MARGINE-GAMING-NATIVE: FAIL package list $list not found: ujust margine-gaming-native cannot run"
     return
   fi
   local pkgs
   mapfile -t pkgs < <(grep -vE '^[[:space:]]*(#|$)' "$list")
   if [[ "${#pkgs[@]}" -eq 0 ]]; then
-    out "MARGINE-GAMING-NATIVE: SKIP (empty package list)"
+    out "MARGINE-GAMING-NATIVE: FAIL empty package list $list"
     return
   fi
   # rpm-ostreed is dbus-activated and not reachable at the very start of
@@ -81,14 +84,14 @@ gaming_check() {
   # nothing, because its message had none of the words grepped for.
   local rc attempt why
   for attempt in 1 2 3; do
-    timeout 240 rpm-ostree install --dry-run "${pkgs[@]}" >/tmp/gaming.out 2>&1
+    timeout 420 rpm-ostree install --dry-run "${pkgs[@]}" >/tmp/gaming.out 2>&1
     rc=$?
     if (( rc == 0 )); then
       out "MARGINE-GAMING-NATIVE: PASS (${#pkgs[@]} pkgs resolve)"
       return
     fi
     if (( rc == 124 )); then
-      out "MARGINE-GAMING-NATIVE: SKIP (dry run timed out after 240 s on attempt $attempt)"
+      out "MARGINE-GAMING-NATIVE: SKIP (dry run timed out after 420 s on attempt $attempt)"
       return
     fi
     grep -qiE 'transaction in progress|busy' /tmp/gaming.out || break

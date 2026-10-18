@@ -515,6 +515,27 @@ jobs:
           sudo .github/scripts/validate-image-rootfs.sh \
             "localhost/${{ env.IMAGE_NAME }}:${{ steps.metadata.outputs.version }}"
 
+      # Gaming-native layer (2026-10-18). The image no longer carries steam's
+      # 32-bit chain: `ujust margine-gaming-native` layers it, and it must fit
+      # the packages of this image exactly. dnf resolves the recipe's list in
+      # a throwaway container with every installed package locked at its
+      # version (rpm-ostree's rule when it layers). A depsolve failure stops
+      # the build before the push; "no verdict" (repositories unreachable)
+      # is a warning, smoke-boot's rpm-ostree dry run checks again.
+      - name: Gaming-native layer resolves against the image
+        env:
+          IMG: localhost/${{ env.IMAGE_NAME }}:${{ steps.metadata.outputs.version }}
+        run: |
+          set -uo pipefail
+          rc=0
+          sudo .github/scripts/gaming-native-resolve.sh "$IMG" | tee gaming-resolve.log || rc=$?
+          { echo "### Gaming-native layer"; echo '```'; grep -E 'MARGINE-GAMING-RESOLVE|off their twin|^  [^ ]+ \(' gaming-resolve.log | head -n 40 || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          case "$rc" in
+            0) ;;
+            2) echo "::warning::gaming-native resolve check gave no verdict (repositories unreachable?); smoke-boot's dry run still gates promotion" ;;
+            *) echo "::error::the gaming-native layer does not resolve against this image: ujust margine-gaming-native, and updates of machines that have it, would fail"; exit 1 ;;
+          esac
+
       # Security scan (2026-10-07). The image is compared with the reviewed
       # baseline in .github/security-baseline/: setuid/caps, world-writable
       # files, build residue, enabled units and security-relevant configs.
