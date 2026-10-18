@@ -326,6 +326,8 @@ hdr "5. Branding assets (Lucciola's)"
   || bad "/usr/share/icons/hicolor/scalable/apps/margine-logo.svg missing"
 [[ -f /usr/share/backgrounds/lucciola/lucciola.png ]] && ok "wallpaper present" \
   || bad "/usr/share/backgrounds/lucciola/lucciola.png missing"
+[[ -f /usr/share/backgrounds/lucciola/lucciola-login.png ]] && ok "login screen wallpaper present" \
+  || bad "/usr/share/backgrounds/lucciola/lucciola-login.png missing"
 [[ -f /usr/share/backgrounds/margine/margine.png ]] && ok "old wallpaper path still resolves (sync.toml and dconf of older installs)" \
   || bad "/usr/share/backgrounds/margine/margine.png does not resolve"
 [[ -d /usr/share/plymouth/themes/lucciola ]] && ok "Plymouth theme dir present" \
