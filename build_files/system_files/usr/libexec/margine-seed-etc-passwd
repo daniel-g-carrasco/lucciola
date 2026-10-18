@@ -14,10 +14,21 @@ boot script, hand-synced):
 
 Local /etc lines override factory ones for the same name, so a custom
 root shell or a real user account is never clobbered.
+
+Then, every time: an account or group that has a passwd or group line but
+no /etc/shadow or /etc/gshadow line gets a locked one (2026-10-18). Seeding
+copies system accounts into /etc/passwd only; systemd-sysusers later finds
+such an account already there and does not write its shadow line, so PAM
+could not look it up ("unix_chkpwd: could not obtain user info"), and
+user@<uid>.service failed for greetd on a machine updated from margine:lucciola
+whose /etc/passwd had been seeded. Existing shadow lines are never touched;
+missing ones are appended in place, which keeps each file's mode, owner and
+SELinux label.
 """
 
 import os
 import sys
+import time
 
 
 def load(p):
@@ -42,9 +53,10 @@ if not force:
             break
     if not need_seed:
         print("/etc/passwd + /etc/group look populated, no seeding needed")
-        sys.exit(0)
+else:
+    need_seed = True
 
-for kind in ("passwd", "group"):
+for kind in ("passwd", "group") if need_seed else ():
     local = by_name(load(f"/etc/{kind}"))
     factory = by_name(load(f"/usr/lib/{kind}"))
     merged = dict(factory)
@@ -63,3 +75,29 @@ for kind in ("passwd", "group"):
             f.write(line + "\n")
     os.replace(tmp, f"/etc/{kind}")
     print(f"/etc/{kind}: was {len(local)} → now {len(merged)} (+{len(merged) - len(local)} from factory)")
+
+
+def add_missing_shadow(table, shadow, line_for):
+    """Append a locked shadow line for every shadowed entry of /etc/<table>
+    that has none in /etc/<shadow>."""
+    path = f"/etc/{shadow}"
+    if not os.path.exists(path):
+        return
+    have = by_name(load(path))
+    missing = []
+    for line in load(f"/etc/{table}"):
+        fields = line.split(":")
+        if len(fields) < 2 or fields[0] in have or fields[1] != "x":
+            continue
+        missing.append(line_for(fields))
+    if not missing:
+        return
+    with open(path, "a") as f:
+        f.write("".join(m + "\n" for m in missing))
+    names = ", ".join(m.split(":", 1)[0] for m in missing)
+    print(f"/etc/{shadow}: added locked entries for {names}")
+
+
+today = int(time.time() // 86400)
+add_missing_shadow("passwd", "shadow", lambda f: f"{f[0]}:!*:{today}::::::")
+add_missing_shadow("group", "gshadow", lambda f: f"{f[0]}:!::{f[3] if len(f) > 3 else ''}")
