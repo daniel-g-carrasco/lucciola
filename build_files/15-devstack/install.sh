@@ -120,40 +120,8 @@ DECLARED_PKGS=(
   # retired it (NetworkManager 1.58 Obsoletes NetworkManager-vpnc{,-gnome}).
   NetworkManager-ssh-gnome sshpass nm-connection-editor
 )
-mapfile -t NEED < <(missing "${DECLARED_PKGS[@]}")
-if (( ${#NEED[@]} == 0 )); then
-  log "declared host packages already in the base (${#DECLARED_PKGS[@]} present)"
-else
-  log "base lacks ${#NEED[@]} declared host packages, installing: ${NEED[*]}"
-  retry 3 30 dnf -y install --setopt=install_weak_deps=False "${NEED[@]}"
-fi
-
-# --- 1c. ROCm: keep OpenCL and the HIP runtime, drop the HIP compiler ------
-# Lived in 12-base-trim while the base shipped rocm-hip; Universal Blue's
-# main does not, so rocm-hip is installed above (DECLARED_PKGS) and the
-# compiler it drags in is removed here, right after.
-# rocm-hip requires hipcc, and rocm-device-libs requires rocm-llvm-static
-# (1963 MB), by packaging, not at run time: with all of them gone,
-# rocm-opencl still builds every one of darktable's 42 kernels and
-# libamdhip64 and libamdocl64 resolve (tested in a fedora:44 container,
-# 2026-10-10). dnf would cascade the removal up to rocm-hip, so these go
-# through rpm alone. That leaves rocm-hip requiring a name nothing
-# provides, and rpm-ostree re-solves every installed package when it
-# layers: the first image built this way failed the smoke test's
-# gaming-native dry run (2026-10-10). So a package of Margine's own,
-# margine-rocm-hip-runtime, provides the name `hipcc` and nothing else,
-# and the prove-it of this script asks dnf for every unmet dependency.
-ROCM_DEV=(hipcc rocm-device-libs rocm-llvm-static rocm-clang rocm-llvm rocm-lld
-          rocm-clang-devel rocm-llvm-devel rocm-libc++-devel rocm-clang-runtime-devel rocm-runtime-devel)
-ROCM_PRESENT=()
-for p in "${ROCM_DEV[@]}"; do
-  rpm -q "$p" >/dev/null 2>&1 && ROCM_PRESENT+=("$p")
-done
-if (( ${#ROCM_PRESENT[@]} )); then
-  log "removing the HIP compiler and ROCm development packages: ${ROCM_PRESENT[*]}"
-  rpm -e --nodeps "${ROCM_PRESENT[@]}"
-fi
-if rpm -q rocm-hip >/dev/null 2>&1 && ! rpm -q hipcc >/dev/null 2>&1; then
+# margine-rocm-hip-runtime: provides the name `hipcc`, nothing else (see 1c).
+install_hip_stub() {
   # rpm-build is not in the image (custom-kernel removes it with the other
   # build-only packages): borrow it for one rpmbuild and take back exactly
   # what the borrowing added.
@@ -195,6 +163,58 @@ SPEC
     dnf -y remove --setopt=clean_requirements_on_remove=False "${borrowed[@]}"
   fi
   log "margine-rocm-hip-runtime provides hipcc: rocm-hip's requirement is met without the compiler"
+}
+
+# The stub goes in BEFORE rocm-hip (2026-10-18). Installed after, as until
+# then, it came too late: dnf had already pulled hipcc, and with it
+# rocm-device-libs, rocm-llvm-static and the rest of the HIP compiler, only
+# for 1c to delete them with rpm a minute later. Measured on
+# silverblue-main:45 for rocminfo, rocm-opencl and rocm-hip: 84 packages,
+# 437 MiB downloaded and 3 GiB unpacked without the stub; 7 packages,
+# 44 MiB and 166 MiB with it. With `hipcc` already provided, rocm-hip
+# installs without any of the compiler; 1c stays as the guard for a base
+# that ships it.
+if ! rpm -q hipcc >/dev/null 2>&1 && ! rpm -q margine-rocm-hip-runtime >/dev/null 2>&1; then
+  install_hip_stub
+fi
+
+mapfile -t NEED < <(missing "${DECLARED_PKGS[@]}")
+if (( ${#NEED[@]} == 0 )); then
+  log "declared host packages already in the base (${#DECLARED_PKGS[@]} present)"
+else
+  log "base lacks ${#NEED[@]} declared host packages, installing: ${NEED[*]}"
+  retry 3 30 dnf -y install --setopt=install_weak_deps=False "${NEED[@]}"
+fi
+
+# --- 1c. ROCm: keep OpenCL and the HIP runtime, drop the HIP compiler ------
+# Lived in 12-base-trim while the base shipped rocm-hip; Universal Blue's
+# main does not, so rocm-hip is installed above (DECLARED_PKGS), after the
+# stub that keeps it from dragging the compiler in. What follows removes
+# the compiler where a base ships it anyway.
+# rocm-hip requires hipcc, and rocm-device-libs requires rocm-llvm-static
+# (1963 MB), by packaging, not at run time: with all of them gone,
+# rocm-opencl still builds every one of darktable's 42 kernels and
+# libamdhip64 and libamdocl64 resolve (tested in a fedora:44 container,
+# 2026-10-10). dnf would cascade the removal up to rocm-hip, so these go
+# through rpm alone. That leaves rocm-hip requiring a name nothing
+# provides, and rpm-ostree re-solves every installed package when it
+# layers: the first image built this way failed the smoke test's
+# gaming-native dry run (2026-10-10). So a package of Margine's own,
+# margine-rocm-hip-runtime, provides the name `hipcc` and nothing else,
+# and the prove-it of this script asks dnf for every unmet dependency.
+ROCM_DEV=(hipcc rocm-device-libs rocm-llvm-static rocm-clang rocm-llvm rocm-lld
+          rocm-clang-devel rocm-llvm-devel rocm-libc++-devel rocm-clang-runtime-devel rocm-runtime-devel)
+ROCM_PRESENT=()
+for p in "${ROCM_DEV[@]}"; do
+  rpm -q "$p" >/dev/null 2>&1 && ROCM_PRESENT+=("$p")
+done
+if (( ${#ROCM_PRESENT[@]} )); then
+  log "removing the HIP compiler and ROCm development packages: ${ROCM_PRESENT[*]}"
+  rpm -e --nodeps "${ROCM_PRESENT[@]}"
+fi
+if rpm -q rocm-hip >/dev/null 2>&1 && ! rpm -q hipcc >/dev/null 2>&1 && ! rpm -q margine-rocm-hip-runtime >/dev/null 2>&1; then
+  # A base that shipped hipcc (removed just above) leaves rocm-hip without it.
+  install_hip_stub
 fi
 
 # --- 2. Docker CE: not in the image since 2026-10-10 ---------------------
