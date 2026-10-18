@@ -290,6 +290,11 @@ grep -q '^-\?session.*pam_systemd\.so' /etc/pam.d/system-auth \
 [[ ! -e /etc/pam.d/greetd && ! -e /etc/pam.d/greetd-greeter ]] \
   || { echo "ERROR: an /etc/pam.d copy of greetd's PAM files would shadow Fedora's" >&2; exit 1; }
 log "greetd PAM stack: $(grep -cvE '^[[:space:]]*(#|$)' /usr/lib/pam.d/greetd) lines, pam_oo7 in auth/password/session"
+# The Secret portal in niri sessions must reach oo7 (Flatpak apps' keyrings):
+# niri's own portals.conf names gnome-keyring, gone in Fedora 45.
+grep -qx 'org.freedesktop.impl.portal.Secret=oo7-portal;' /etc/xdg-desktop-portal/niri-portals.conf \
+  && [[ -f /usr/share/xdg-desktop-portal/portals/oo7-portal.portal ]] \
+  || { echo "ERROR: niri sessions would have no Secret portal (oo7-portal)" >&2; exit 1; }
 
 # 5d. greetd's configuration (the template says what each line is for). The
 #     package's own file is %config(noreplace); written over here, in the
