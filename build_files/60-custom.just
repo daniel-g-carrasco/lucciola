@@ -3,7 +3,7 @@
 # /usr/share/ublue-os/just/00-entry.just `import?` of 60-custom.just
 # (the only optional extension point in Bluefin's entry file).
 
-# Apply the Margine user-state (default apps, Zen, darktable) in one shot.
+# Apply the Lucciola user-state (default apps, Zen, darktable) in one shot.
 [group('Lucciola')]
 lucciola-bootstrap $MODE="interactive":
     #!/usr/bin/bash
@@ -15,9 +15,9 @@ lucciola-bootstrap $MODE="interactive":
 
     if [[ "$UNATTENDED" -ne 1 ]]; then
       cat <<'EOF'
-    == Margine user-state bootstrap ==
+    == Lucciola user-state bootstrap ==
 
-    Applies the Margine user-state declaration. Idempotent: safe to
+    Applies the Lucciola user-state declaration. Idempotent: safe to
     re-run after upgrades; each step reports [no change] for keys that
     already match the spec.
 
@@ -80,7 +80,7 @@ lucciola-gaming:
     set -euo pipefail
 
     cat <<'EOF'
-    == Margine gaming layer ==
+    == Lucciola gaming layer ==
 
     This installs:
 
@@ -173,7 +173,7 @@ lucciola-gaming:
     Activities grid.
     EOF
 
-# Roll back the Margine gaming layer (undo lucciola-gaming)
+# Roll back the gaming layer (undo lucciola-gaming).
 [group('Gaming')]
 lucciola-gaming-remove:
     #!/usr/bin/bash
@@ -228,7 +228,7 @@ lucciola-gaming-native:
     set -euo pipefail
 
     cat <<'EOF'
-    == Margine gaming layer (NATIVE variant) ==
+    == Lucciola gaming layer (NATIVE variant) ==
 
     This installs:
 
@@ -418,7 +418,7 @@ lucciola-scheduler $MODE="status":
         ;;
 
       default|stop|off)
-        echo "Stopping scx_loader.service; kernel default (BORE on Margine) takes over."
+        echo "Stopping scx_loader.service; kernel default (BORE on Lucciola) takes over."
         stop_loader
         echo "ok - scx_loader.service is stopped and disabled."
         ;;
@@ -460,7 +460,7 @@ lucciola-ai:
     #!/usr/bin/bash
     set -euo pipefail
     cat <<'EOF'
-    == Margine AI workflow ==
+    == Lucciola AI workflow ==
 
     This installs:
       - com.jeffser.Alpaca (Flatpak) — GUI chat with local LLMs.
@@ -546,7 +546,7 @@ lucciola-ai:
     you to pick a model to download.
     EOF
 
-# Roll back the Margine AI workflow (undo lucciola-ai)
+# Roll back the AI workflow (undo lucciola-ai).
 [group('Lucciola')]
 lucciola-ai-remove:
     #!/usr/bin/bash
@@ -590,6 +590,7 @@ margine-tpm2-enroll ACTION="enroll":
 # not an optimization: the service re-installs every list entry at each
 # boot, so without the mask the removed apps come back. Reversible with
 # lucciola-slim-restore.
+[doc('Remove the larger preinstalled apps and keep them from coming back (undo: lucciola-slim-restore).')]
 [group('Lucciola')]
 lucciola-slim:
     #!/usr/bin/bash
@@ -598,11 +599,11 @@ lucciola-slim:
     # finished (or failed) — masking now could strand a half-set system.
     if ! flatpak info --system app.zen_browser.zen >/dev/null 2>&1; then
       echo "Zen is not installed yet — first-boot app install still running (or broken)."
-      echo "Wait for the 'Margine is ready' notification, then re-run. (ujust lucciola-doctor helps if it never arrives.)"
+      echo "Wait for the 'Lucciola is ready' notification, then re-run. (ujust lucciola-doctor helps if it never arrives.)"
       exit 1
     fi
     cat <<'EOF'
-    == Margine slim profile ==
+    == Lucciola slim profile ==
 
     This will:
       - mask flatpak-preinstall.service (stops the deferred heavy
@@ -639,12 +640,13 @@ lucciola-slim:
 # Calculator, Text Editor, Calendar, Clocks and the system utilities
 # (Bazaar, Flatseal, Mission Center, Firmware, Disk Usage Analyzer).
 # Add anything back from Bazaar. Reversible with lucciola-slim-restore.
+[doc('Near-empty app set on top of lucciola-slim (undo: lucciola-slim-restore).')]
 [group('Lucciola')]
 lucciola-naked: lucciola-slim
     #!/usr/bin/bash
     set -euo pipefail
     cat <<'EOF'
-    == Margine naked profile (on top of slim) ==
+    == Lucciola naked profile (on top of slim) ==
 
     This ALSO removes: LibreOffice, Thunderbird, Contacts, Sound
     Recorder, Impression, Deja Dup (and Bitwarden, Maps, Weather where
@@ -665,11 +667,12 @@ lucciola-naked: lucciola-slim
 # Undo lucciola-slim / lucciola-naked: unmasking flatpak-preinstall is
 # enough — its list contains the full stock set (bake fallback included),
 # so the next run re-installs everything that was removed.
+[doc('Bring back the apps lucciola-slim or lucciola-naked removed.')]
 [group('Lucciola')]
 lucciola-slim-restore:
     #!/usr/bin/bash
     set -euo pipefail
-    echo "Restoring the stock Margine app set (runs in background, 5-15 min on a normal line)…"
+    echo "Restoring the stock Lucciola app set (runs in background, 5-15 min on a normal line)…"
     sudo systemctl unmask flatpak-preinstall.service
     sudo systemctl start flatpak-preinstall.service --no-block
     echo "Started. Apps reappear as they land; check progress with:"
@@ -680,6 +683,7 @@ lucciola-slim-restore:
 # from Margine, or lucciola-configure-home-layout run by hand). New Lucciola
 # accounts already have the stock layout. Never moves or deletes files: it
 # only changes where apps default to.
+[doc("Go back to the stock home folders (Documents, Downloads...) on a home with Margine's layout.")]
 [group('Lucciola')]
 lucciola-home-stock:
     #!/usr/bin/bash
@@ -813,7 +817,7 @@ lucciola-dock-wake:
     case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
     sudo /usr/libexec/margine/dock-dp-rescue --force
 
-# Run all Margine validators (the "is my system as shipped?" check).
+# Run all the validators (the "is my system as shipped?" check).
 [group('Lucciola')]
 lucciola-doctor:
     #!/usr/bin/bash
@@ -849,7 +853,7 @@ lucciola-doctor:
     fi
     exit $overall
 
-# Show Margine deployment vs latest :stable + lineage + kernel (read-only).
+# Show this deployment vs the latest :stable + lineage + kernel (read-only).
 [group('Lucciola')]
 lucciola-status:
     @/usr/bin/lucciola-status
@@ -857,6 +861,7 @@ lucciola-status:
 # Pull the latest Margine :stable and stage it for the next reboot.
 # `ujust lucciola-update force` runs the update even when the image is
 # current (it also refreshes rpm-ostree layered packages).
+[doc('Stage the latest :stable for the next restart (force: also when current).')]
 [group('Lucciola')]
 lucciola-update FORCE="":
     #!/usr/bin/bash
@@ -984,7 +989,7 @@ lucciola-grub-hidpi:
 lucciola-keyring ACTION="status":
     @/usr/bin/lucciola-keyring "{{ ACTION }}"
 
-# Spin up a throwaway VM to test a Margine ISO on the REAL secure path: UEFI
+# Spin up a throwaway VM to test a Lucciola ISO on the REAL secure path: UEFI
 # Secure Boot with Microsoft's keys pre-enrolled (so you also walk the MOK
 # enrollment flow Margine relies on) + an emulated TPM 2.0 (so you can test
 # LUKS TPM2 auto-unlock). Runs rootless on qemu:///session, so it reads ISOs
@@ -1002,6 +1007,7 @@ lucciola-keyring ACTION="status":
 # (image version, deployment state, Secure Boot, flatpak health, recent
 # errors) into ~/lucciola-report.txt, then opens the issue template. Keeps
 # reports in ONE searchable place instead of forum threads and comments.
+[doc('Collect a diagnostic report (~/lucciola-report.txt) and open the bug-report page.')]
 [group('Lucciola')]
 lucciola-report:
     #!/usr/bin/bash
@@ -1037,7 +1043,7 @@ lucciola-report:
     echo "Opening the bug-report page. Attach or paste $OUT into the Logs field."
     xdg-open "https://github.com/daniel-g-carrasco/lucciola/issues/new/choose" >/dev/null 2>&1 ||       echo "Open manually: https://github.com/daniel-g-carrasco/lucciola/issues/new/choose"
 
-# Create + boot a throwaway Margine test VM from an ISO (libvirt).
+# Create + boot a throwaway test VM from an ISO (libvirt).
 [group('Lucciola')]
 lucciola-test-vm ISO="" NAME="" DISK="80":
     #!/usr/bin/bash
@@ -1070,12 +1076,12 @@ lucciola-test-vm ISO="" NAME="" DISK="80":
     print_walkthrough() {
       echo
       echo "  === Testing the secure path in this VM ==="
-      echo "  1. Boot the ISO and install Margine."
+      echo "  1. Boot the ISO and install Lucciola."
       echo "  2. First boot after install: Secure Boot is ON with Microsoft's keys,"
-      echo "     so shim runs, but Margine signs its kernel/modules with its own MOK."
+      echo "     so shim runs, but the kernel and modules are signed with the Margine key (a MOK)."
       echo "     A blue MOK Manager screen appears:"
       echo "         Enroll MOK -> Continue -> Yes -> enter the password"
-      echo "     (Margine's MOK password is 'margine', public by design), reboot."
+      echo "     (the MOK password is 'margine', public by design), reboot."
       echo "  3. Confirm Secure Boot:    mokutil --sb-state     # -> SecureBoot enabled"
       echo "  4. TPM2 LUKS auto-unlock:  ujust lucciola-tpm-unlock enable"
       echo "     then reboot — the disk should unlock from the emulated TPM with no"
@@ -1173,7 +1179,8 @@ lucciola-test-vm ISO="" NAME="" DISK="80":
     fi
     print_walkthrough
 
-# Tear down a Margine test VM (stops it, removes domain + disks + UEFI nvram).
+# Tear down a test VM (stops it, removes domain + disks + UEFI nvram).
+[doc('Tear down a test VM (domain, disks, UEFI nvram).')]
 [group('Lucciola')]
 lucciola-test-vm-remove NAME="margine-test-template":
     #!/usr/bin/bash
@@ -1242,6 +1249,7 @@ lucciola-test-vm-clean $ALL="false":
 # the watchdog masks the app so nightly updates keep working, and points
 # here. This recipe unmasks it, updates it IN THE FOREGROUND (you see the
 # progress and can Ctrl+C a stall), and clears the exclusion on success.
+[doc('Update an app the update watchdog excluded from unattended updates.')]
 [group('Lucciola')]
 lucciola-update-unblock APP="":
     #!/usr/bin/bash
@@ -1742,7 +1750,7 @@ lucciola-sunshine:
     set -euo pipefail
 
     cat <<'EOF'
-    == Margine Sunshine setup (EXPERIMENTAL) ==
+    == Lucciola Sunshine setup (EXPERIMENTAL) ==
 
     Sunshine is the host side of Moonlight game streaming. This sets it up
     the atomic-friendly way (no rpm-ostree layering):
@@ -1754,7 +1762,7 @@ lucciola-sunshine:
       4. opens the Sunshine firewall ports (47984-48010, TCP + UDP)
 
     Heads-up:
-      - This is Margine's first cut, not yet validated end-to-end. If
+      - This is a first cut, not yet validated end-to-end. If
         something is off, please report it.
       - It opens network ports and grants input-device access, which is
         why it is an explicit opt-in command and not a default.
@@ -1840,6 +1848,7 @@ lucciola-sunshine-remove:
 # see an Opera-on-Linux user agent (the one condition Netflix uses to
 # unlock 1080p on Linux). 1080p also depends on the title, your plan and
 # the network. Verify with the Netflix overlay: Ctrl+Shift+Alt+D.
+[doc('Netflix in 1080p in Zen (a user-agent extension, DRM on): status / install / remove.')]
 [group('Apps')]
 lucciola-netflix-1080p $ACTION="status":
     #!/usr/bin/bash
@@ -1958,6 +1967,7 @@ lucciola-netflix-1080p $ACTION="status":
 # supports it natively (no HSA_OVERRIDE, which would abort with
 # INVALID_ISA), a GPU-only Cycles render completes, and the GUI stays
 # clean. status / enable / disable.
+[doc('Blender (Flatpak) renders on an AMD GPU through the host ROCm: status / enable / disable.')]
 [group('Apps')]
 lucciola-blender-gpu $ACTION="status":
     #!/usr/bin/bash

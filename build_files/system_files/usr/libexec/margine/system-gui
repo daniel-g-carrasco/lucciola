@@ -1,10 +1,11 @@
 #!/usr/bin/python3
-# Margine System — the graphical answer to "is my machine current and healthy?"
+# Lucciola System — the graphical answer to "is my machine current and healthy?"
+# (Margine System until 2026-10-18.)
 #
 # Everything here already existed as CLI (lucciola-status, ujust
-# margine-update, ujust lucciola-doctor, rpm-ostree rollback). This app
+# lucciola-update, ujust lucciola-doctor, rpm-ostree rollback). This app
 # is not a reimplementation: it drives the same scripts, so there is
-# exactly one definition of "how Margine updates" and the GUI can never
+# exactly one definition of "how the system updates" and the GUI can never
 # drift from the terminal (system-update is the shared helper; the just
 # recipe calls it too).
 #
@@ -33,6 +34,10 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
+# The application id keeps its Margine name: it is the window's Wayland
+# app_id, which must equal the .desktop file's name for the launcher to
+# match the window, and the name a dock pin or a saved favourite refers
+# to. Renaming it would orphan those for nothing the user sees.
 APP_ID = "dev.margine.System"
 REPO = "ghcr.io/daniel-g-carrasco/lucciola"
 IMAGE = f"{REPO}:stable"
@@ -101,7 +106,7 @@ def local_state():
 class SystemWindow(Adw.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app)
-        self.set_title("Margine System")
+        self.set_title("Lucciola System")
         self.set_default_size(560, 720)
         self.set_size_request(400, -1)
 
@@ -116,9 +121,9 @@ class SystemWindow(Adw.ApplicationWindow):
         self._toasts.set_child(toolbar)
 
         header = Adw.HeaderBar()
-        header.set_title_widget(Adw.WindowTitle(title="Margine System"))
+        header.set_title_widget(Adw.WindowTitle(title="Lucciola System"))
         menu = Gio.Menu()
-        menu.append("About Margine System", "win.about")
+        menu.append("About Lucciola System", "win.about")
         menu_button = Gtk.MenuButton(icon_name="open-menu-symbolic", primary=True)
         menu_button.set_menu_model(menu)
         menu_button.set_tooltip_text("Main menu")
@@ -686,10 +691,10 @@ class SystemWindow(Adw.ApplicationWindow):
 
     def _on_about(self, *_args):
         about = Adw.AboutDialog(
-            application_name="Margine System",
+            application_name="Lucciola System",
             application_icon=APP_ID,
             developer_name="Daniel Grasso",
-            website="https://margine.dev/docs/updates-and-rollback",
+            website="https://github.com/daniel-g-carrasco/lucciola",
             issue_url="https://github.com/daniel-g-carrasco/lucciola/issues",
             license_type=Gtk.License.GPL_3_0,
         )
@@ -712,7 +717,7 @@ class SystemApp(Adw.Application):
 
 def main():
     if not shutil.which("rpm-ostree"):
-        print("margine-system-gui: this is not an rpm-ostree/bootc system", flush=True)
+        print("lucciola-system: this is not an rpm-ostree/bootc system", flush=True)
     return SystemApp().run(None)
 
 

@@ -1,5 +1,5 @@
 [Unit]
-Description=Margine: notify if booted deployment changed since last login
+Description=Lucciola: notify if booted deployment changed since last login
 After=graphical-session.target
 PartOf=graphical-session.target
 

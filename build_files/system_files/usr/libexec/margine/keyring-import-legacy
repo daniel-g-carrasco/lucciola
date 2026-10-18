@@ -126,7 +126,7 @@ def notify_locked():
         subprocess.run([
             NOTIFY, "-i", "dialog-password",
             "Saved passwords from Fedora 44 are waiting",
-            "Margine now uses oo7 for saved passwords. The old login keyring is kept "
+            "The system now uses oo7 for saved passwords. The old login keyring is kept "
             "aside until the new one is unlocked: run ujust lucciola-keyring import, "
             "or ujust lucciola-keyring tpm to have it open at every login.",
         ], check=False)
