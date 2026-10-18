@@ -352,6 +352,8 @@ grep -qx 'Theme=lucciola' "$ROOTFS/etc/plymouth/plymouthd.conf" \
 grep -qx 'DeviceScale=1' "$ROOTFS/etc/plymouth/plymouthd.conf" \
   || { echo "::error::A.3.ter plymouthd.conf lacks DeviceScale=1"; fail=1; }
 check_nonempty "usr/share/backgrounds/lucciola/lucciola.png" "A.3.ter"
+# The login screen's blurred wallpaper (named by the greeter's greeter.toml).
+check_nonempty "usr/share/backgrounds/lucciola/lucciola-login.png" "A.3.ter"
 check_nonempty "usr/share/backgrounds/margine/margine.png" "A.3.ter"
 test -s "$ROOTFS/usr/share/icons/hicolor/scalable/apps/fedora-logo-icon.svg" \
   || { echo "::error::A.3.ter fedora-logo-icon.svg missing (fedora-welcome + gnome-initial-setup hardcode it)"; fail=1; }

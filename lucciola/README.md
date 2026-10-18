@@ -86,11 +86,12 @@ This layer adds:
   that says a failed login in words ("Wrong password, try again" instead
   of `pam_authenticate: AUTH_ERR`); greetd comes from Fedora. `/etc/greetd/config.toml` (reference copy in
   `/usr/share/lucciola/greetd/`) runs the greeter as the `greetd` account;
-  its fixed settings are `/usr/share/lucciola/greeter/greeter.toml` (linked
-  into `/var/lib/noctalia-greeter/`), its starting look (dark, the
-  `Margine.json` palette, JetBrains Mono, Lucciola's wallpaper, Lucciola preselected) is
-  `sync.toml`, copied once and then replaced by Noctalia's "Sync with
-  Noctalia". greetd uses Fedora's PAM file with pam_oo7 added to the
+  its settings and look are `/usr/share/lucciola/greeter/greeter.toml`
+  (linked into `/var/lib/noctalia-greeter/`, so updates bring them: dark,
+  the `Margine.json` palette with the card in the sky's blues, JetBrains
+  Mono, Lucciola's wallpaper blurred), and `sync.toml` only preselects
+  Lucciola (copied once; Noctalia's "Sync with Noctalia" adds the screen
+  layout). greetd uses Fedora's PAM file with pam_oo7 added to the
   password stack and the Wayland session type set for autologin
   (`ujust lucciola-autologin`). GDM stays installed and takes over when
   greetd cannot start (`greetd.service.d/50-lucciola.conf`);

@@ -20,6 +20,7 @@
 #   plymouth/field-N.png        the password field, N px high, 9N wide
 #   plymouth/bullet-N.png       one typed character for a field N px high
 #   wallpaper/lucciola.svg      from make-wallpaper.py, and its PNGs
+#   wallpaper/lucciola-login.*  the same scene blurred, for the login screen
 set -euo pipefail
 cd "$(dirname "$0")"
 for t in rsvg-convert python3; do
@@ -95,12 +96,18 @@ done
 # make-wallpaper.py writes the 3840x2400 master; each PNG is the same SVG with
 # another width/height: preserveAspectRatio slice crops sky or sides, never
 # the hills.
-python3 -I wallpaper/make-wallpaper.py wallpaper/lucciola.svg
+python3 -I wallpaper/make-wallpaper.py wallpaper/lucciola.svg wallpaper/lucciola-login.svg
 for size in 3840x2160 2880x1920 2560x1600; do
   w="${size%x*}" h="${size#*x}"
   sed -e "0,/width=\"3840\" height=\"2400\"/s//width=\"$w\" height=\"$h\"/" wallpaper/lucciola.svg > "$tmp/wall.svg"
   rsvg-convert -o "wallpaper/lucciola-$size.png" "$tmp/wall.svg"
 done
+
+# The login screen's version: one 16:10 file the greeter crops to any
+# screen. Blurred, it has no detail a bigger file would keep, so 1920x1200
+# looks the same on the 2880x1920 reference as a native render and costs a
+# fraction of the bytes in every update.
+rsvg-convert -w 1920 -h 1200 -o wallpaper/lucciola-login.png wallpaper/lucciola-login.svg
 
 if command -v optipng >/dev/null; then
   optipng -quiet -o2 -strip all icons/*.png about/*.png plymouth/*.png wallpaper/*.png

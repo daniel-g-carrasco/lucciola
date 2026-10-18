@@ -1,18 +1,76 @@
-# Lucciola: Noctalia Greeter's fixed settings. Linked as
-# /var/lib/noctalia-greeter/greeter.toml (lucciola-greeter.conf in
-# tmpfiles.d), so every image update brings the current version.
+# Lucciola: Noctalia Greeter's settings, the login screen's look included.
+# Linked as /var/lib/noctalia-greeter/greeter.toml (lucciola-greeter.conf in
+# tmpfiles.d), so every image update brings the current version to installed
+# systems too.
 #
-# Only what "Sync with Noctalia" never changes belongs here: a value set in
-# this file wins over sync.toml, so a colour, font or wallpaper set here would
-# make Sync do nothing. Lucciola's look is in sync.toml instead
-# (/usr/share/lucciola/greeter/sync.toml, copied once), where Sync replaces it.
+# How the greeter (v1.6.0) combines this file with sync.toml, the file that
+# "Sync with Noctalia" and the greeter itself write:
+# - Colours, font, corner radius and theme mode come as one block from ONE
+#   file: this one when its [appearance.palette] is complete, sync.toml
+#   otherwise (appearance_config.cpp, loadGreeterSyncedAppearance). A font or
+#   a radius here without a complete palette is ignored, and a palette here
+#   without font_family falls back to the greeter's default font: keep them
+#   together.
+# - The wallpaper is separate: [appearance.wallpaper] here wins over
+#   sync.toml's even without a palette, but a per-monitor entry in sync.toml
+#   ([appearance.wallpapers.<connector>]) wins over it on that monitor
+#   (mergeWallpaperAppearance). Sync writes one for every monitor once a
+#   wallpaper has been picked in Noctalia: after Sync Now, that wallpaper
+#   shows, and the colours stay these.
+# - scheme here wins over the palette picked on the login screen.
+# So with all of them here, Sync no longer changes the login screen's
+# colours and font (it still brings the monitor layout and scales).
+# Lucciola's Noctalia never syncs on its own: Noctalia's Auto-Sync
+# Greeter is off by default (shell.greeter_sync.auto_sync, Noctalia 5.3.0)
+# and Lucciola leaves it off, while the greeter rewrites sync.toml at every
+# login (last session, picked scheme). A look kept in sync.toml would reach
+# installed systems only by replacing a file the greeter owns; here it
+# arrives with each update.
 
 [appearance]
+# Lucciola's own colours, not a picker: the scheme cannot be changed from
+# the login screen, and an older pick saved in sync.toml no longer applies.
+scheme = "Synced"
+scheme_selector_position = "hidden"
+theme_mode = "dark"
+font_family = "JetBrains Mono"
+corner_radius_scale = 1.0
 # The logo at the bottom of the screen is Lucciola's firefly: the RPM puts
 # lucciola-mark.svg in place of Noctalia's logo (noctalia-greeter.spec,
 # Source1), since the greeter has no setting for its own logo. It is drawn
 # about 64 px high, tinted with the palette's on_surface.
 hide_logo = false
+
+# The Margine palette of the desktop (palettes/Margine.json, keys renamed
+# the greeter's way) with the card and the fields in the blues of the
+# wallpaper's sky: surface (the fields), surface_variant (the card),
+# on_surface_variant, outline (the card's edge) and hover. Beige primary,
+# text and logo stay the desktop's.
+[appearance.palette]
+primary = "#e6d5bf"
+on_primary = "#121212"
+secondary = "#c2a180"
+on_secondary = "#121212"
+tertiary = "#cba6f7"
+on_tertiary = "#121212"
+error = "#ff938c"
+on_error = "#121212"
+surface = "#0e1020"
+on_surface = "#ece6df"
+surface_variant = "#171a2e"
+on_surface_variant = "#aaa6bb"
+outline = "#2e3150"
+shadow = "#000000"
+hover = "#262a45"
+on_hover = "#ffffff"
+
+# Lucciola's wallpaper blurred and a little darker (make-wallpaper.py, the
+# login version): the card and the logo stand out, and the logo no longer
+# looks like one more firefly. One 16:10 file, cropped to each screen.
+[appearance.wallpaper]
+path = "/usr/share/backgrounds/lucciola/lucciola-login.png"
+fill_mode = "crop"
+fill_color = "#121212"
 
 [auth]
 # PAM asks one thing at a time. With fingerprint login turned on

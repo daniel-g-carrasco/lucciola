@@ -305,15 +305,19 @@ large font:
 Lucciola's login screen is not GDM (GDM stays installed as the fallback greetd
 starts when the greeter cannot come up, and keeps the dconf branding above).
 
-- **Look** (`lucciola/system_files/usr/share/lucciola/greeter/sync.toml`, copied
-  once to `/var/lib/noctalia-greeter/sync.toml` by tmpfiles): `scheme =
-  "Synced"`, dark, the Margine palette (`palettes/Margine.json` with the keys
-  renamed: `mPrimary` becomes `primary`, `mOnSurfaceVariant` becomes
-  `on_surface_variant`, and so on), `JetBrains Mono`, Lucciola's wallpaper
-  (`/usr/share/backgrounds/lucciola/lucciola.png`), `[session] last = "Lucciola"`.
-  Installed systems keep their copy, which names
-  `/usr/share/backgrounds/margine/margine.png`: that path is a link to the
-  new wallpaper, so they change too.
+- **Look** (`lucciola/system_files/usr/share/lucciola/greeter/greeter.toml`,
+  linked as `/var/lib/noctalia-greeter/greeter.toml`, so updates reach
+  installed systems): `scheme = "Synced"` pinned, the palette selector
+  hidden, dark, JetBrains Mono, corners 1.0, the Margine palette
+  (`palettes/Margine.json` with the keys renamed: `mPrimary` becomes
+  `primary`, and so on) with five roles in the blues of the wallpaper's sky
+  (`surface #0e1020` the fields, `surface_variant #171a2e` the card,
+  `on_surface_variant #aaa6bb`, `outline #2e3150`, `hover #262a45`), and the
+  login wallpaper `/usr/share/backgrounds/lucciola/lucciola-login.png`
+  (`fill_mode = "crop"`, section 5).
+- **Starting session** (`.../greeter/sync.toml`, copied once to
+  `/var/lib/noctalia-greeter/sync.toml` by tmpfiles): `[session] last =
+  "Lucciola"`, nothing else.
 - **Logo** (`.../greeter/greeter.toml`, linked as
   `/var/lib/noctalia-greeter/greeter.toml`): `hide_logo = false`. The greeter
   has no setting for its logo: it draws `assets/noctalia.svg` 64 px high at the
@@ -333,12 +337,20 @@ starts when the greeter cannot come up, and keeps the dconf branding above).
   `lucciola.desktop` (lucciola/build.sh 5d checks it).
 
 **Gotchas**
-- `greeter.toml` wins over `sync.toml`. Anything visual put in `greeter.toml`
-  (palette, font, wallpaper) silently disables Noctalia's "Sync with Noctalia"
-  for that value: keep the look in `sync.toml`.
-- An installed system keeps its `/var/lib/noctalia-greeter/sync.toml` (the
-  greeter and Sync own it); a new look in the image reaches it only where the
-  file is deleted (it comes back from the image at the next boot).
+- Colours, font, corners and theme mode come as one block from one file:
+  `greeter.toml` when its `[appearance.palette]` has all 16 roles, else
+  `sync.toml`. A font alone in `greeter.toml` is ignored; a palette there
+  without `font_family` shows the greeter's default font. `lucciola/build.sh`
+  (5d) and `tests/greeter-look.test.sh` check the set is complete.
+- So "Sync with Noctalia" no longer changes the login screen's colours or
+  font, only the screen layout and scales, plus per-monitor wallpapers:
+  Noctalia writes `[appearance.wallpapers.<connector>]` for every monitor
+  once a wallpaper is picked in it, and those win over `greeter.toml`'s
+  wallpaper on their monitor. Noctalia's Auto-Sync Greeter is off by default
+  (Noctalia 5.3.0) and Lucciola leaves it off.
+- The greeter rewrites `sync.toml` at every successful login (last session,
+  picked scheme), dropping its comments. An installed system keeps its copy;
+  the look does not live there for that reason.
 - The greeter only reads fonts installed system-wide (Fontconfig, as the
   `greetd` account).
 
@@ -351,7 +363,7 @@ website's desktop picture (`lucciola/assets/wallpaper/make-wallpaper.py`, a
 3840x2400 master anchored at the bottom: other shapes crop sky or sides,
 never the hills). `/usr/share/backgrounds/lucciola/` has the 3840x2160,
 2880x1920 and 2560x1600 renders; `lucciola.png` links to the 16:9 one and is
-the default everywhere:
+the default everywhere but the login screen:
 - GNOME and its lock screen: gschema override
   `/usr/share/glib-2.0/schemas/zz1-margine.gschema.override` (named **zz1** so
   it loads *after* the base's own overrides), `picture-uri[-dark]`;
@@ -359,7 +371,12 @@ the default everywhere:
 - Noctalia: `lucciola/system_files/usr/share/lucciola/noctalia/15-wallpaper.toml`
   (`[wallpaper.default] path`; a wallpaper picked in Noctalia goes to its
   `settings.toml`, which wins);
-- the greeter: `sync.toml` (section 4b).
+- the greeter: `lucciola-login.png`, the same scene blurred (Gaussian, 35
+  units of the 3840x2400 master, 28 px on the 2880x1920 reference) and at
+  85% brightness, written by `make-wallpaper.py` as `lucciola-login.svg`
+  and rendered by `render.sh` at 1920x1200: blurred, a bigger file shows
+  nothing more, and the greeter crops it to any screen (`greeter.toml`,
+  section 4b).
 
 Compat links `/usr/share/backgrounds/margine/{margine,autumn-leaves}.png` →
 `../lucciola/lucciola.png` keep every old path (user dconf, installed
