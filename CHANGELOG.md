@@ -7,6 +7,21 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-19)
+- **Flatpak apps looked signed out (Spola, Fractal, Deja Dup...).** niri's
+  portals configuration sends the Secret portal to gnome-keyring, which
+  Fedora 45 no longer ships, so apps that keep their passwords through
+  libsecret could not open their own keyring. Lucciola now points it at
+  oo7's portal (`/etc/xdg-desktop-portal/niri-portals.conf`); the build
+  fails if that portal is missing. The passwords were never lost: they come
+  back by themselves after the update.
+- **"ld.so: object ... cannot be preloaded" in every terminal after moving
+  from Margine.** Wayland Scroll Factor, which Margine ships, enables itself
+  with an `LD_PRELOAD` line in `~/.config/environment.d`; Lucciola does not
+  ship the library, so every program printed the error. A user environment
+  generator now drops `LD_PRELOAD` entries whose file is missing before the
+  session starts (from the next login).
+
 ### Added (the kernel reserve: Lucciola with Fedora's kernel)
 - **A second image, `:fedora-kernel`, the same Lucciola with Fedora's own
   kernel instead of the CachyOS one.** A bootc image carries one kernel,
