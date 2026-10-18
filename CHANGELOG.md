@@ -7,6 +7,14 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Added
+- **A welcome window at the first login.** New users of the Lucciola
+  session get one short page in the website's look: the keys first, then
+  how updates work (what Lucciola System does and does not do, where
+  Homebrew fits), apps arriving in the background, and a button for the
+  guide. It comes back at each login until it is closed once, and
+  "Lucciola Welcome" in the launcher reopens it. Not in the GNOME session.
+
 ### Changed (Lucciola's own identity)
 - **Lucciola looks like Lucciola from the boot to the desktop.** Until now
   the boot splash, the About page, notifications and the commands still

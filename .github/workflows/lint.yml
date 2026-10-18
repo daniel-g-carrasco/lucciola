@@ -113,6 +113,12 @@ jobs:
         # is tested. See tests/login-migrate.test.sh.
         run: bash tests/login-migrate.test.sh
 
+      - name: Welcome window at the first login
+        # session-start opens it for new users until it is closed once, and
+        # never for accounts that had Lucciola sessions before it existed.
+        # See tests/session-start-welcome.test.sh.
+        run: bash tests/session-start-welcome.test.sh
+
       - name: Signed transport migration helper
         # Moves unverified installs to ostree-image-signed:. What it leaves
         # alone (other images, no policy, failed verification) is tested.
