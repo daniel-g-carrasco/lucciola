@@ -282,16 +282,14 @@ log "Stripping Bluefin/ublue branding leftover from /usr/share + /usr/share/appl
 # (a) Visible app-menu entries that point at Bluefin docs/community.
 # `discourse.desktop` opens github.com/ublue-os/bluefin/discussions →
 # not a Margine resource at all → delete.
-# `documentation.desktop` opens docs.projectbluefin.io → repoint at
-# Margine's docs launcher + rename.
+# `documentation.desktop` opens docs.projectbluefin.io → delete. Margine's
+# offline docs launcher replaced it until 2026-10-18; Lucciola's guide is
+# online and has no address of its own yet, so there is no launcher.
 # `system-update.desktop` says "Update Bluefin, Flatpaks, …" → keep
 # the underlying uupd flow (Margine uses it too) but rebrand.
 rm -f /usr/share/applications/discourse.desktop
 
 SCHEDULER_ICON="/usr/share/icons/hicolor/scalable/apps/margine-scheduler.svg"
-DOCS_ICON="/usr/share/icons/hicolor/scalable/apps/margine-documentation.svg"
-OFFLINE_DOCS_DIR="/usr/share/margine/offline-docs"
-MARGINE_DOCS_BASE_URL="${MARGINE_DOCS_BASE_URL:-https://margine.dev}"
 
 # Lightning-bolt app icon for the CPU scheduler — ties to Margine's perf /
 # "snappier under load" theme, shipped locally instead of a generic MoreWaita
@@ -315,29 +313,14 @@ cat >"$SCHEDULER_ICON" <<'SCHEDULER_ICON_SVG'
   <path d="M74 18 L36 70 H58 L54 110 L92 58 H70 Z" fill="url(#m-sched-bolt)" stroke="#ffe0b0" stroke-opacity="0.5" stroke-width="2" stroke-linejoin="round"/>
 </svg>
 SCHEDULER_ICON_SVG
-cp /ctx/50-branding/assets/icons/margine-documentation.svg "$DOCS_ICON"
-[[ -s "$DOCS_ICON" ]] || { log "FATAL: required branding asset is empty: $DOCS_ICON"; exit 1; }
-# Ship the offline-docs builder in the image so the runtime refresh
-# service (margine-docs-refresh.timer -> /usr/libexec/margine/docs-refresh)
-# can rebuild the mirror into /var/lib/margine/offline-docs with the
-# exact same fetch/rewrite logic that bakes this /usr seed.
-install -Dm0755 /ctx/50-branding/build-offline-docs.py /usr/libexec/margine/build-offline-docs
-# Best-effort seed: don't couple a ~28-min image build to the docs
-# site's uptime. If the site is unreachable past its retries the seed
-# is left empty (or partial) and margine-docs-refresh.service rebuilds
-# the mirror from the network on first boot. Failing the build here
-# would brick it on a transient website blip for no durable gain.
-if ! python3 /usr/libexec/margine/build-offline-docs \
-  --base-url "$MARGINE_DOCS_BASE_URL" \
-  --output-dir "$OFFLINE_DOCS_DIR"; then
-  log "WARN: offline-docs seed failed (site unreachable?) — runtime docs-refresh will backfill the mirror"
-fi
-chmod 0644 "$SCHEDULER_ICON" "$DOCS_ICON"
-chmod -R a+rX "$OFFLINE_DOCS_DIR"
+chmod 0644 "$SCHEDULER_ICON"
+# The offline mirror of margine.dev (fetched here at build time, refreshed
+# by margine-docs-refresh.timer, opened by margine-docs-open and its
+# "Margine Documentation" launcher) left on 2026-10-18: Lucciola's guide
+# is online.
 
-# Offline-first docs enablement symlinks + the two rebranded app-menu
-# entries (margine-documentation / margine-system-update) ship as
-# tracked system_files now; only the Bluefin originals get removed here.
+# The rebranded system-update entry (margine-system-update) ships as a
+# tracked system_files entry; only the Bluefin originals get removed here.
 rm -f /usr/share/applications/documentation.desktop
 rm -f /usr/share/applications/system-update.desktop
 

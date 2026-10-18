@@ -224,12 +224,9 @@ for f in usr/lib/systemd/user/oo7-daemon.service.d/50-margine-keyring-legacy.con
 done
 
 # A.4.repro: leftovers that made identical builds differ (2026-10-03).
-# Cloudflare-obfuscated text in the offline docs is unreadable offline
-# and re-randomised on every fetch; adb keys in root's home would be one
-# private key shared by every install of the same build.
-if grep -rqsE 'data-cfemail|email&#160;protected' "$ROOTFS/usr/share/margine/offline-docs"; then
-  echo "::error::offline docs still contain Cloudflare-obfuscated text (A.4.repro)"; fail=1
-fi
+# adb keys in root's home would be one private key shared by every
+# install of the same build. (The offline docs' Cloudflare-obfuscated text
+# was the other one; the docs left on 2026-10-18.)
 if [[ -e "$ROOTFS/var/roothome/.android" ]]; then
   echo "::error::var/roothome/.android (adb keys) shipped in the image (A.4.repro)"; fail=1
 fi
@@ -297,26 +294,15 @@ test -L "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants/margine-signed-o
   || { echo "::error::margine-signed-origin.service is not enabled (A.4.trust)"; fail=1; }
 check_exec "usr/libexec/margine/signed-origin" "A.4.trust"
 
-# A.4.bis — desktop launchers have high-res icons and docs fallback
+# A.4.bis — desktop launchers have high-res icons. The offline docs, their
+# launcher and their refresh timer left on 2026-10-18 (Lucciola's guide is
+# online): none of them may come back by accident.
 check_nonempty "usr/share/icons/hicolor/scalable/apps/margine-scheduler.svg" "A.4.bis"
-check_nonempty "usr/share/icons/hicolor/scalable/apps/margine-documentation.svg" "A.4.bis"
-check_exec "usr/libexec/margine/docs-open" "A.4.bis"
-check_exec "usr/bin/margine-docs-open" "A.4.bis"
-check_nonempty "usr/share/margine/offline-docs/index.html" "A.4.bis"
-check_nonempty "usr/share/margine/offline-docs/docs/index.html" "A.4.bis"
-check_nonempty "usr/share/margine/offline-docs/docs/install-status/index.html" "A.4.bis"
-docs_count="$(find "$ROOTFS/usr/share/margine/offline-docs" -path '*/index.html' -type f | wc -l)"
-if (( docs_count < 14 )); then
-  echo "::error::A.4.bis offline docs mirror is incomplete (index.html count=$docs_count)"
-  fail=1
-fi
-if grep -R -n -E '<script|/assets/.*\.(js|css)|href="/docs' "$ROOTFS/usr/share/margine/offline-docs"; then
-  echo "::error::A.4.bis offline docs still reference live JS/CSS assets or root-relative docs links"
-  fail=1
-fi
 grep -qxF 'Icon=margine-scheduler' "$ROOTFS/usr/share/applications/margine-scheduler.desktop" || { echo "::error::A.4.bis scheduler launcher does not use margine-scheduler icon"; fail=1; }
-grep -qxF 'Exec=margine-docs-open' "$ROOTFS/usr/share/applications/margine-documentation.desktop" || { echo "::error::A.4.bis docs launcher does not use margine-docs-open"; fail=1; }
-grep -qxF 'Icon=margine-documentation' "$ROOTFS/usr/share/applications/margine-documentation.desktop" || { echo "::error::A.4.bis docs launcher does not use margine-documentation icon"; fail=1; }
+for f in usr/share/margine/offline-docs usr/share/applications/margine-documentation.desktop \
+         usr/bin/margine-docs-open usr/lib/systemd/system/margine-docs-refresh.timer; do
+  if [[ -e "$ROOTFS/$f" ]]; then echo "::error::$f is back in the image (A.4.bis: the offline docs left on 2026-10-18)"; fail=1; fi
+done
 
 # A.5 — REMOVED (org.gnome.shell.app-grid schema does not exist in
 # GNOME 47/48; the keys we tried to set are ignored. Icon-size drift

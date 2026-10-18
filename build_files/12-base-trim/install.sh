@@ -42,8 +42,8 @@
 #     dependencies from 2026-10-10 and left the build on 2026-10-18 (the
 #     gaming chain is layered on demand); this is the guard.
 #   - fluid soundfonts and wildmidi (330 MB), python3-boto3/botocore
-#     (130 MB), gnome-user-docs and yelp (65 MB; Margine ships its own
-#     offline docs and Bluefin itself excludes yelp): orphans.
+#     (130 MB), gnome-user-docs and yelp (65 MB; Bluefin itself excludes
+#     yelp): orphans.
 # The families are matched by name pattern, so they are removed whatever
 # the base's version of them; the prove-it block then checks that
 # everything the x86 VMs need is still there.
@@ -103,7 +103,7 @@ TRIM_PKGS=(
   # negativo17's gstreamer1-plugins-bad (custom-kernel's codec swap) links
   # libWildMidi and gtk4 requires that package (THE CASCADE above).
   python3-boto3 python3-botocore python3-s3transfer         # AWS SDK, orphans
-  gnome-user-docs yelp yelp-libs yelp-xsl                   # GNOME help: Margine ships offline docs
+  gnome-user-docs yelp yelp-libs yelp-xsl                   # GNOME help, orphans
   # Two packages the new base brings and no Margine ever shipped (Bluefin
   # excluded both): GNOME Software, because Bazaar is the store and GNOME
   # Software would check, stage and announce OS and firmware updates on

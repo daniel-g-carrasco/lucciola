@@ -562,11 +562,11 @@ fi
 hdr "7. Margine launchers"
 # ---------------------------------------------------------------------------
 # Margine-branded replacements for the Bluefin app-menu entries we
-# stripped (system-update, documentation): the launcher should offer
-# Margine's own versions in their place rather than leaving holes.
+# stripped: the launcher should offer Margine's own version in their place
+# rather than leaving holes. (Documentation has none since 2026-10-18: the
+# offline docs left, and Lucciola's guide is online.)
 declare -A MARGINE_DESKTOP_REPLACEMENTS=(
   ['Margine System Update']='/usr/share/applications/margine-system-update.desktop'
-  ['Margine Documentation']='/usr/share/applications/margine-documentation.desktop'
 )
 for label in "${!MARGINE_DESKTOP_REPLACEMENTS[@]}"; do
   p=${MARGINE_DESKTOP_REPLACEMENTS[$label]}
