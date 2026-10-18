@@ -127,9 +127,12 @@ for t in standard administrator; do
   grep -q '^Session=lucciola$' "$f" || { echo "ERROR: $f not rewritten" >&2; exit 1; }
 done
 
-# 3. Identity. Only the public name changes: ID, VARIANT_ID and the rest stay
-#    Margine's, because the tooling underneath (validators, status, update
-#    helpers) is Margine's and keys on them.
+# 3. Identity. The public name, the logo (50-branding installs
+#    lucciola-logo, the firefly on its tile) and the terminal accent (beige
+#    #e6d5bf, the firefly's colour, where systemd prints the name at boot)
+#    change: ID, VARIANT_ID and the rest stay Margine's, because the
+#    tooling underneath (validators, status, update helpers) is Margine's
+#    and keys on them.
 fedora_ver="$(rpm -E %fedora)"
 build_date="$(date -u +%Y%m%d)"
 sed -i \
@@ -137,8 +140,13 @@ sed -i \
   -e "s/^VERSION=.*/VERSION=\"${fedora_ver} (Lucciola)\"/" \
   -e "s/^PRETTY_NAME=.*/PRETTY_NAME=\"Lucciola ${fedora_ver} (${build_date})\"/" \
   -e 's/^VARIANT=.*/VARIANT="Lucciola"/' \
+  -e 's/^LOGO=.*/LOGO=lucciola-logo/' \
+  -e 's/^ANSI_COLOR=.*/ANSI_COLOR="0;38;2;230;213;191"/' \
   /usr/lib/os-release
 grep -q '^NAME="Lucciola"$' /usr/lib/os-release || { echo "ERROR: os-release not rewritten" >&2; exit 1; }
+grep -qx 'LOGO=lucciola-logo' /usr/lib/os-release || { echo "ERROR: os-release LOGO not rewritten" >&2; exit 1; }
+[[ -s /usr/share/icons/hicolor/scalable/apps/lucciola-logo.svg ]] \
+  || { echo "ERROR: os-release names lucciola-logo, but the icon is not installed (50-branding)" >&2; exit 1; }
 
 # 4. Checks: the shipped niri config must parse (includes resolved), and the
 #    helpers must be there and executable.

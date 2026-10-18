@@ -40,12 +40,11 @@ check_nonempty() { [[ -s "$ROOTFS/$1" ]] || { echo "::error::file $1 missing or 
 check_exec() { [[ -x "$ROOTFS/$1" ]] || { echo "::error::not executable $1 ($2)"; fail=1; }; }
 
 # A.1 — About-panel logo: os-release LOGO + asset on disk
-if ! grep -qE '^LOGO=margine-logo$' "$ROOTFS/etc/os-release"; then
-  echo "::error::A.1 /etc/os-release does not declare LOGO=margine-logo"; fail=1
+if ! grep -qE '^LOGO=lucciola-logo$' "$ROOTFS/etc/os-release"; then
+  echo "::error::A.1 /etc/os-release does not declare LOGO=lucciola-logo"; fail=1
 fi
-if [[ ! -f "$ROOTFS/usr/share/pixmaps/margine-logo.png" && ! -f "$ROOTFS/usr/share/pixmaps/margine-logo.svg" ]]; then
-  echo "::error::A.1 /usr/share/pixmaps/margine-logo.{png,svg} missing"; fail=1
-fi
+check_nonempty "usr/share/icons/hicolor/scalable/apps/lucciola-logo.svg" "A.1"
+check_nonempty "usr/share/pixmaps/lucciola-logo.png" "A.1"
 check_nonempty "usr/share/pixmaps/fedora_logo_med.png" "A.1"
 check_nonempty "usr/share/pixmaps/fedora_whitelogo_med.png" "A.1"
 
@@ -317,7 +316,17 @@ grep -qxF 'system-db:distro' "$ROOTFS/etc/dconf/profile/user" || { echo "::error
 # (added 2026-06-12). These assert OUTCOMES, independent of how the build
 # scripts behave.
 test -s "$ROOTFS/usr/share/icons/hicolor/scalable/apps/margine-logo.svg" \
-  || { echo "::error::A.3.ter margine-logo.svg missing from hicolor"; fail=1; }
+  || { echo "::error::A.3.ter margine-logo.svg missing from hicolor (the old name, kept as an alias of lucciola-logo)"; fail=1; }
+# The boot splash: Lucciola's theme, selected, at DeviceScale=1 (the theme
+# sizes itself in device pixels), and the wallpaper with the old Margine
+# path still resolving (installed systems' greeter sync.toml names it).
+check_nonempty "usr/share/plymouth/themes/lucciola/lucciola.script" "A.3.ter"
+grep -qx 'Theme=lucciola' "$ROOTFS/etc/plymouth/plymouthd.conf" \
+  || { echo "::error::A.3.ter plymouthd.conf does not select the lucciola theme"; fail=1; }
+grep -qx 'DeviceScale=1' "$ROOTFS/etc/plymouth/plymouthd.conf" \
+  || { echo "::error::A.3.ter plymouthd.conf lacks DeviceScale=1"; fail=1; }
+check_nonempty "usr/share/backgrounds/lucciola/lucciola.png" "A.3.ter"
+check_nonempty "usr/share/backgrounds/margine/margine.png" "A.3.ter"
 test -s "$ROOTFS/usr/share/icons/hicolor/scalable/apps/fedora-logo-icon.svg" \
   || { echo "::error::A.3.ter fedora-logo-icon.svg missing (fedora-welcome + gnome-initial-setup hardcode it)"; fail=1; }
 test -s "$ROOTFS/usr/share/pixmaps/fedora_logo_med.png" \

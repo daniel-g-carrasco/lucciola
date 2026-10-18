@@ -10,7 +10,7 @@
 #   boot chain legible there, the image carries two deliberate HiDPI tunings:
 #     1. GRUB:     /usr/lib/bootupd/grub2-static/configs.d/05_margine-gfxmode.cfg
 #                  caps the menu render mode at 1080p (HiDPI panels upscale it).
-#     2. Plymouth: a *script*-based theme (margine.script) whose logo + text
+#     2. Plymouth: a *script*-based theme (lucciola.script) whose logo + text
 #                  are sized RELATIVE to the screen, not in fixed pixels.
 #   The risk this script guards against is the inverse: that those choices
 #   make something look comically huge or broken on a STANDARD-DPI display
@@ -75,14 +75,14 @@ done
 
 # Known repo-relative paths to the HiDPI artifacts (single source of truth).
 GFXMODE_REL="build_files/system_files/usr/lib/bootupd/grub2-static/configs.d/05_margine-gfxmode.cfg"
-PLYMOUTH_SCRIPT_REL="build_files/50-branding/assets/plymouth/margine.script"  # now vendored in-repo (was the separate margine-fedora-atomic site repo)
+PLYMOUTH_SCRIPT_REL="lucciola/assets/plymouth/lucciola.script"  # in-repo source of the Lucciola theme (was Margine's margine.script)
 GNOME_OVERRIDE_REL="build_files/30-gnome-defaults/install.sh"
 DCONF_DIR_REL="build_files/30-gnome-defaults/dconf"
 
 # Live install paths.
 LIVE_GFXMODE="/usr/lib/bootupd/grub2-static/configs.d/05_margine-gfxmode.cfg"
 LIVE_PLYMOUTH_CONF="/etc/plymouth/plymouthd.conf"
-LIVE_PLYMOUTH_THEME_DIR="/usr/share/plymouth/themes/margine"
+LIVE_PLYMOUTH_THEME_DIR="/usr/share/plymouth/themes/lucciola"
 
 # ---------------------------------------------------------------------------
 # 0. Context: is this even a Margine host, and what DPI is the panel?
@@ -236,16 +236,16 @@ audit_plymouth_script() {
 if [[ -r "$LIVE_PLYMOUTH_CONF" ]]; then
   theme="$(grep -E '^[[:space:]]*Theme=' "$LIVE_PLYMOUTH_CONF" 2>/dev/null | tail -1 | cut -d= -f2)"
   info "live: plymouthd.conf Theme=${theme:-<unset>}"
-  [[ "${theme:-}" == "margine" ]] && ok "Margine script theme is the active splash." \
-                                   || warn "Active Plymouth theme is '${theme:-?}', not 'margine' — audit that theme's scaling instead."
+  [[ "${theme:-}" == "lucciola" ]] && ok "Lucciola script theme is the active splash." \
+                                   || warn "Active Plymouth theme is '${theme:-?}', not 'lucciola': audit that theme's scaling instead."
 fi
-if [[ -r "$LIVE_PLYMOUTH_THEME_DIR/margine.script" ]]; then
-  audit_plymouth_script "$LIVE_PLYMOUTH_THEME_DIR/margine.script" "live"
+if [[ -r "$LIVE_PLYMOUTH_THEME_DIR/lucciola.script" ]]; then
+  audit_plymouth_script "$LIVE_PLYMOUTH_THEME_DIR/lucciola.script" "live"
 else
-  miss "live: $LIVE_PLYMOUTH_THEME_DIR/margine.script absent."
+  miss "live: $LIVE_PLYMOUTH_THEME_DIR/lucciola.script absent."
 fi
 # The script SOURCE now lives IN this repo at
-# build_files/50-branding/assets/plymouth/margine.script (it used to live in
+# lucciola/assets/plymouth/lucciola.script (Margine's margine.script lived in
 # the separate margine-fedora-atomic site repo, fetched at build time — the
 # sibling-checkout search below was retired when the assets were vendored).
 # Audit the in-repo copy directly.

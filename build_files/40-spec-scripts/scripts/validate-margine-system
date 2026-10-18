@@ -84,8 +84,8 @@ fi
 EXPECTED_OS_ID="fedora"
 EXPECTED_OS_VARIANT_ID="margine"
 EXPECTED_KERNEL_PATTERN="cachy"   # kernel-cachyos (cachyos1)
-EXPECTED_PLYMOUTH_THEME="margine"
-EXPECTED_WALLPAPER="file:///usr/share/backgrounds/margine/margine.png"
+EXPECTED_PLYMOUTH_THEME="lucciola"
+EXPECTED_WALLPAPER="file:///usr/share/backgrounds/lucciola/lucciola.png"
 EXPECTED_GDM_LOGO=""   # empty: no logo in greeter, by design (see lessons-learned Bug 7)
 EXPECTED_GHCR_IMAGE="ghcr.io/daniel-g-carrasco/lucciola"
 
@@ -293,14 +293,18 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-hdr "5. Margine branding assets"
+hdr "5. Branding assets (Lucciola's)"
 # ---------------------------------------------------------------------------
-[[ -f /usr/share/pixmaps/margine-logo.png ]] && ok "margine-logo.png present" \
-  || bad "/usr/share/pixmaps/margine-logo.png missing"
-[[ -f /usr/share/backgrounds/margine/margine.png ]] && ok "wallpaper present" \
-  || bad "/usr/share/backgrounds/margine/margine.png missing"
-[[ -d /usr/share/plymouth/themes/margine ]] && ok "Plymouth theme dir present" \
-  || bad "/usr/share/plymouth/themes/margine missing"
+[[ -f /usr/share/pixmaps/lucciola-logo.png ]] && ok "lucciola-logo.png present" \
+  || bad "/usr/share/pixmaps/lucciola-logo.png missing"
+[[ -f /usr/share/icons/hicolor/scalable/apps/margine-logo.svg ]] && ok "margine-logo alias present (older references)" \
+  || bad "/usr/share/icons/hicolor/scalable/apps/margine-logo.svg missing"
+[[ -f /usr/share/backgrounds/lucciola/lucciola.png ]] && ok "wallpaper present" \
+  || bad "/usr/share/backgrounds/lucciola/lucciola.png missing"
+[[ -f /usr/share/backgrounds/margine/margine.png ]] && ok "old wallpaper path still resolves (sync.toml and dconf of older installs)" \
+  || bad "/usr/share/backgrounds/margine/margine.png does not resolve"
+[[ -d /usr/share/plymouth/themes/lucciola ]] && ok "Plymouth theme dir present" \
+  || bad "/usr/share/plymouth/themes/lucciola missing"
 [[ -f /usr/share/margine/ascii-logo.txt ]] && ok "fastfetch ASCII logo present" \
   || warn "fastfetch ASCII logo missing (cosmetic)"
 
@@ -308,9 +312,9 @@ hdr "5. Margine branding assets"
 # distro logo. Without LOGO=, GNOME falls back to the inherited Bluefin
 # asset → wrong logo. Fixed 2026-06-02 (commit f40d793 margine-image).
 LOGO_KEY=$(grep -E '^LOGO=' /etc/os-release | cut -d= -f2- | tr -d '"')
-[[ "$LOGO_KEY" == "margine-logo" ]] \
-  && ok "os-release LOGO=margine-logo (GNOME About will find /usr/share/pixmaps/margine-logo.png)" \
-  || bad "os-release LOGO='$LOGO_KEY' (expected 'margine-logo') — GNOME About will show wrong distro logo"
+[[ "$LOGO_KEY" == "lucciola-logo" ]] \
+  && ok "os-release LOGO=lucciola-logo (GNOME About finds it in hicolor)" \
+  || bad "os-release LOGO='$LOGO_KEY' (expected 'lucciola-logo'): GNOME About would show the wrong logo"
 
 # /etc/fastfetch/config.jsonc is the system-wide default config that
 # vanilla `fastfetch` (no --config flag) picks up. Without it,
@@ -322,20 +326,19 @@ LOGO_KEY=$(grep -E '^LOGO=' /etc/os-release | cut -d= -f2- | tr -d '"')
   && ok "/etc/fastfetch/config.jsonc present (vanilla fastfetch → Margine config)" \
   || warn "/etc/fastfetch/config.jsonc missing — vanilla fastfetch will show Fedora default (cosmetic)"
 
-# Plymouth watermark dimensions — Margine ships at 480x120 (≈25% of a
-# 1080p viewport, consistent with Fedora/Bluefin stock).
-# Pre-2026-06-02 was 720x180 (too big, daniel flagged it).
-if command -v identify >/dev/null 2>&1 && [[ -f /usr/share/plymouth/themes/margine/watermark.png ]]; then
-  PLY_DIM=$(identify -format '%wx%h' /usr/share/plymouth/themes/margine/watermark.png 2>/dev/null)
-  [[ "$PLY_DIM" == "480x120" ]] \
-    && ok "Plymouth watermark = 480x120 (expected)" \
-    || warn "Plymouth watermark = '$PLY_DIM' (expected 480x120; cosmetic)"
+# Plymouth: the theme sizes itself in device pixels and needs Plymouth's
+# own HiDPI scale off (DeviceScale=1), or it is drawn at scale 1 and
+# stretched 2x on HiDPI panels (50-branding, lucciola.script).
+if grep -qx 'DeviceScale=1' /etc/plymouth/plymouthd.conf 2>/dev/null; then
+  ok "plymouthd.conf: DeviceScale=1 (the theme sizes itself)"
+else
+  warn "plymouthd.conf has no DeviceScale=1: the boot splash is soft on HiDPI panels (cosmetic)"
 fi
 
 # start-here-symbolic.svg — Bluefin overrides this Adwaita icon with
 # a mascot glyph that bleeds through into gnome-initial-setup's
-# Language page header. Margine overlays a path-based symbolic 'm'
-# glyph. GTK4 symbolic icons reject embedded raster <image> payloads,
+# Language page header. The image overlays Lucciola's symbolic firefly
+# (two circles). GTK4 symbolic icons reject embedded raster <image> payloads,
 # so validate the SVG shape rather than using a file-size heuristic.
 START_HERE=/usr/share/icons/Adwaita/symbolic/places/start-here-symbolic.svg
 if [[ -f "$START_HERE" ]]; then
@@ -434,9 +437,9 @@ else
   bad "fastfetch broken — alias likely still resolves to a removed ublue-fastfetch / ublue-motd"
 fi
 
-# The Margine logo PNG must exist where os-release's LOGO key
-# resolves it (i.e. /usr/share/pixmaps/<LOGO>.png).
-RESOLVED_LOGO="/usr/share/pixmaps/${LOGO_KEY:-margine-logo}.png"
+# The logo PNG must exist where os-release's LOGO key resolves it outside
+# the icon theme (i.e. /usr/share/pixmaps/<LOGO>.png).
+RESOLVED_LOGO="/usr/share/pixmaps/${LOGO_KEY:-lucciola-logo}.png"
 [[ -f "$RESOLVED_LOGO" ]] \
   && ok "LOGO=$LOGO_KEY resolves to $RESOLVED_LOGO" \
   || bad "$RESOLVED_LOGO missing — GNOME About panel will fall back to a generic logo"
@@ -466,9 +469,9 @@ gdm_bg_path="${GDM_BG#file://}"
 gdm_bg_real=$(readlink -f "$gdm_bg_path" 2>/dev/null || echo "$gdm_bg_path")
 if [[ "$gdm_bg_real" == "$exp_real" ]]; then
   if [[ "$GDM_BG" == "$EXPECTED_WALLPAPER" ]]; then
-    ok "GDM background uses Margine wallpaper"
+    ok "GDM background uses the Lucciola wallpaper"
   else
-    ok "GDM background resolves to Margine wallpaper via symlink (dconf still references the old path)"
+    ok "GDM background resolves to the Lucciola wallpaper via symlink (dconf still references the old path)"
   fi
 else
   bad "GDM background resolves to '$gdm_bg_real' (expected '$exp_real')"

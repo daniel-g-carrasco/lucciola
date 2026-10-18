@@ -12,14 +12,20 @@ fail=0
 ok()  { printf '  ok: %s\n' "$*"; }
 err() { printf 'FAIL: %s\n' "$*"; fail=1; }
 
+# The icon names that must resolve: Lucciola's two (the tile is os-release
+# LOGO=, the mark the firefly alone), the old margine-logo (the live ISO's
+# installer icon and older references) and fedora-logo-icon (hardcoded by
+# the welcome dialogs).
+ICONS=(lucciola-logo lucciola-mark margine-logo fedora-logo-icon)
+
 # 1. os-release LOGO
 LOGO="$(. /etc/os-release; echo "${LOGO:-}")"
-if [[ "$LOGO" == "margine-logo" ]]; then ok "os-release LOGO=margine-logo"
-else err "os-release LOGO='$LOGO' (expected margine-logo)"; fi
+if [[ "$LOGO" == "lucciola-logo" ]]; then ok "os-release LOGO=lucciola-logo"
+else err "os-release LOGO='$LOGO' (expected lucciola-logo)"; fi
 
 # 2a. Icon files on disk — display-independent, runs everywhere
 #     (build container, headless smoke probe, live session).
-for n in margine-logo fedora-logo-icon; do
+for n in "${ICONS[@]}"; do
   if compgen -G "/usr/share/icons/hicolor/*/apps/${n}.*" >/dev/null \
      || [[ -f "/usr/share/pixmaps/${n}.png" || -f "/usr/share/pixmaps/${n}.svg" ]]; then
     ok "icon file present: $n"
@@ -35,8 +41,9 @@ done
 #     skip instead of emitting a false FAIL (2026-06-12, found when the
 #     Layer C GUI probe ran this as a displayless root unit).
 if command -v gjs >/dev/null 2>&1; then
-  if RES="$(gjs -c 'imports.gi.versions.Gtk="4.0"; const {Gtk}=imports.gi; Gtk.init(); const t=new Gtk.IconTheme(); t.set_search_path(["/usr/share/icons","/usr/share/pixmaps"]); t.set_theme_name("hicolor"); for (const n of ["margine-logo","fedora-logo-icon"]) print(n+"="+t.has_icon(n));' 2>/dev/null)"; then
-    for n in margine-logo fedora-logo-icon; do
+  names="$(printf '"%s",' "${ICONS[@]}")"
+  if RES="$(gjs -c 'imports.gi.versions.Gtk="4.0"; const {Gtk}=imports.gi; Gtk.init(); const t=new Gtk.IconTheme(); t.set_search_path(["/usr/share/icons","/usr/share/pixmaps"]); t.set_theme_name("hicolor"); for (const n of ['"${names%,}"']) print(n+"="+t.has_icon(n));' 2>/dev/null)"; then
+    for n in "${ICONS[@]}"; do
       if grep -q "${n}=true" <<<"$RES"; then ok "icon resolves: $n"
       else err "icon does NOT resolve: $n (welcome dialogs would show a broken placeholder)"; fi
     done
@@ -84,39 +91,55 @@ except Exception:
 sys.exit(1 if bad else 0)
 PY
 
-# 4. Plymouth theme: the three files are present and the (script-based) theme
+# 4. Plymouth theme: its files are present and the (script-based) theme
 #    passes a cheap sanity gate. There is NO offline Plymouth-Script linter, so
 #    a balance + callback-presence check is the only build-time guard against a
-#    theme edit silently breaking the WHOLE boot splash — it otherwise surfaces
+#    theme edit silently breaking the WHOLE boot splash: it otherwise surfaces
 #    only at boot, after promotion to :stable.
-PTHEME=/usr/share/plymouth/themes/margine
-for f in margine.plymouth margine.script watermark.png; do
+PTHEME=/usr/share/plymouth/themes/lucciola
+for f in lucciola.plymouth lucciola.script; do
   if [[ -f "$PTHEME/$f" ]]; then ok "plymouth theme file: $f"
   else err "plymouth theme file MISSING: $f"; fi
 done
-if [[ -f "$PTHEME/margine.script" ]]; then
-  python3 - "$PTHEME/margine.script" <<'PY' || fail=1
-import sys, re
-s = open(sys.argv[1]).read()
+if grep -qx 'DeviceScale=1' /etc/plymouth/plymouthd.conf 2>/dev/null; then ok "plymouthd.conf: DeviceScale=1"
+else err "plymouthd.conf lacks DeviceScale=1 (the theme sizes itself in device pixels; soft on HiDPI without it)"; fi
+if [[ -f "$PTHEME/lucciola.script" ]]; then
+  python3 - "$PTHEME" <<'PY' || fail=1
+import os, re, sys
+d = sys.argv[1]
+s = open(os.path.join(d, "lucciola.script")).read()
 code = re.sub(r'//.*', '', s)          # strip line comments
 code = re.sub(r'"[^"]*"', '""', code)  # strip string literals
 bad = False
 for o, c, name in (('{', '}', 'braces'), ('(', ')', 'parens'), ('[', ']', 'brackets')):
     if code.count(o) != code.count(c):
-        print(f"FAIL: margine.script unbalanced {name}: {code.count(o)} open vs {code.count(c)} close")
+        print(f"FAIL: lucciola.script unbalanced {name}: {code.count(o)} open vs {code.count(c)} close")
         bad = True
 for cb in ("Plymouth.SetRefreshFunction", "Plymouth.SetDisplayPasswordFunction"):
     if cb not in s:
-        print(f"FAIL: margine.script no longer registers {cb}")
+        print(f"FAIL: lucciola.script no longer registers {cb}")
         bad = True
 # Non-indexed Window.GetX()/GetY() must stay out of the layout maths: on
 # plymouth 24.004.60 they return the smallest display's offset, not 0, and
 # the wordmark lands off-centre on the big screen of a two-display setup.
 if re.search(r'Window\.Get[XY]\(\s*\)', code):
-    print("FAIL: margine.script uses non-indexed Window.GetX()/GetY() (off-centre logo with two displays)")
+    print("FAIL: lucciola.script uses non-indexed Window.GetX()/GetY() (off-centre logo with two displays)")
     bad = True
+# The script builds its image names from size ladders; every one must exist.
+def ladder(name):
+    return [int(v) for v in re.findall(name + r"\[\d+\]\s*=\s*(\d+);", s)]
+for prefix, lname in (("wordmark", "word_ladder"), ("firefly", "word_ladder"),
+                      ("field", "field_ladder"), ("bullet", "field_ladder")):
+    sizes = ladder(lname)
+    if not sizes:
+        print(f"FAIL: lucciola.script: no {lname} sizes")
+        bad = True
+    for n in sizes:
+        if not os.path.isfile(os.path.join(d, f"{prefix}-{n}.png")):
+            print(f"FAIL: plymouth image missing: {prefix}-{n}.png")
+            bad = True
 if not bad:
-    print("  ok: margine.script balanced + registers refresh/password callbacks")
+    print("  ok: lucciola.script balanced, registers refresh/password callbacks, all its images present")
 sys.exit(1 if bad else 0)
 PY
 fi

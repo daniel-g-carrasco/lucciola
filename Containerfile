@@ -50,6 +50,12 @@ COPY build_files /
 # time via the installer/ working dir. The gaming variant was retired
 # 2026-06-06 so there is no installer/flatpaks-gaming any more.
 COPY installer/flatpaks-base    /installer-flatpaks-base
+# Lucciola's brand (logos, wallpaper, the Plymouth theme), for 50-branding.
+# In ctx rather than a stage of its own because the boot splash must be in
+# place before 50-branding writes the initramfs, in the same RUN as the
+# kernel; an asset change costs that layer's cache, like any other
+# build_files change does.
+COPY lucciola/assets            /lucciola-assets
 
 # lucciola/build.sh gets a context stage of its own, not a place in ctx:
 # the kernel RUN below mounts the whole ctx, and an edit to the Lucciola
