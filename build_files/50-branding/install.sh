@@ -88,27 +88,32 @@ chmod 0644 /usr/share/plymouth/themes/margine/*
 log "Installed: /usr/share/plymouth/themes/margine/"
 
 # Set Margine as the default Plymouth theme. The `-R` flag would
-# regenerate the initramfs, but in a bootc build context we'd rather
-# trigger that explicitly at the end of the kernel install path. Here we
-# just point the config; dracut --regenerate-all (run below) picks it
-# up because the symlink set by plymouth-set-default-theme is in
+# regenerate the initramfs itself; here we just point the config, and the
+# one dracut run of the build (below) picks it up from
 # /etc/plymouth/plymouthd.conf.
-if command -v plymouth-set-default-theme >/dev/null 2>&1; then
-  plymouth-set-default-theme margine
-  log "Set Plymouth default theme: margine"
-fi
-# Regenerate initramfs so the new Plymouth theme is embedded for the
-# boot splash. Output goes to /usr/lib/modules/<KVER>/initramfs.img,
-# the bootc/ostree-expected path. --add ostree explicitly includes the
-# ostree dracut module (without which switch-root fails — see comment
-# in custom-kernel/install.sh).
-# regenerate_initramfs (00-common.sh): zstd, --add ostree, and
-# byte-reproducible (same packages, same bytes, whatever the build date).
-if command -v dracut >/dev/null 2>&1; then
-  for kver_dir in /usr/lib/modules/*/; do
-    kver=$(basename "$kver_dir")
-    regenerate_initramfs "$kver" || { log "ERROR: dracut failed for $kver"; exit 1; }
-  done
+plymouth-set-default-theme margine
+log "Set Plymouth default theme: margine"
+# THE initramfs of the build (2026-10-18: custom-kernel no longer makes a
+# first one that this run always replaced). Output goes to
+# /usr/lib/modules/<KVER>/initramfs.img, the bootc/ostree-expected path.
+# regenerate_initramfs (00-common.sh): generic (custom-kernel's
+# 01-margine-no-hostonly.conf), --add ostree (without which switch-root
+# fails, see custom-kernel/install.sh), zstd, and byte-reproducible (same
+# packages, same bytes, whatever the build date).
+command -v dracut >/dev/null 2>&1 || { log "ERROR: dracut missing: no initramfs, no boot"; exit 1; }
+for kver_dir in /usr/lib/modules/*/; do
+  kver=$(basename "$kver_dir")
+  regenerate_initramfs "$kver" || { log "ERROR: dracut failed for $kver"; exit 1; }
+  [[ -s "${kver_dir}initramfs.img" ]] || { log "ERROR: no initramfs written for $kver"; exit 1; }
+  log "Wrote ${kver_dir}initramfs.img ($(du -h "${kver_dir}initramfs.img" | cut -f1), Plymouth theme margine)"
+done
+# vmlinuz must still be the bytes custom-kernel signed (its checksum,
+# left in this RUN's /tmp): a rewrite would ship a kernel Secure Boot
+# rejects with the cryptic "bad shim signature".
+if [[ -f /tmp/vmlinuz.sha ]]; then
+  sha256sum -c /tmp/vmlinuz.sha >/dev/null || { log "ERROR: vmlinuz changed after signing"; exit 1; }
+  rm -f /tmp/vmlinuz.sha
+  log "vmlinuz still the signed bytes after dracut"
 fi
 
 # (d) GDM login screen background — system dconf override.

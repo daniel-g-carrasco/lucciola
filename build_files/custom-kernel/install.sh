@@ -628,7 +628,7 @@ log "Removing transient build-only packages: ${TRANSIENT[*]}"
 dnf -y remove "${TRANSIENT[@]}" || true
 
 # Drop a dracut config to disable host-only mode for every subsequent
-# dracut invocation in this image (build.sh's Plymouth regeneration too,
+# dracut invocation in this image (50-branding's, the build's only one,
 # and any user-triggered `rpm-ostree initramfs` post-install). Without
 # this, dracut runs in the build container — where there's no LUKS,
 # no btrfs root, no virtio-net — and bakes an initramfs that boots only
@@ -655,17 +655,23 @@ CONF
 # resize (margine.script refresh_callback). On bare metal the real GPU driver
 # (e.g. amdgpu) is already in the generic set. So: no virtio_gpu drop-in.
 
-# Regenerate initramfs at the **bootc/ostree-expected path**:
-#   /usr/lib/modules/<KVER>/initramfs.img
-# Bluefin DX (and every Universal Blue image) puts initramfs there.
-# bootc/ostree picks it up at deployment time from that exact path.
-# Dracut's default output is /boot/initramfs-<KVER>.img — the traditional
-# Anaconda/non-ostree location — which ostree IGNORES, falling back to
-# auto-generating a host-only initramfs (no crypto/btrfs/virtio_blk
-# modules → kernel panic on real installs with LUKS).
+# The initramfs is generated ONCE per build, by 50-branding, right after the
+# Plymouth theme is set (2026-10-18). Until then it was also generated here,
+# and every build ran dracut twice over the same kernel: this copy was
+# always overwritten by the second one, which is the one that carries the
+# Margine boot splash. Nothing between here and 50-branding needs an
+# initramfs. 50-branding writes it where bootc/ostree expect it,
+# /usr/lib/modules/<KVER>/initramfs.img, with regenerate_initramfs
+# (00-common.sh): generic (the drop-in above), --add ostree, zstd, and
+# byte-reproducible; and fails the build when a kernel ends up without one.
 #
-# We pass the output path as a positional argument so dracut writes
-# exactly where ostree expects.
+# The ostree dracut module is essential, and why the explicit --add:
+# without ostree-prepare-root, /sysroot is never pivoted from the raw btrfs
+# root to the deployment and switch-root fails with "os-release file is
+# missing" (verified missing on the published image 2026-05-30; Dracut's
+# default output, /boot/initramfs-<KVER>.img, is ignored by ostree, which
+# then builds a host-only initramfs with no crypto/btrfs modules).
+#
 # Suppress the dracut-install ERROR: installing '/root' / FAILED warnings
 # that have been showing up in every build for months. Source: dracut's
 # 95ssh-client module-setup.sh probes for /root/.ssh/known_hosts +
@@ -685,37 +691,13 @@ ROOT_HOME="$(realpath -m /root)"
 mkdir -p "$ROOT_HOME"
 chmod 700 "$ROOT_HOME"
 
-log "Regenerating initramfs for all installed kernels (generic, bootc-path, ostree)"
-# --add ostree: ESSENTIAL for bootc/ostree systems. Without it the
-# initramfs doesn't include ostree-prepare-root, which is what pivots
-# /sysroot from the raw btrfs root (where there's no /etc/os-release
-# at the top level — just home/root/var subvolumes) to the actual
-# deployment content under /ostree/deploy/.../.../. Without this,
-# systemd's switch-root check `openat(fd, "etc/os-release",
-# O_NOFOLLOW)` fails because /sysroot is the wrong filesystem view.
-# Symptom: "Failed to switch root: ... os-release file is missing"
-# even when the deployment is fully present on disk.
-# Verified missing 2026-05-30: `lsinitrd <initramfs> | grep ostree`
-# returned ZERO lines on our published image. `--no-hostonly` alone
-# is insufficient; ostree dracut module must be EXPLICITLY requested.
-# The initramfs MUST be zstd-compressed (today this only works by
-# inheriting Bluefin's 10-compression.conf; nothing pins it). Pass --zstd
-# explicitly AND fail loudly if the tool is missing, so dracut can never
-# silently fall back to gzip (slower boot, bigger initramfs).
-# regenerate_initramfs (00-common.sh) passes --zstd and fails when zstd is
-# missing, and makes the result byte-reproducible.
-for kver_dir in /usr/lib/modules/*/; do
-  kver=$(basename "$kver_dir")
-  regenerate_initramfs "$kver" || { err "dracut failed for $kver"; exit 1; }
-  log "Wrote ${kver_dir}initramfs.img ($(du -h "${kver_dir}initramfs.img" | cut -f1))"
-done
-
 # Final integrity check (Origami pattern): vmlinuz must still be the
 # exact bytes sign_kernel produced — a post-signing rewrite would ship
 # a kernel Secure Boot rejects with the cryptic "bad shim signature".
 sha256sum -c /tmp/vmlinuz.sha >/dev/null \
   || { err "vmlinuz was modified AFTER signing — refusing to ship"; exit 1; }
-rm -f /tmp/vmlinuz.sha
-log "vmlinuz signature integrity verified end-of-build"
+# Kept for 50-branding (same RUN, same /tmp): it checks again after the
+# build's dracut run, then deletes it.
+log "vmlinuz signature integrity verified at the end of the kernel step"
 
 log "custom-kernel install complete: $KERNEL_VERSION"
