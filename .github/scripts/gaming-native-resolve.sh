@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Does the gaming-native layer resolve against this image, the way
-# `ujust margine-gaming-native` will layer it?
+# `ujust lucciola-gaming-native` will layer it?
 #
 #   usage: gaming-native-resolve.sh <image-ref>
 #   exit:  0 resolves, 1 does not resolve (or no package list), 2 could not
@@ -10,7 +10,7 @@
 # packages), so the layer only ever added the applications. Now the layer
 # brings the chain, and it must fit the image as it is: the moment one
 # i686 library needs a newer version of something the image ships,
-# `ujust margine-gaming-native` and every update of a machine that has the
+# `ujust lucciola-gaming-native` and every update of a machine that has the
 # layer stop depsolving. smoke-boot's rpm-ostree dry run checks this on the
 # booted image; this check runs right after the build, before anything is
 # pushed, and needs no VM.
@@ -36,7 +36,7 @@ podman run --rm --network=host --entrypoint /usr/bin/bash "$IMAGE_REF" -c '
 set -uo pipefail
 list=/usr/share/margine/gaming-native-packages.txt
 if [[ ! -r "$list" ]]; then
-  echo "MARGINE-GAMING-RESOLVE: FAIL $list is missing: ujust margine-gaming-native cannot run"; exit 1
+  echo "MARGINE-GAMING-RESOLVE: FAIL $list is missing: ujust lucciola-gaming-native cannot run"; exit 1
 fi
 mapfile -t pkgs < <(grep -vE "^[[:space:]]*(#|$)" "$list")
 if (( ${#pkgs[@]} == 0 )); then

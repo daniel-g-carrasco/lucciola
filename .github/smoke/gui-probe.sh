@@ -46,7 +46,7 @@ wait_gaming() { [[ -n "${GAMING_PID:-}" ]] && wait "$GAMING_PID" 2>/dev/null || 
 fail() { out "MARGINE-GUI-SMOKE: FAIL $*"; wait_gaming; poweroff_vm; exit 0; }
 
 # ---- Gaming-native layer resolvability (independent of the GUI) ------------
-# `ujust margine-gaming-native` layers a multilib RPM set whose fragile
+# `ujust lucciola-gaming-native` layers a multilib RPM set whose fragile
 # edge is steam's 32-bit chain: about 200 i686 packages, layered since
 # 2026-10-18 together with the applications (the image no longer carries
 # them), each of which must fit the x86_64 packages of the image. A
@@ -59,7 +59,7 @@ fail() { out "MARGINE-GUI-SMOKE: FAIL $*"; wait_gaming; poweroff_vm; exit 0; }
 gaming_check() {
   local list=/usr/share/margine/gaming-native-packages.txt
   if [[ ! -r "$list" ]]; then
-    out "MARGINE-GAMING-NATIVE: FAIL package list $list not found: ujust margine-gaming-native cannot run"
+    out "MARGINE-GAMING-NATIVE: FAIL package list $list not found: ujust lucciola-gaming-native cannot run"
     return
   fi
   local pkgs

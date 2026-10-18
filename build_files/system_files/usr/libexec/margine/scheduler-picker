@@ -270,7 +270,7 @@ const SchedulerWindow = GObject.registerClass(
       const foot = new Adw.PreferencesGroup();
       const note = new Adw.ActionRow({
         title: "Prefer a terminal?",
-        subtitle: "Run “ujust margine-scheduler NAME” — same effect as this app.",
+        subtitle: "Run “ujust lucciola-scheduler NAME” — same effect as this app.",
         subtitle_selectable: true,
       });
       note.add_prefix(Gtk.Image.new_from_icon_name("utilities-terminal-symbolic"));

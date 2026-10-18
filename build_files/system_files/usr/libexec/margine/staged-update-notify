@@ -73,7 +73,7 @@ if [[ -s "$BLOCKED" ]]; then
     grep -qx "$app" "$NOTIFIED" && continue
     "$MN" -u normal \
       "$app excluded from automatic updates" \
-      "Its vendor download kept hanging unattended updates (since $when). Update it when you want with: ujust margine-update-unblock $app" \
+      "Its vendor download kept hanging unattended updates (since $when). Update it when you want with: ujust lucciola-update-unblock $app" \
       && printf '%s\n' "$app" >> "$NOTIFIED"
   done < "$BLOCKED"
 fi

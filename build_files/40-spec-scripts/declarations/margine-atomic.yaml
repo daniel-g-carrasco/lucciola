@@ -70,7 +70,7 @@ base:
       terminal:
         action: inherit Bluefin default (Ptyxis); no override
       configure_user_state:
-        action: configure-{default-applications,zen-browser,darktable-import} (ujust margine-bootstrap, by hand); configure-home-layout only on purpose
+        action: configure-{default-applications,zen-browser,darktable-import} (ujust lucciola-bootstrap, by hand); configure-home-layout only on purpose
 
 updates:
   orchestrator: uupd
@@ -96,7 +96,7 @@ updates:
   validators_on_demand:
     # The 7 validators shipped in the image as /usr/bin/lucciola-validate-*
     # (fetched by margine-image 40-spec-scripts; run together by
-    # `ujust margine-doctor`). Kept in sync with that fetch list —
+    # `ujust lucciola-doctor`). Kept in sync with that fetch list —
     # this list rotted at 4 entries while the image shipped 7
     # (caught 2026-06-12).
     - scripts/validate-margine-system
@@ -252,7 +252,7 @@ host_packages:
     # workflows and gaming. scx-scheds since 2026-06-03, steam-devices
     # since 2026-06-05. mangohud and goverlay were here from 2026-06-05 to
     # 2026-10-18; they moved to the opt-in gaming layer (ujust
-    # margine-gaming, ujust margine-gaming-native), see gaming_runtime.
+    # margine-gaming, ujust lucciola-gaming-native), see gaming_runtime.
     # ---------------------------------------------------------------------
     creator_tier:
       install:
@@ -410,7 +410,7 @@ host_packages:
       - NetworkManager-ssh-gnome
       - nm-connection-editor
   optional_after_validation:
-    # Layered on demand by `ujust margine-vm` (in the image until 2026-10-18).
+    # Layered on demand by `ujust lucciola-vm` (in the image until 2026-10-18).
     virtualization:
       - libvirt
       - libvirt-nss
@@ -439,9 +439,9 @@ host_packages:
       - lsp-plugins-ladspa
       - lsp-plugins-vst3
     gaming_runtime:
-      # Layered by ujust margine-gaming (gamescope, mangohud, vkBasalt,
+      # Layered by ujust lucciola-gaming (gamescope, mangohud, vkBasalt,
       # goverlay); gamemode comes with the base, steam-devices with the image.
-      # ujust margine-gaming-native layers its own list,
+      # ujust lucciola-gaming-native layers its own list,
       # /usr/share/margine/gaming-native-packages.txt.
       desktop_host_helpers:
         - gamescope
@@ -536,7 +536,7 @@ flatpaks:
     # keeps that as the default IDE. See docs/16-developer-toolbox.md.
   optional_apps:
     gaming:
-      # Installed by `ujust margine-gaming` (Flatpak path; the native
+      # Installed by `ujust lucciola-gaming` (Flatpak path; the native
       # path swaps Steam/Lutris/RetroArch for layered RPMs).
       - com.valvesoftware.Steam
       - net.lutris.Lutris
@@ -628,7 +628,7 @@ home:
   # Margine's layout. Opt-in in Lucciola since 2026-10-18: new accounts
   # keep the standard XDG folders; lucciola-configure-home-layout --apply
   # (the only reader of this section) sets it on purpose, and
-  # `ujust margine-home-stock` goes back.
+  # `ujust lucciola-home-stock` goes back.
   roots:
     - data
     - dev
@@ -706,17 +706,17 @@ gaming_runtime:
     steam_gaming_mode_default: false
     split_lock_override_default: false
     nvidia_gaming_default: false
-    default_image_includes_gaming: false  # opt-in via `ujust margine-gaming`
+    default_image_includes_gaming: false  # opt-in via `ujust lucciola-gaming`
   opt_in:
     # Two variants, both opt-in, both reversible. Pick by use case.
     default:
-      command: ujust margine-gaming
-      rollback_command: ujust margine-gaming-remove
+      command: ujust lucciola-gaming
+      rollback_command: ujust lucciola-gaming-remove
       delivery: flatpak_for_launchers_plus_rpm_for_gamescope_vkbasalt
       good_for: occasional gaming, no rpm-ostree upgrade overhead
     native:
-      command: ujust margine-gaming-native
-      rollback_command: ujust margine-gaming-native-remove
+      command: ujust lucciola-gaming-native
+      rollback_command: ujust lucciola-gaming-native-remove
       delivery: rpm_for_steam_lutris_retroarch_plus_flatpak_for_the_rest
       good_for: anti-cheat (EAC/BattlEye), VR, Steam Link, NVIDIA + Mesa-git side-by-side
       cost: +30-60s per bootc upgrade to re-apply the layer
@@ -726,14 +726,14 @@ gaming_runtime:
     inspired_by: >
       Bazzite (ublue-os/bazzite). Margine ships a SINGLE image
       `margine:stable` and reaches the gaming stack via the opt-in
-      `ujust margine-gaming` recipe (Margine Gaming OCI variant was
+      `ujust lucciola-gaming` recipe (Margine Gaming OCI variant was
       retired 2026-06-06). The base creator tier already carries
       scx-scheds + mangohud + goverlay + steam-devices (see
       host_packages.baseline.creator_tier above, promoted on
       2026-06-03/05); the ujust layer only adds gamescope + vkBasalt
       on top, plus the Flatpak gaming launchers. No umu-launcher
       (complex packaging), no Bazzite KDE/Deck-specific bits.
-      A second variant `ujust margine-gaming-native` (added 2026-06-07)
+      A second variant `ujust lucciola-gaming-native` (added 2026-06-07)
       layers Steam + Lutris + RetroArch as native RPMs for users
       needing maximum Proton/Wine compatibility — same trade-off
       RakuOS chose with its "Native Gaming. Not Flatpak." stance,
@@ -778,10 +778,10 @@ ai_workflow:
   # local-LLM serving) and the broader 2026 trend of locally-hosted,
   # privacy-friendly LLMs replacing some SaaS-only workflows for
   # writers / coders / creators (Margine's ICP).
-  default_image_includes_ai: false  # opt-in via `ujust margine-ai`
+  default_image_includes_ai: false  # opt-in via `ujust lucciola-ai`
   opt_in:
-    command: ujust margine-ai
-    rollback_command: ujust margine-ai-remove
+    command: ujust lucciola-ai
+    rollback_command: ujust lucciola-ai-remove
     recipe_file: /usr/share/ublue-os/just/99-margine.just
     source_in_image_repo: build_files/60-custom.just
     gui:

@@ -71,7 +71,7 @@ matches the base; go through this list first, then bump the number.
 - RPM Fusion, Docker CE, VS Code, Tailscale repositories: release-specific
   URLs resolve.
 - ROCm: `rocm-opencl` still builds darktable's kernels
-  (`ujust margine-darktable-opencl status`), and whether Mesa's rusticl works
+  (`ujust lucciola-darktable-opencl status`), and whether Mesa's rusticl works
   again (then the ROCm shim could go).
 
 ## Desktop and apps
@@ -85,7 +85,7 @@ matches the base; go through this list first, then bump the number.
 - Flatpak: the GL runtime branch the preinstalled apps use, and the
   `org.gnome.Platform` versions.
 - `validate-margine-system`, smoke-boot and the install gate pass on the
-  new release; `ujust margine-update` from the previous release works
+  new release; `ujust lucciola-update` from the previous release works
   (gaming layer included, see the update-path gate).
 
 ## Last

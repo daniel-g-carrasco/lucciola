@@ -39,7 +39,7 @@ case "$sb" in
 esac
 
 # 2. The Margine key is the one shim trusts here, and Margine's own helper
-#    agrees (the helper is what users rely on: ujust margine-secureboot).
+#    agrees (the helper is what users rely on: ujust lucciola-secureboot).
 k="$(mokutil --test-key /usr/share/cert/MOK.der 2>/dev/null)"
 case "$k" in
   *"is already enrolled"*) res mok-key PASS "Margine key in MokList" ;;

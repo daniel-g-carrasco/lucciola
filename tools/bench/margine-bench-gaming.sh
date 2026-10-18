@@ -3,7 +3,7 @@
 # margine-bench-gaming.sh — Gaming-performance capture helper for Margine
 # ----------------------------------------------------------------------
 # Margine is a Bluefin-DX-based Fedora bootc atomic image with a signed
-# CachyOS/BORE kernel and an OPT-IN gaming layer (`ujust margine-gaming`:
+# CachyOS/BORE kernel and an OPT-IN gaming layer (`ujust lucciola-gaming`:
 # Steam Flatpak + gamescope/MangoHud/vkBasalt layered via rpm-ostree).
 #
 # This helper makes it easy to:
@@ -466,7 +466,7 @@ cmd_run() {
   if ! have mangohud; then
     info "note: host 'mangohud' not found; relying on the wrapped command"
     info "      (e.g. Flatpak Steam) to provide it. Install the gaming"
-    info "      layer with: ujust margine-gaming"
+    info "      layer with: ujust lucciola-gaming"
   fi
 
   # Derive a label for filenames.

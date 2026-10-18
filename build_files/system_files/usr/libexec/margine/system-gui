@@ -2,7 +2,7 @@
 # Margine System — the graphical answer to "is my machine current and healthy?"
 #
 # Everything here already existed as CLI (lucciola-status, ujust
-# margine-update, ujust margine-doctor, rpm-ostree rollback). This app
+# margine-update, ujust lucciola-doctor, rpm-ostree rollback). This app
 # is not a reimplementation: it drives the same scripts, so there is
 # exactly one definition of "how Margine updates" and the GUI can never
 # drift from the terminal (system-update is the shared helper; the just
@@ -441,7 +441,7 @@ class SystemWindow(Adw.ApplicationWindow):
         self._list_dialog(
             "Extra Packages",
             "Installed on top of the image (rpm-ostree layering), usually by "
-            "ujust margine-gaming-native. They are re-resolved from the "
+            "ujust lucciola-gaming-native. They are re-resolved from the "
             "repositories on every system update, so they stay current with it.",
             self._state.get("layered") or [],
             "No extra packages",

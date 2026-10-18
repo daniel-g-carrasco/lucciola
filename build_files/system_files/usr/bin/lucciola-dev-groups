@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Put every wheel member in the libvirt group, and in the docker and
-# incus-admin groups when those exist (after `ujust margine-docker`, or incus
+# incus-admin groups when those exist (after `ujust lucciola-docker`, or incus
 # layered by hand). Runs at every boot (build_files/15-devstack enables it):
 # a group can appear later, and usermod -aG on a member is a no-op.
 # Margine's stand-in for Bluefin DX's bluefin-dx-groups, which expects the

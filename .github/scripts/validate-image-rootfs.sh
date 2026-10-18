@@ -129,7 +129,7 @@ check_exec "usr/libexec/margine-first-boot-status" "A.4"
 # image ships: the generated font, a drop-in that loadfonts it + selects it
 # via gfxterm_font + switches to gfxterm, and the re-render helper (bootupd
 # does NOT re-render the static config on `bootc upgrade`, so existing installs
-# need `ujust margine-grub-hidpi`).
+# need `ujust lucciola-grub-hidpi`).
 GRUB_GFX="usr/lib/bootupd/grub2-static/configs.d/05_margine-gfxmode.cfg"
 check_file "$GRUB_GFX" "A.4.gfx"
 check_nonempty "usr/lib/bootupd/grub2-static/fonts/margine.pf2" "A.4.gfx"
@@ -192,7 +192,7 @@ grep -q '^[[:space:]]*set gfxterm_font=' "$ROOTFS/$GRUB_GFX" 2>/dev/null \
 grep -q 'terminal_output gfxterm' "$ROOTFS/$GRUB_GFX" 2>/dev/null \
   || { echo "::error::A.4.gfx GRUB drop-in does not switch to gfxterm"; fail=1; }
 
-# A.4.grub-lock: `ujust margine-grub-lock` only works while bootupd's
+# A.4.grub-lock: `ujust lucciola-grub-lock` only works while bootupd's
 # static GRUB config keeps reading user.cfg (GRUB2_PASSWORD). If a base
 # change drops that snippet, the password would silently protect nothing,
 # and TPM2 disk unlock would again be one `e` away from a root shell.

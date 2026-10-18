@@ -39,7 +39,7 @@ die() { echo "error: $*" >&2; exit 1; }
 # /boot/grub2 is 0700 root. A custom dir (tests) skips the check: writing
 # there fails on its own if it must.
 if [[ -z "${MARGINE_GRUB_DIR:-}" && "$(id -u)" -ne 0 ]]; then
-  die "must run as root: ujust margine-grub-lock $ACTION"
+  die "must run as root: ujust lucciola-grub-lock $ACTION"
 fi
 [[ -d "$GRUB_DIR" ]] || die "$GRUB_DIR not found: this system does not boot through GRUB"
 
@@ -59,7 +59,7 @@ case "$ACTION" in
       echo "GRUB menu lock: off"
       echo "  Anyone at the keyboard can edit the kernel command line at boot. With TPM2"
       echo "  disk unlock enabled that means a root shell on the unlocked disk."
-      echo "  Turn it on with: ujust margine-grub-lock on"
+      echo "  Turn it on with: ujust lucciola-grub-lock on"
     fi
     ;;
   on)
@@ -86,7 +86,7 @@ case "$ACTION" in
     echo "GRUB menu lock: ON (user: root)."
     echo "Normal boots and rollbacks stay unattended. To edit an entry or open the"
     echo "GRUB command line, GRUB asks for user 'root' and this password."
-    echo "Forgot it? From the running system: ujust margine-grub-lock off"
+    echo "Forgot it? From the running system: ujust lucciola-grub-lock off"
     ;;
   off)
     boot_writable || die "cannot make $GRUB_DIR writable"

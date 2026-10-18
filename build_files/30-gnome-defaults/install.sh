@@ -31,7 +31,7 @@ accent-color='yellow'
 # Fonts stay GNOME's defaults: no Margine type system has been picked yet.
 
 # virt-manager — show the rootless USER SESSION out of the box (UX, not branding).
-# `ujust margine-test-vm` and the ISO-creator GUI put their throwaway test VMs on
+# `ujust lucciola-test-vm` and the ISO-creator GUI put their throwaway test VMs on
 # qemu:///session (rootless: reads ISOs straight from $HOME, no polkit). But
 # virt-manager's stock default is uris=[] and it only auto-adds qemu:///system on
 # first launch — so those session VMs are INVISIBLE in the default window (I

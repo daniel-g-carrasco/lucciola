@@ -19,7 +19,7 @@
 #   absent     stage the import: at the next reboot shim shows MokManager
 #              (Enroll MOK -> Continue -> Yes -> password "margine")
 #   off        /etc/margine/secureboot-enroll says "off"
-#              (ujust margine-secureboot never): leave the user alone
+#              (ujust lucciola-secureboot never): leave the user alone
 #   unsupported the firmware has no Secure Boot at all (no SecureBoot EFI
 #              variable, as in a virtual machine with plain OVMF):
 #              mokutil refuses to import and Secure Boot can never be
@@ -92,7 +92,7 @@ esac
 
 # -r first: a missing switch file is the normal case, not an error to log.
 if [[ "$MODE" = boot ]] && [[ -r "$SWITCH" ]] && [[ "$(tr -d '[:space:]' < "$SWITCH")" = off ]]; then
-  say "Margine key NOT enrolled, and enrollment is switched off in $SWITCH: Secure Boot cannot be turned on until 'ujust margine-secureboot enroll'"
+  say "Margine key NOT enrolled, and enrollment is switched off in $SWITCH: Secure Boot cannot be turned on until 'ujust lucciola-secureboot enroll'"
   exit 0
 fi
 

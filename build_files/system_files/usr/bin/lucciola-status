@@ -29,7 +29,7 @@ if command -v bootc >/dev/null 2>&1; then
   booted_ver="$(printf '%s' "$st" | jq -r '.status.booted.image.version // ""' 2>/dev/null)"
 fi
 # Fallback via rpm-ostree. On a CLIENT-LAYERED deployment (e.g. after
-# `ujust margine-gaming-native`) `bootc status` omits booted.image, so the
+# `ujust lucciola-gaming-native`) `bootc status` omits booted.image, so the
 # digest+version above come back empty — which previously read as a network
 # failure. rpm-ostree still records the base image manifest digest; use it.
 # MUST select booted==true: deployments[0] is the STAGED deployment when an
@@ -115,7 +115,7 @@ if [ "$uupd_result" = "timeout" ]; then
   printf '  %-15s %slast unattended run hung and was killed; retries daily at 04:00%s\n' "Updates" "$c_ylw" "$c_reset"
 fi
 if [ -n "$blocked_apps" ]; then
-  printf '  %-15s %s%s%s excluded from unattended updates %s(ujust margine-update-unblock)%s\n' "Excluded" "$c_ylw" "$blocked_apps" "$c_reset" "$c_dim" "$c_reset"
+  printf '  %-15s %s%s%s excluded from unattended updates %s(ujust lucciola-update-unblock)%s\n' "Excluded" "$c_ylw" "$blocked_apps" "$c_reset" "$c_dim" "$c_reset"
 fi
 printf '\n'
 case "$state" in
@@ -128,7 +128,7 @@ case "$state" in
 esac
 printf '\n'
 
-# `ujust margine-update` needs the verdict, not just the text: with
+# `ujust lucciola-update` needs the verdict, not just the text: with
 # MARGINE_STATUS_EXIT_STATE=1 the exit code carries it. Without the
 # variable this stays a read-only report that always exits 0.
 if [ "${MARGINE_STATUS_EXIT_STATE:-0}" = "1" ]; then

@@ -5,7 +5,7 @@
 # absence is never an error). It FAILS only on broken-while-present
 # states: Steam is installed but the Vulkan stack it depends on does
 # not answer. Until 2026-06-12 the script could not fail at all, which
-# made it an unconditional PASS line in `ujust margine-doctor`.
+# made it an unconditional PASS line in `ujust lucciola-doctor`.
 set -u
 set -o pipefail
 

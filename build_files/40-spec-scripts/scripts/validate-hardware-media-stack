@@ -6,7 +6,7 @@
 # image itself makes regardless of hardware: ffmpeg must exist and
 # answer, and the GStreamer VA plugin must be inspectable (both ship in
 # base Margine). Until 2026-06-12 the script could not fail at all,
-# which made it an unconditional PASS line in `ujust margine-doctor`.
+# which made it an unconditional PASS line in `ujust lucciola-doctor`.
 set -u
 set -o pipefail
 

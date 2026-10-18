@@ -43,7 +43,7 @@ set -euo pipefail
 # never uninstalls, so a system that has them keeps them.
 #
 # The gaming variant was retired 2026-06-06. Users who want gaming run
-# `ujust margine-gaming` after first boot — see build_files/60-custom.just.
+# `ujust lucciola-gaming` after first boot — see build_files/60-custom.just.
 
 # ---- BAKE list (instant at first boot) ----
 # Source of truth: installer/flatpaks-base, accessible from this script

@@ -451,7 +451,7 @@ boot_path_wired() {
 }
 
 # ── status (default) ──────────────────────────────────────────────────────
-# Is the GRUB menu locked (ujust margine-grub-lock)? PCR 7 does not cover
+# Is the GRUB menu locked (ujust lucciola-grub-lock)? PCR 7 does not cover
 # the kernel command line: with an open menu, `e` + init=/bin/bash boots to
 # a root shell and the TPM still releases the disk key (2026-10-04).
 grub_locked() {
@@ -596,7 +596,7 @@ to wire crypttab blind. Nothing changed."
   if ! grub_locked; then
     warn "  Warning : the GRUB menu is OPEN. With auto-unlock, anyone at the keyboard"
     warn "            can edit the kernel command line at boot and get a root shell on"
-    warn "            the unlocked disk. Run 'ujust margine-grub-lock on' (before or"
+    warn "            the unlocked disk. Run 'ujust lucciola-grub-lock on' (before or"
     warn "            right after this); normal boots stay password-free."
   fi
   printf '\n'
