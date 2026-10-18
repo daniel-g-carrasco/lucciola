@@ -424,10 +424,11 @@ All under `build_files/system_files/`. All autostart entries follow Golden Rules
 4 & 5 (no `X-GNOME-Autostart-Phase`; `Exec=` → a `/usr/libexec` wrapper).
 
 - **Bootstrap** (`usr/libexec/margine/first-boot-bootstrap`): runs `ujust
-  margine-bootstrap unattended` (home layout, default applications, Zen,
-  darktable). Idempotent marker `~/.config/margine/bootstrapped`. Margine starts
-  it from a GNOME-only autostart entry; Lucciola ships no autostart for it
-  (2026-10-18), so in Lucciola it runs only by hand.
+  margine-bootstrap unattended` (default applications, Zen, darktable; the
+  Margine home layout left it on 2026-10-18, new accounts keep the standard
+  XDG folders). Idempotent marker `~/.config/margine/bootstrapped`. Margine
+  starts it from a GNOME-only autostart entry; Lucciola ships no autostart for
+  it (2026-10-18), so in Lucciola it runs only by hand.
 - **First-boot status** (`usr/libexec/margine-first-boot-status`): notifies if
   `flatpak-preinstall.service` is still installing the deferred heavy apps
   ("installing extra apps… ~5–15 min"), and "Margine is ready" when done. Marker

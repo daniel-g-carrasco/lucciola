@@ -35,8 +35,11 @@ install -Dm0644 /ctx/60-ujust-services/gaming-native-packages.txt \
 # Margine runs `ujust margine-bootstrap unattended` at a user's first GNOME
 # login through an XDG autostart entry (OnlyShowIn=GNOME). Lucciola ships
 # no such entry (2026-10-18; lucciola/build.sh deleted it before): what is
-# left of the bootstrap (home layout, default applications, Zen, darktable)
-# runs only by hand, `ujust margine-bootstrap`.
+# left of the bootstrap (default applications, Zen, darktable) runs only by
+# hand, `ujust margine-bootstrap`. Margine's home layout (~/data, ~/dev,
+# ~/scratch) is not part of it since 2026-10-18: new accounts keep the
+# standard XDG folders (Fedora's /etc/xdg/user-dirs.defaults, untouched),
+# and margine-configure-home-layout --apply sets the layout on purpose.
 # ---------------------------------------------------------------------------
 # 5c. Mask systemd-remount-fs.service (Bug 8 — composefs noise)
 # ---------------------------------------------------------------------------
@@ -54,8 +57,8 @@ ln -sf /dev/null /etc/systemd/system/systemd-remount-fs.service
 # "Welcome to Bluefin / ujust --choose / brew help" banner unless
 # ~/.config/no-show-user-motd exists. We ship that marker in the
 # skeleton so EVERY new user account inherits the off-by-default
-# behavior. Existing users get the file via configure-home-layout
-# (idempotent), which `ujust margine-bootstrap` runs.
+# behavior. Existing users got the file from configure-home-layout when
+# `ujust margine-bootstrap` still ran it (until 2026-10-18).
 mkdir -p /etc/skel/.config
 touch /etc/skel/.config/no-show-user-motd
 log "Installed: /etc/skel/.config/no-show-user-motd (disables Bluefin MOTD for new users)"

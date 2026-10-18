@@ -3,7 +3,7 @@
 # /usr/share/ublue-os/just/00-entry.just `import?` of 60-custom.just
 # (the only optional extension point in Bluefin's entry file).
 
-# Apply the Margine user-state (home layout, default apps, Zen, darktable) in one shot.
+# Apply the Margine user-state (default apps, Zen, darktable) in one shot.
 [group('Margine')]
 margine-bootstrap $MODE="interactive":
     #!/usr/bin/bash
@@ -22,13 +22,16 @@ margine-bootstrap $MODE="interactive":
     already match the spec.
 
     Steps:
-      1. margine-configure-home-layout          (~/data + ~/dev + ~/scratch + XDG remap + bookmarks)
-      2. margine-configure-default-applications (Zen as browser, Ptyxis terminal, etc.)
-      3. margine-configure-zen-browser          (DuckDuckGo default, uBlock Origin)
-      4. margine-configure-darktable-import     (import from Pictures/raw, RAWs only)
+      1. margine-configure-default-applications (Zen as browser, Ptyxis terminal, etc.)
+      2. margine-configure-zen-browser          (DuckDuckGo default, uBlock Origin)
+      3. margine-configure-darktable-import     (import from Pictures/raw, RAWs only)
 
-    The GNOME steps (keybindings, appearance, app folders) are gone:
-    GNOME is Lucciola's stock fallback session.
+    Your folders stay the standard ones (Documents, Downloads, Pictures...).
+    Margine's own layout (~/data, ~/dev, ~/scratch, the XDG folders inside
+    them) is not applied any more; to use it on purpose:
+    margine-configure-home-layout --apply. The GNOME steps (keybindings,
+    appearance, app folders) are gone: GNOME is Lucciola's stock fallback
+    session.
 
     No package install. No layer staged. Pure user-state under $HOME.
     Reversible by hand.
@@ -42,7 +45,6 @@ margine-bootstrap $MODE="interactive":
 
     FAILED=()
     for step in \
-        margine-configure-home-layout \
         margine-configure-default-applications \
         margine-configure-zen-browser \
         margine-configure-darktable-import ; do
@@ -61,7 +63,7 @@ margine-bootstrap $MODE="interactive":
       echo "== Bootstrap complete with ${#FAILED[@]} failed step(s): =="
       printf '   - %s\n' "${FAILED[@]}"
     fi
-    echo "Log out and back in to refresh the bookmarks and default applications."
+    echo "Log out and back in to refresh the default applications."
 
     # Marker: when the bootstrap last ran. Re-run `ujust margine-bootstrap`
     # to refresh.
@@ -673,18 +675,20 @@ margine-slim-restore:
     echo "Started. Apps reappear as they land; check progress with:"
     echo "  systemctl status flatpak-preinstall.service"
 
-# Go back to the stock Linux home layout (~/Documents, ~/Downloads, ...)
-# for anyone who does not want Margine's opinionated one. Never moves or
-# deletes files: it only changes where apps default to.
+# Go back to the stock Linux home layout (~/Documents, ~/Downloads, ...) on a
+# home where Margine's opinionated one was applied (an install that came
+# from Margine, or margine-configure-home-layout run by hand). New Lucciola
+# accounts already have the stock layout. Never moves or deletes files: it
+# only changes where apps default to.
 [group('Margine')]
 margine-home-stock:
     #!/usr/bin/bash
     set -euo pipefail
     echo "== Restore the stock home layout =="
     echo
-    echo "Margine ships an opinionated home: ~/data (backed up), ~/dev (code),"
-    echo "~/scratch (throwaway), with the XDG folders remapped inside them."
-    echo "This puts the machine back to what any other GNOME distro gives you."
+    echo "Margine's opinionated home: ~/data (backed up), ~/dev (code), ~/scratch"
+    echo "(throwaway), with the XDG folders remapped inside them. Lucciola uses the"
+    echo "standard folders; this puts a home that has Margine's layout back to them."
     echo
     margine-restore-stock-home
     echo

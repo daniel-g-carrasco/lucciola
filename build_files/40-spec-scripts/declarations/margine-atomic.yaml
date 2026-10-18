@@ -70,7 +70,7 @@ base:
       terminal:
         action: inherit Bluefin default (Ptyxis); no override
       configure_user_state:
-        action: configure-{home-layout,default-applications,zen-browser,darktable-import} (ujust margine-bootstrap, by hand)
+        action: configure-{default-applications,zen-browser,darktable-import} (ujust margine-bootstrap, by hand); configure-home-layout only on purpose
 
 updates:
   orchestrator: uupd
@@ -174,6 +174,7 @@ storage:
     var: writable
     home: /var/home
     home_cache: /var/home/<user>/.cache
+    # Margine's layout, opt-in in Lucciola (see home: below)
     home_dev: /var/home/<user>/dev
     home_scratch: /var/home/<user>/scratch
     data: /var/home/<user>/data
@@ -623,6 +624,10 @@ gnome:
     terminal_emulator: org.gnome.Ptyxis.desktop
 
 home:
+  # Margine's layout. Opt-in in Lucciola since 2026-10-18: new accounts
+  # keep the standard XDG folders; margine-configure-home-layout --apply
+  # (the only reader of this section) sets it on purpose, and
+  # `ujust margine-home-stock` goes back.
   roots:
     - data
     - dev

@@ -2,6 +2,11 @@
 """
 Configure Margine's home layout from declarations.yaml.
 
+Opt-in in Lucciola (2026-10-18): new accounts keep the standard XDG
+folders, `ujust margine-bootstrap` no longer runs this, and nothing else
+does. Run it by hand to get Margine's layout; `ujust margine-home-stock`
+goes back.
+
 What this does:
   1. Create the home root directories declared in `home.roots`
      (~/data, ~/dev, ~/scratch) plus any subdirectories referenced

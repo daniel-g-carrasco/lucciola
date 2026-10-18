@@ -107,9 +107,9 @@ hotkey-overlay {
     skip-at-startup
 }
 
-// Fallback only: at login session-start writes the GNOME/Margine path
-// (Pictures folder of user-dirs.dirs, ~/data/media/photos on Margine, plus
-// GNOME's translated "Screenshots/Screenshot From ...") to the file below.
+// Fallback only: at login session-start writes GNOME's path (the XDG
+// Pictures folder of user-dirs.dirs plus GNOME's translated
+// "Screenshots/Screenshot From ...") to the file below.
 screenshot-path "~/Pictures/Screenshots/Screenshot From %Y-%m-%d %H-%M-%S.png"
 include optional=true "~/.local/state/lucciola/niri-screenshots.kdl"
 
