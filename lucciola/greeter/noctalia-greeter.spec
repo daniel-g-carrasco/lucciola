@@ -11,11 +11,19 @@
 
 Name:           noctalia-greeter
 Version:        %{greeter_version}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Login greeter for greetd with the look of Noctalia Shell
 License:        MIT AND (Apache-2.0 OR MIT)
 URL:            https://github.com/noctalia-dev/noctalia-greeter
 Source0:        %{url}/archive/refs/tags/v%{version}.tar.gz
+# Lucciola's mark (lucciola/assets/lucciola-mark.svg): the greeter has no
+# setting for its logo, only hide_logo, and draws assets/noctalia.svg at the
+# bottom of the screen, tinted with the palette's on_surface. %%install puts
+# the firefly in its place, so greeter.toml can show the logo again.
+Source1:        lucciola-mark.svg
+# A wrong password read "pam_authenticate: AUTH_ERR"; the patch says it in
+# words (the patch file says which results and why).
+Patch0:         0001-say-pam-results-in-words.patch
 
 # The pkg-config names come from meson.build of the tag.
 BuildRequires:  gcc
@@ -61,7 +69,7 @@ compositor and shares the visual language of Noctalia Shell, which can copy
 its colours, font and wallpaper to it ("Sync with Noctalia").
 
 %prep
-%autosetup -n noctalia-greeter-%{version}
+%autosetup -n noctalia-greeter-%{version} -p1
 
 %build
 # Fedora's %%meson uses buildtype=plain with the distribution's flags; the
@@ -75,6 +83,9 @@ its colours, font and wallpaper to it ("Sync with Noctalia").
 # runs greeters as "greetd", and Lucciola ships its own entry
 # (lucciola-greeter.conf) with that account and the seeded settings.
 rm -f %{buildroot}%{_prefix}/lib/tmpfiles.d/noctalia-greeter.conf
+# The login screen's logo: Lucciola's firefly instead of Noctalia's (Source1).
+test -f %{buildroot}%{_datadir}/noctalia-greeter/assets/noctalia.svg
+install -m 0644 %{SOURCE1} %{buildroot}%{_datadir}/noctalia-greeter/assets/noctalia.svg
 
 %files
 %license LICENSE
@@ -89,5 +100,8 @@ rm -f %{buildroot}%{_prefix}/lib/tmpfiles.d/noctalia-greeter.conf
 %{_datadir}/polkit-1/actions/org.noctalia.greeter.apply-appearance.policy
 
 %changelog
+* Sun Oct 18 2026 Daniel Grasso Carrasco <code@danielgrasso.com> - %{greeter_version}-2
+- Lucciola's firefly as the logo; PAM results in words on a failed login
+
 * Sat Oct 17 2026 Daniel Grasso Carrasco <code@danielgrasso.com> - %{greeter_version}-1
 - Built from the upstream tag for the Lucciola image
