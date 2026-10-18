@@ -56,6 +56,7 @@ on:
       # lucciola/ is NOT in this list any more: since 2026-10 it is part of
       # this build (the last step of the Containerfile).
       - '.github/workflows/base-watch.yml'
+      - '.github/workflows/build-fedora-kernel.yml'
       - '.github/workflows/build-retry.yml'
       - '.github/workflows/check-upstreams.yml'
       - '.github/workflows/ghcr-cleanup.yml'
@@ -93,6 +94,7 @@ on:
       # lucciola/ is NOT in this list any more: since 2026-10 it is part of
       # this build (the last step of the Containerfile).
       - '.github/workflows/base-watch.yml'
+      - '.github/workflows/build-fedora-kernel.yml'
       - '.github/workflows/build-retry.yml'
       - '.github/workflows/check-upstreams.yml'
       - '.github/workflows/ghcr-cleanup.yml'
