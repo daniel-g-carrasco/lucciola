@@ -14,6 +14,19 @@ stable release is cut.
   Homebrew fits), apps arriving in the background, and a button for the
   guide. It comes back at each login until it is closed once, and
   "Lucciola Welcome" in the launcher reopens it. Not in the GNOME session.
+- **A content editor for the website and the welcome window.** `just edit`
+  opens a local page in the browser: on the website, click a text to change
+  it and use the small bar on a section, paragraph, command or key to move,
+  hide, copy or delete it; the welcome window is a form with a live preview.
+  Save checks first and changes only what was edited; "Propose changes"
+  puts the saved changes in a pull request, never on main. See
+  `tools/content-editor/README.md`.
+
+### Changed
+- **The welcome window's texts are data.** Its sections, their order and
+  every text now live in `/usr/share/lucciola/welcome/content.json`; the
+  window looks exactly as before. A check in CI and on the built image
+  stops a broken file.
 
 ### Changed (Lucciola's own identity)
 - **Lucciola looks like Lucciola from the boot to the desktop.** Until now
