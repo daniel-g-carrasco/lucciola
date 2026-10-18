@@ -45,6 +45,21 @@ stable release is cut.
     `VARIANT_ID` keep `margine`, and Secure Boot still asks for the
     "Margine key" with the password `margine`.
 
+### Changed (Margine's name, where Lucciola's belongs)
+- **The texts that still said Margine now say Lucciola.** The README,
+  with the wordmark as its title, the security policy and the security
+  claims register are written for Lucciola; the bug report form asks how
+  you got Lucciola. A few messages the rename had missed are fixed:
+  `lucciola-status` and `lucciola-tpm-unlock` pointed at the old
+  `ujust margine-*` names, the validator called itself "Margine", and
+  some notices could fall back to "Margine OS". Margine's design
+  documents (the handbook, ADRs, notes and changelog) moved to
+  `docs/history/margine/`. The Secure Boot key keeps its name, "Margine
+  MOK Signing Key", with the password `margine`: Lucciola signs with the
+  key Margine used, and MOK Manager shows that name.
+- The smoke boot's security probe now checks that the device verifies
+  signatures for Lucciola's own repository, not only Margine's.
+
 ### Removed (lighter image: on demand instead of in every install)
 - **What only some people use is installed when they ask for it.** Measured
   on two local builds of the same base (this branch and its parent): 450
@@ -225,4 +240,4 @@ stable release is cut.
   scope for the new repository; the Margine scope stays.
 - No NVIDIA or LTS variant, and no ISO yet.
 - Margine's history up to this point is kept in
-  [docs/margine/CHANGELOG.md](docs/margine/CHANGELOG.md).
+  [docs/history/margine/CHANGELOG.md](docs/history/margine/CHANGELOG.md).

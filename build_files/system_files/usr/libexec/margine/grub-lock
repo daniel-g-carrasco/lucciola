@@ -12,7 +12,7 @@
 # What it does NOT close: the initramfs lives on the unencrypted /boot and
 # is neither signed nor measured into PCR 7, so someone who can boot the
 # machine from other media can replace it. Against that, use a TPM PIN or
-# the passphrase alone (see docs/spec/07-secure-boot-tpm2.md).
+# the passphrase alone (see docs/history/margine/spec/07-secure-boot-tpm2.md).
 #
 # How: nothing new. bootupd's static GRUB config already sources
 # $prefix/user.cfg and, when GRUB2_PASSWORD is set there, makes "root" the

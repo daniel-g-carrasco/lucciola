@@ -121,7 +121,7 @@ printf '\n'
 case "$state" in
   current)  printf "  You're current — nothing to do.\n" ;;
   staged)   printf "  The latest is already staged: reboot when it suits you to finish updating.\n" ;;
-  behind)   printf "  Run %sujust margine-update%s to stage the latest for next boot.\n" "$c_ember" "$c_reset" ;;
+  behind)   printf "  Run %sujust lucciola-update%s to stage the latest for next boot.\n" "$c_ember" "$c_reset" ;;
   noremote) printf "  Couldn't reach the registry to compare — check your network.\n" ;;
   nolocal)  printf "  Couldn't read the booted image digest locally — compare skipped (deployment is fine).\n" ;;
   *)        printf "  Couldn't compare deployment vs latest.\n" ;;

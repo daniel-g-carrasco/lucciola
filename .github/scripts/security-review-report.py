@@ -73,7 +73,7 @@ def main():
         "- [ ] Open \"Security baseline drift\" issues reviewed, baseline updated or the change reverted",
         "- [ ] Last smoke-boot runs: security probe PASS, no new WARN lines (validator, SELinux denials)",
         "- [ ] Scorecard and Renovate security updates looked at",
-        "- [ ] Upstream security news for what Margine ships: shim/GRUB/dbx, kernel (CachyOS), bootc/rpm-ostree, containers/image, cosign",
+        "- [ ] Upstream security news for what Lucciola ships: shim/GRUB/dbx, kernel (CachyOS), bootc/rpm-ostree, containers/image, cosign",
         "- [ ] Register updated: statuses, new claims, due dates; close this issue when done",
         "",
     ]

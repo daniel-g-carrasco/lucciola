@@ -180,7 +180,7 @@ rm -f /etc/ublue-os/system-flatpaks.list
 # 2026-10-10 (system_files; Fedora ships none, Bluefin's was a system file
 # too). Enabled here so a base without Bluefin's preset still runs it.
 systemctl enable flatpak-preinstall.service
-# Flathub only (docs/spec/06): Fedora's flatpak package enables
+# Flathub only (docs/history/margine/spec/06): Fedora's flatpak package enables
 # flatpak-add-fedora-repos.service, which adds the Fedora remote at boot.
 # Bluefin undid it with its flatpak-nuke-fedora.service, the Margine
 # installer with disable-fedora-flatpak.ks; masked here, on every path.

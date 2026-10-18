@@ -23,7 +23,7 @@
 #   icon  os-release LOGO (lucciola-logo, the firefly on its tile), else
 #         margine-logo (in the image as an alias of the same tile);
 #   name  /usr/share/margine/product-name (Lucciola), else os-release
-#         NAME, else "Margine OS".
+#         NAME, else "Lucciola".
 # Exit: non-zero when no notification daemon answered (callers use this
 # to retry at the next tick instead of burning their once-only stamps).
 set -euo pipefail
@@ -37,10 +37,10 @@ os_release_value() {  # os_release_value KEY: the value, quotes removed
 
 URGENCY=1
 ICON="$(os_release_value LOGO)"
-ICON="${ICON:-margine-logo}"
+ICON="${ICON:-lucciola-logo}"
 APP_NAME="$(head -n1 /usr/share/margine/product-name 2>/dev/null || true)"
 [[ -n "$APP_NAME" ]] || APP_NAME="$(os_release_value NAME)"
-APP_NAME="${APP_NAME:-Margine OS}"
+APP_NAME="${APP_NAME:-Lucciola}"
 DESKTOP_ID=""
 while getopts "u:i:a:d:" opt; do
   case "$opt" in

@@ -1,5 +1,12 @@
 # Upstream Inspirations and Code Derivations
 
+> I wrote this file for Margine OS, the image Lucciola grew from, and it
+> still applies: Lucciola inherits the same upstreams, the same kernel
+> signing script and the same build pattern. Where it says Margine, read
+> Lucciola. It stays maintained because `check-upstreams.yml` reads the
+> "Last reviewed" dates in its table every month. Older design documents
+> are in [`history/margine/`](history/margine/README.md).
+
 Margine is not built from scratch. It builds on top of several upstream
 projects, in different ways. This document distinguishes those ways
 honestly — there's a difference between *being inspired by an architectural
@@ -100,7 +107,7 @@ should be flagged).
   `openssl x509 ... -pubkey -noout` and `cmp -s` to ensure the MOK
   private key and certificate actually match before doing anything.
 - **`dracut --no-hostonly --no-hostonly-cmdline --regenerate-all`** —
-  see [lessons-learned/2026-05-28-initramfs-and-bootc-labels.md](lessons-learned/2026-05-28-initramfs-and-bootc-labels.md).
+  see [lessons-learned/2026-05-28-initramfs-and-bootc-labels.md](history/margine/spec/lessons-learned/2026-05-28-initramfs-and-bootc-labels.md).
 
 The header comment of our `install.sh` credits Origami inline.
 
@@ -188,7 +195,7 @@ behaviour shift for us, see the review cadence below.
 step of our `.github/workflows/build.yml`. Without it, our image's
 labels (ostree.linux, ostree.commit, ostree.bootable) are stale from
 Bluefin's commit, and composefs isn't set up correctly for our
-modifications. See `docs/lessons-learned/2026-05-28-initramfs-and-bootc-labels.md`
+modifications. See `docs/history/margine/spec/lessons-learned/2026-05-28-initramfs-and-bootc-labels.md`
 for the full story.
 
 Bluefin uses rechunk via a custom `just rechunk` recipe (3 separate

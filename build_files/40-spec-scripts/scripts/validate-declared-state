@@ -44,9 +44,8 @@ from typing import Iterable
 try:
     import yaml
 except ImportError:
-    print("ERROR: PyYAML not installed. On Margine: `flatpak run org.gnome.Terminal` "
-          "then `sudo dnf install python3-pyyaml` (transient layer) or use the "
-          "bundled spec at /usr/declarations/margine-atomic.yaml.", file=sys.stderr)
+    print("ERROR: PyYAML (python3-pyyaml) is not installed. In a toolbox: "
+          "`sudo dnf install python3-pyyaml`.", file=sys.stderr)
     sys.exit(2)
 
 
@@ -236,7 +235,7 @@ def collect(d: dict | list | None, path: list[str], acc: list[str]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Margine spec-drift detector"
+        description="Lucciola spec-drift detector"
     )
     parser.add_argument("--spec", default=None,
                         help="path to declarations/margine-atomic.yaml (overrides MARGINE_SPEC)")

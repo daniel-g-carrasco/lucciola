@@ -1,67 +1,71 @@
-# Security Policy
+# Security policy
 
-Margine is a personal, single-maintainer atomic Linux image. Security is
-taken seriously — the published image is [cosign](https://github.com/sigstore/cosign)-signed
-by digest, the CachyOS kernel and every kernel module are signed for Secure
-Boot with the Margine MOK, and the build supply chain is locked down
-(SHA-pinned GitHub Actions, least-privilege workflow tokens, generated and
-signed SBOMs, Renovate dependency updates). Please calibrate expectations
-accordingly, though: triage and fixes are best-effort, by one person.
+Lucciola is an experimental operating system, and I maintain it alone. I
+take its security seriously: every image is signed with
+[cosign](https://github.com/sigstore/cosign) by digest, and devices check
+that signature before they install an update. The CachyOS kernel and every
+kernel module are signed for Secure Boot. GitHub Actions are pinned by SHA,
+workflow tokens get only the permissions they need, SBOMs are generated and
+signed, and Renovate keeps dependencies current. Triage and fixes are
+still best effort, by one person.
 
 ## What is promised, and what proves it
 
 [`docs/SECURITY-CLAIMS.md`](docs/SECURITY-CLAIMS.md) lists every security
-promise Margine makes, the attack it defends against, the automated check
-that proves it, and the known limitations. It is reviewed monthly.
+promise Lucciola makes, the attack it defends against, the automated check
+that proves it, and the known limitations. I review it every month.
 
 ## Reporting a vulnerability
 
-**Please do not open a public issue for security problems.**
+Please do not open a public issue for a security problem.
 
-Report privately through GitHub's private vulnerability reporting:
-
-- **Build pipeline / published image** —
-  <https://github.com/daniel-g-carrasco/lucciola/security/advisories/new>
-- **Spec / configuration / validators** —
-  <https://github.com/daniel-g-carrasco/lucciola/security/advisories/new>
+Report it privately through GitHub:
+<https://github.com/daniel-g-carrasco/lucciola/security/advisories/new>
 
 If you cannot use GitHub Security Advisories, email **ai@danielgrasso.com**
-with `[margine-security]` in the subject (PGP available on request).
+with `[lucciola-security]` in the subject (PGP available on request).
 
-Please include, where you can: the affected component and version or image
-digest, a description, reproduction steps or a proof of concept, and the
-impact you foresee.
+Where you can, include the affected component and the image version or
+digest, a description, steps to reproduce or a proof of concept, and the
+impact you expect.
 
 ## What to expect
 
-This is a best-effort process for a personal project:
-
-- **Acknowledgement:** typically within 14 days.
-- **Assessment & fix:** triaged by severity; a fix or mitigation ships in a
-  new atomic image as soon as practical. Because Margine is delivered as an
-  OCI image with automatic daily updates (`uupd.timer`) and atomic rollback,
-  an accepted fix reaches users on the next update with no manual steps.
-- **Disclosure:** coordinated; credit is given to reporters who want it.
+- **Acknowledgement:** usually within 14 days.
+- **Fix:** triaged by severity; a fix or mitigation ships in a new image as
+  soon as practical. Lucciola checks for updates every day and applies
+  them at the next restart, so an accepted fix reaches users with no
+  manual steps.
+- **Disclosure:** coordinated; I credit reporters who want it.
 
 ## Scope
 
-**In scope:** the Margine build pipeline, the published OCI image
-(`ghcr.io/daniel-g-carrasco/lucciola:stable`), the kernel-signing / MOK flow,
-the declarative spec and configuration helpers, and the live ISO.
+**In scope:** the build pipeline, the published image
+(`ghcr.io/daniel-g-carrasco/lucciola`), the kernel signing and MOK
+enrollment, the login screen setup (greetd with Noctalia Greeter), and the
+helpers and configuration this repository ships.
 
-**Out of scope / not a vulnerability:**
+**Out of scope, or not a vulnerability:**
 
-- **The MOK enrollment passphrase `margine` is public by design.** A MOK
-  passphrase only authorizes enrolling the *already-built, already-signed*
-  Margine key on the local machine during a physically-present reboot — it
-  is not a secret and grants no remote capability. See the
-  [handbook](https://margine.dev/handbook) for the threat model.
-- Issues in upstream components shipped unchanged (Fedora, Bluefin DX, the
-  CachyOS kernel, Flatpak apps): please report those to the respective
-  upstreams. Margine picks up their fixes on the next rebuild.
+- **The MOK enrollment password `margine` is public by design.** It only
+  confirms, at a reboot with someone at the keyboard, that the
+  already-built signing key should be enrolled on that machine. It is not
+  a secret and grants nothing remotely. The key and the password still
+  carry the name of Margine OS, the project Lucciola grew from, which
+  signs with the same key: that is why MOK Manager shows "Margine MOK
+  Signing Key".
+- Problems in upstream components shipped unchanged (Fedora, Universal
+  Blue, the CachyOS kernel, niri, Noctalia, greetd, Flatpak apps): please
+  report them upstream. Lucciola picks up their fixes on the next build.
 
-## Verifying what you run
+## Verify the image signature
 
-The published image is cosign-signed. See the **Verify the image signature**
-section of the [README](README.md#verify-the-image-signature) for the
-verification command.
+```sh
+cosign verify \
+  --key https://raw.githubusercontent.com/daniel-g-carrasco/lucciola/main/secrets/cosign.pub \
+  ghcr.io/daniel-g-carrasco/lucciola:stable
+```
+
+A valid signature prints the verified payload and exits 0. The public key
+is [`secrets/cosign.pub`](secrets/cosign.pub); the private half exists only
+in CI.

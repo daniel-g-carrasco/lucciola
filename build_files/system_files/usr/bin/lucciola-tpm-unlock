@@ -518,7 +518,7 @@ cmd_status() {
   if has_tpm2_token && ! grub_locked; then
     printf '  %sThe boot menu is open:%s with auto-unlock on, editing the kernel command\n' "$c_ylw" "$c_reset"
     printf '  line at boot gives a root shell on the unlocked disk. Close it with\n'
-    printf '  %sujust margine-grub-lock on%s (normal boots stay password-free).\n\n' "$c_ember" "$c_reset"
+    printf '  %sujust lucciola-grub-lock on%s (normal boots stay password-free).\n\n' "$c_ember" "$c_reset"
   fi
 
   if has_tpm2_token && boot_path_wired; then

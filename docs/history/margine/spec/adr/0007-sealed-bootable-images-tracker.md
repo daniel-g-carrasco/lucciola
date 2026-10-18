@@ -42,7 +42,7 @@ Status as of 2026-06-07:
 ## What this means for Margine
 
 Margine's current `custom-kernel/install.sh` (derived from Origami
-Linux, see [`docs/upstream-inspirations.md`](../upstream-inspirations.md))
+Linux, see [`docs/upstream-inspirations.md`](../../../../upstream-inspirations.md))
 does the following at OCI build time:
 
 1. `dnf install kernel-cachyos kernel-cachyos-core ...` from COPR
@@ -158,7 +158,7 @@ for the migration:
 ## Periodic review
 
 - **Monthly**: the auto-cron `scripts/check-upstreams.sh` issue (see
-  [`docs/upstream-inspirations.md`](../upstream-inspirations.md))
+  [`docs/upstream-inspirations.md`](../../../../upstream-inspirations.md))
   will surface activity in the sealed-images repo.
 - **Quarterly**: re-read this ADR. If any "Action trigger" has
   fired, write a follow-up "Migration in progress" ADR (0008)
