@@ -431,6 +431,7 @@ jobs:
             echo "- tags: \`stable\`, \`stable.${DATE_TAG}\`, \`${DATE_TAG}\`"
             echo "- Layer C GUI probe: \`${{ steps.boot.outputs.gui || 'n/a' }}\`"
             echo "- Gaming-native dry-run: \`${{ steps.boot.outputs.gaming || 'n/a' }}\`"
+            echo "- Developer-layer dry-run: \`${{ steps.boot.outputs.developer || 'n/a' }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Last step, so the message reports what actually happened: the
@@ -441,6 +442,7 @@ jobs:
           NTFY_URL: ${{ secrets.NTFY_TOPIC_URL }}
           SEC: ${{ steps.boot.outputs.sec }}
           GAMING_OUT: ${{ steps.boot.outputs.gaming }}
+          DEV_OUT: ${{ steps.boot.outputs.developer }}
           PROMOTE: ${{ github.event.inputs.promote }}
           SIGCHECK: ${{ steps.sigcheck.outcome }}
           PROMOTED: ${{ steps.promote.outcome }}
@@ -468,12 +470,18 @@ jobs:
             PRIO="high"
             TAGS="x,video_game"
             MSG="Booted, but the gaming-native layer does not resolve: gaming-native updates would fail."
+          elif [[ "$DEV_OUT" == fail ]]; then
+            TITLE="Developer-layer check FAILED: :stable NOT advanced"
+            SHORT="developer-layer check failed"
+            PRIO="high"
+            TAGS="x,hammer_and_wrench"
+            MSG="Booted, but the developer layer does not resolve (or the VS Code key was refused): ujust lucciola-devmode and its updates would fail."
           elif [[ "${{ steps.boot.outputs.passed }}" == "true" && "${{ vars.LUCCIOLA_PROMOTE_STABLE }}" != "true" ]]; then
             TITLE="QEMU boot OK, :stable held"
             SHORT="all gates passed, promotion held"
             PRIO="default"
             TAGS="white_check_mark,pause_button"
-            MSG="Candidate healthy (GUI probe: ${{ steps.boot.outputs.gui || 'n/a' }}, gaming-native: ${{ steps.boot.outputs.gaming || 'n/a' }}). :stable is held until LUCCIOLA_PROMOTE_STABLE is true."
+            MSG="Candidate healthy (GUI probe: ${{ steps.boot.outputs.gui || 'n/a' }}, gaming-native: ${{ steps.boot.outputs.gaming || 'n/a' }}, developer layer: ${{ steps.boot.outputs.developer || 'n/a' }}). :stable is held until LUCCIOLA_PROMOTE_STABLE is true."
           elif [[ "${{ steps.boot.outputs.passed }}" == "true" ]]; then
             TITLE="QEMU boot OK → promoting :stable"
             SHORT="all gates passed"
@@ -491,6 +499,11 @@ jobs:
               fail) MSG="${MSG} Gaming-native: WON'T resolve, ujust lucciola-gaming-native would break." ; PRIO="high"; TAGS="warning" ;;
               skip) : ;;
               *)    MSG="${MSG} Gaming-native: no verdict." ;;
+            esac
+            case "$DEV_OUT" in
+              pass) MSG="${MSG} Developer layer: resolves." ;;
+              skip) : ;;
+              *)    MSG="${MSG} Developer layer: no verdict." ;;
             esac
             if [[ "$SIGCHECK" == failure ]]; then
               TITLE="Image NOT signed in the format devices read: :stable NOT advanced"
