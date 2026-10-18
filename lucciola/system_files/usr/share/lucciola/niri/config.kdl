@@ -7,8 +7,9 @@
 // (/usr/libexec/lucciola/session-start); a config.kdl without that include
 // replaces all of this.
 //
-// Keybindings follow Margine's GNOME ones (declarations/margine-atomic.yaml,
-// gnome.keybindings), so the hands do not have to relearn: Mod is Super.
+// Keybindings follow Margine OS's GNOME ones (gnome.keybindings in Margine's
+// declarations/margine-atomic.yaml), so the hands do not have to relearn:
+// Mod is Super.
 // Mod+Shift+H shows the full list.
 
 input {
