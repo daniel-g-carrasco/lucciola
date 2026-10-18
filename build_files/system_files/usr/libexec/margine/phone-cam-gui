@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# Phone Camera — use an Android phone as a webcam.
+# Phone Camera: use an Android phone as a webcam.
 #
 # Thin GUI over the pieces the image already ships: adb (android-tools),
 # scrcpy (pinned release bundle, /usr/bin/scrcpy wrapper) and the
@@ -321,7 +321,7 @@ class PhoneCamWindow(Adw.ApplicationWindow):
         self._start_button.add_css_class("destructive-action")
         # Give the producer a moment to negotiate before previewing.
         GLib.timeout_add(700, self._start_preview)
-        self._toast(f"Camera running — pick “{device_label(self._device)}” in any app")
+        self._toast(f"Camera running: pick “{device_label(self._device)}” in any app")
 
     def _on_scrcpy_exit(self, proc, result):
         try:

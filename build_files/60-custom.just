@@ -633,7 +633,7 @@ lucciola-slim:
       sudo flatpak uninstall --system -y "$app" 2>/dev/null || true
     done
     sudo flatpak uninstall --system --unused -y || true
-    echo "Done — slim profile active. Restore anytime: ujust lucciola-slim-restore"
+    echo "Done: slim profile active. Restore anytime: ujust lucciola-slim-restore"
 
 # Near-empty profile on top of lucciola-slim: also removes office, mail
 # and the situational GNOME apps. What survives: Zen, Papers, Loupe,
@@ -662,7 +662,7 @@ lucciola-naked: lucciola-slim
       sudo flatpak uninstall --system -y "$app" 2>/dev/null || true
     done
     sudo flatpak uninstall --system --unused -y || true
-    echo "Done — naked profile active. Restore anytime: ujust lucciola-slim-restore"
+    echo "Done: naked profile active. Restore anytime: ujust lucciola-slim-restore"
 
 # Undo lucciola-slim / lucciola-naked: unmasking flatpak-preinstall is
 # enough — its list contains the full stock set (bake fallback included),
@@ -843,13 +843,13 @@ lucciola-doctor:
     # failure class this recipe exists to catch. Never report healthy
     # on an empty loop (review finding A8).
     if [[ "$ran" -eq 0 ]]; then
-      echo "lucciola-doctor: NO validators found under /usr/bin/lucciola-validate-* — image regression."
+      echo "lucciola-doctor: NO validators found under /usr/bin/lucciola-validate-*: image regression."
       exit 1
     fi
     if [[ "$overall" -eq 0 ]]; then
       echo "lucciola-doctor: all $ran validators passed ✅ (logs: $outdir)"
     else
-      echo "lucciola-doctor: something is off — see the FAIL logs in $outdir"
+      echo "lucciola-doctor: something is off: see the FAIL logs in $outdir"
     fi
     exit $overall
 

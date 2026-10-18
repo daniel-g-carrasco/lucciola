@@ -207,7 +207,7 @@ fi
 [[ -f "$ROOTFS/usr/libexec/margine/boot-writable.sh" ]] \
   || { echo "::error::usr/libexec/margine/boot-writable.sh missing: grub-lock and grub-hidpi-apply cannot write to a read-only /boot (A.4.grub-lock)"; fail=1; }
 
-# A.4.keyring — login keyring on oo7 (Fedora 45). lucciola-keyring opens the
+# A.4.keyring: login keyring on oo7 (Fedora 45). lucciola-keyring opens the
 # keyring at login with a TPM-bound credential (fingerprint, autologin);
 # keyring-legacy-aside runs before oo7-daemon so a Fedora 44 plaintext
 # keyring cannot stop it, keyring-import-legacy moves its items over; the

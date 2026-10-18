@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# lucciola-validate-branding — assert the distro logo actually resolves
+# lucciola-validate-branding: assert the distro logo actually resolves
 # everywhere it is consumed. Born from the 2026-06-11/12 debugging
 # session: the welcome dialogs hardcode the icon NAME fedora-logo-icon
 # (anaconda-live's fedora-welcome, gnome-initial-setup maps ID=fedora

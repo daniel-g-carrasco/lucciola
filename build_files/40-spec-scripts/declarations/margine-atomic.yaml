@@ -96,7 +96,7 @@ updates:
   validators_on_demand:
     # The 7 validators shipped in the image as /usr/bin/lucciola-validate-*
     # (fetched by margine-image 40-spec-scripts; run together by
-    # `ujust lucciola-doctor`). Kept in sync with that fetch list —
+    # `ujust lucciola-doctor`). Kept in sync with that fetch list:
     # this list rotted at 4 entries while the image shipped 7
     # (caught 2026-06-12).
     - scripts/validate-margine-system

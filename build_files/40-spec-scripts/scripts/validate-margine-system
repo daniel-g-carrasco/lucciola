@@ -665,7 +665,7 @@ if command -v ujust >/dev/null; then
   if (( UJUST_RECIPES > 0 )); then
     ok "ujust has $UJUST_RECIPES lucciola-* recipe(s), $UJUST_ALIASES with their margine-* alias"
   else
-    warn "ujust has no lucciola-* recipes — check /usr/share/ublue-os/just/60-custom.just (must use this name; 00-entry.just only \`import?\`s 60-custom.just)"
+    warn "ujust has no lucciola-* recipes: check /usr/share/ublue-os/just/60-custom.just (must use this name; 00-entry.just only \`import?\`s 60-custom.just)"
   fi
 fi
 
@@ -750,7 +750,7 @@ elif flatpak info --system com.valvesoftware.Steam >/dev/null 2>&1 || (( core_pr
 elif (( core_present == 1 )); then
   warn "gaming remnants: ${core_found[*]} is present without the rest of the layer. Converge with 'ujust lucciola-gaming' or clean up with 'ujust lucciola-gaming-remove'"
 else
-  info "Gaming layer not installed — skipping (run 'ujust lucciola-gaming' to install)"
+  info "Gaming layer not installed: skipping (run 'ujust lucciola-gaming' to install)"
 fi
 
 if rpm -q steam >/dev/null 2>&1 || flatpak info --system com.valvesoftware.Steam >/dev/null 2>&1 || (( core_present == 2 )); then

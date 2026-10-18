@@ -251,7 +251,7 @@ if [[ -n "$BOOT_OK" ]]; then
     case "$GAMING_RESULT" in
       pass) echo "✓ Gaming-native layer resolves (rpm-ostree dry-run)" ;;
       fail)
-        echo "::error::Gaming-native layer does NOT resolve — every gaming-native rpm-ostree upgrade (and ujust lucciola-gaming-native) would fail to depsolve. GATING: not promoting. See serial log artifact."
+        echo "::error::Gaming-native layer does NOT resolve: every gaming-native rpm-ostree upgrade (and ujust lucciola-gaming-native) would fail to depsolve. GATING: not promoting. See serial log artifact."
         emit "passed=false"
         exit 1 ;;
       skip) echo "::warning::Gaming-native check skipped (rpm-ostreed not ready or dry run timed out); build.yml's resolve check still ran." ;;

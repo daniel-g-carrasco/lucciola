@@ -1,5 +1,5 @@
 #!/usr/bin/bash
-# lucciola-tpm-unlock — enroll / inspect / remove TPM2-based LUKS auto-unlock
+# lucciola-tpm-unlock: enroll / inspect / remove TPM2-based LUKS auto-unlock
 # for the encrypted root, SAFELY.
 #
 # This ships to EVERY Margine machine, so its prime directive is: never make
@@ -459,7 +459,7 @@ grub_locked() {
 }
 
 cmd_status() {
-  printf '\n  %sTPM2 LUKS auto-unlock — status%s\n\n' "$c_bold" "$c_reset"
+  printf '\n  %sTPM2 LUKS auto-unlock: status%s\n\n' "$c_bold" "$c_reset"
 
   if have_tpm2; then
     printf '  %-26s %s✓ present (2.0)%s\n' "TPM2 device" "$c_grn" "$c_reset"
@@ -681,7 +681,7 @@ relying on auto-unlock."
   if [ "$wired" -eq 1 ]; then
     info "${c_grn}✓ TPM2 token enrolled on ${LUKS_DEV} (PCRs ${pcrs}); ${CRYPTTAB} wired with tpm2-device=auto.${c_reset}"
     info "${c_ylw}  NOT proven active yet: whether the initramfs actually auto-unlocks${c_reset}"
-    info "${c_ylw}  MUST be confirmed by a real reboot — the image's initramfs is generic and${c_reset}"
+    info "${c_ylw}  MUST be confirmed by a real reboot: the image's initramfs is generic and${c_reset}"
     info "${c_ylw}  may not consume the host crypttab, so do NOT assume it works until you${c_reset}"
     info "${c_ylw}  have seen one unattended boot (with console access).${c_reset}"
   else

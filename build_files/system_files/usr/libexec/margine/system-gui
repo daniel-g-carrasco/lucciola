@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# Lucciola System — the graphical answer to "is my machine current and healthy?"
+# Lucciola System: the graphical answer to "is my machine current and healthy?"
 # (Margine System until 2026-10-18.)
 #
 # Everything here already existed as CLI (lucciola-status, ujust
