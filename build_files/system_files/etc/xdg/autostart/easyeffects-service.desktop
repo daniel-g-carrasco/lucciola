@@ -18,4 +18,4 @@ X-GNOME-Autostart-enabled=true
 # "Hidden=true" line, or toggle it off in GNOME Settings -> Apps -> Startup.
 #
 # NOTE: deliberately no X-GNOME-Autostart-Phase (GNOME 50+ SKIPS entries that
-# set it; see margine-first-boot.desktop).
+# set it).

@@ -30,17 +30,13 @@ install -Dm0644 /ctx/60-ujust-services/gaming-native-packages.txt \
   /usr/share/margine/gaming-native-packages.txt
 
 # ---------------------------------------------------------------------------
-# 5b. First-login auto-bootstrap (XDG autostart)
+# 5b. First-login bootstrap: not automatic in Lucciola
 # ---------------------------------------------------------------------------
-# When a fresh user logs in for the first time after rebasing to
-# Margine, run `ujust margine-bootstrap unattended` once. It's
-# idempotent and skips re-running because of the marker file at
-# ~/.config/margine/bootstrapped. The user can re-run by deleting
-# that file or by invoking `ujust margine-bootstrap` manually.
-#
-# Without this, the configure-* scripts only ever run if the user
-# happens to know they have to type the ujust command — which is
-# exactly the "nothing's configured" bug we just fixed.
+# Margine runs `ujust margine-bootstrap unattended` at a user's first GNOME
+# login through an XDG autostart entry (OnlyShowIn=GNOME). Lucciola ships
+# no such entry (2026-10-18; lucciola/build.sh deleted it before): what is
+# left of the bootstrap (home layout, default applications, Zen, darktable)
+# runs only by hand, `ujust margine-bootstrap`.
 # ---------------------------------------------------------------------------
 # 5c. Mask systemd-remount-fs.service (Bug 8 — composefs noise)
 # ---------------------------------------------------------------------------
@@ -59,7 +55,7 @@ ln -sf /dev/null /etc/systemd/system/systemd-remount-fs.service
 # ~/.config/no-show-user-motd exists. We ship that marker in the
 # skeleton so EVERY new user account inherits the off-by-default
 # behavior. Existing users get the file via configure-home-layout
-# (idempotent), which margine-bootstrap runs at first login.
+# (idempotent), which `ujust margine-bootstrap` runs.
 mkdir -p /etc/skel/.config
 touch /etc/skel/.config/no-show-user-motd
 log "Installed: /etc/skel/.config/no-show-user-motd (disables Bluefin MOTD for new users)"

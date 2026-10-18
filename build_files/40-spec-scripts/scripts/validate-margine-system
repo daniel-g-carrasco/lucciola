@@ -126,7 +126,6 @@ EXPECTED_EXTENSIONS=(
 
 EXPECTED_MARGINE_HELPERS=(
   margine-fetch
-  margine-install-user-extensions
 )
 
 # Services that are expected to fail and are NOT counted as

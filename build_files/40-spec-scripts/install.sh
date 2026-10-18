@@ -6,12 +6,15 @@
 set -euo pipefail
 . /ctx/00-common.sh
 
-# 3. Bundle the configure-gnome-* helpers from margine-fedora-atomic
+# 3. Bundle the configure-* and validate-* helpers
 # ---------------------------------------------------------------------------
-# These are user-state helpers. We don't run them at image build time
-# (no user yet); we install them so the user can run e.g.
-#   margine-configure-keybindings --apply
-# from any terminal post-install.
+# The configure-* scripts are user-state helpers. We don't run them at
+# image build time (no user yet); we install them so the user can run e.g.
+#   margine-configure-home-layout --apply
+# from any terminal post-install. The GNOME ones (keybindings, appearance,
+# app folders, extensions, install-user-extensions) left with the rest of
+# Margine's GNOME customisation (2026-10-18): GNOME is Lucciola's stock
+# fallback session.
 #
 # The scripts are vendored into this image tree under
 # 40-spec-scripts/scripts/. The ctx stage COPYs build_files/ to the
@@ -21,14 +24,9 @@ log "Installing Margine configure-* / validate-* scripts"
 
 for s in \
     configure-default-applications \
-    configure-gnome-app-folders \
-    configure-gnome-appearance \
-    configure-gnome-extensions \
-    configure-gnome-keybindings \
     configure-darktable-import \
     configure-home-layout \
     configure-zen-browser \
-    install-user-extensions \
     restore-stock-home \
     validate-atomic-layout \
     validate-cachyos-kernel \
@@ -46,13 +44,13 @@ done
 install -Dm0644 /ctx/40-spec-scripts/declarations/margine-atomic.yaml /usr/share/margine/declarations.yaml
 log "Installed: /usr/share/margine/declarations.yaml"
 
-# Compat symlink: 6 of the 7 configure-* scripts compute
+# Compat symlink: configure-default-applications computes
 #   YAML = Path(__file__).parent.parent / "declarations" / "margine-atomic.yaml"
 # Since the scripts live at /usr/bin/, that resolves to
-# /usr/declarations/margine-atomic.yaml. Without this symlink they
-# silently can't find the file and bootstrap is broken end-to-end.
+# /usr/declarations/margine-atomic.yaml. Without this symlink it
+# silently can't find the file.
 # Only configure-home-layout honors MARGINE_DECLARATIONS env var.
-# Symlink is cheaper than patching 6 scripts. Keep until the scripts
+# Symlink is cheaper than patching the script. Keep until the scripts
 # are unified to use a canonical lookup (FHS /usr/share/margine/).
 mkdir -p /usr/declarations
 ln -sf ../share/margine/declarations.yaml /usr/declarations/margine-atomic.yaml

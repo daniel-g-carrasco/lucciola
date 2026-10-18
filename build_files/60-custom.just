@@ -3,7 +3,7 @@
 # /usr/share/ublue-os/just/00-entry.just `import?` of 60-custom.just
 # (the only optional extension point in Bluefin's entry file).
 
-# Apply the full Margine user-state (home, GNOME, keybinds, apps) in one shot.
+# Apply the Margine user-state (home layout, default apps, Zen, darktable) in one shot.
 [group('Margine')]
 margine-bootstrap $MODE="interactive":
     #!/usr/bin/bash
@@ -17,30 +17,23 @@ margine-bootstrap $MODE="interactive":
       cat <<'EOF'
     == Margine user-state bootstrap ==
 
-    Applies the full Margine user-state declaration. Idempotent — safe
-    to re-run after upgrades; each step reports [no change] for keys
-    that already match the spec.
+    Applies the Margine user-state declaration. Idempotent: safe to
+    re-run after upgrades; each step reports [no change] for keys that
+    already match the spec.
 
     Steps:
-      1. margine-configure-home-layout         (~/data + ~/dev + ~/scratch + XDG remap + bookmarks)
-      2. margine-configure-gnome-keybindings   (Hyprland-style SUPER+1..0, SUPER+E, tiling binds)
-      3. margine-configure-gnome-appearance    (accent, theme, dconf for extensions)
-      4. margine-configure-default-applications (Zen as browser, Ptyxis terminal, etc.)
-      5. margine-configure-gnome-app-folders   (Activities grid grouped by category)
-      6. margine-configure-darktable-import    (import from Pictures/raw, RAWs only)
+      1. margine-configure-home-layout          (~/data + ~/dev + ~/scratch + XDG remap + bookmarks)
+      2. margine-configure-default-applications (Zen as browser, Ptyxis terminal, etc.)
+      3. margine-configure-zen-browser          (DuckDuckGo default, uBlock Origin)
+      4. margine-configure-darktable-import     (import from Pictures/raw, RAWs only)
 
-    As of 2026-06-03 PR A, GNOME extensions are no longer installed
-    or enabled per-user: o-tiling and hide-cursor live in /usr/share/
-    gnome-shell/extensions/ (baked by margine-image build), enablement
-    is in /usr/share/glib-2.0/schemas/zz1-margine.gschema.override.
-    Bootstrap no longer touches them.
+    The GNOME steps (keybindings, appearance, app folders) are gone:
+    GNOME is Lucciola's stock fallback session.
 
-    No package install. No layer staged. Pure user-state under $HOME
-    and user-dconf. Reversible by hand.
+    No package install. No layer staged. Pure user-state under $HOME.
+    Reversible by hand.
 
-    Run `ujust margine-bootstrap unattended` to skip the prompt
-    (this is what /etc/xdg/autostart/margine-first-boot.desktop does
-    the first time you log in).
+    Run `ujust margine-bootstrap unattended` to skip the prompt.
 
     EOF
       read -rp "Continue? [Y/n] " ans
@@ -48,19 +41,9 @@ margine-bootstrap $MODE="interactive":
     fi
 
     FAILED=()
-    # Extension install + enable used to be in this chain (steps 2/3)
-    # but lived per-user under ~/.local/share/gnome-shell/extensions/
-    # and shadowed Bluefin's own copies (search-light), or never ran
-    # at all due to first-login race with flatpak-preinstall.service.
-    # Replaced 2026-06-03 by system-wide install in margine-image's
-    # build-margine-extensions.sh + zz1-margine.gschema.override
-    # enabled-extensions list. Nothing left here for extensions.
     for step in \
         margine-configure-home-layout \
-        margine-configure-gnome-keybindings \
-        margine-configure-gnome-appearance \
         margine-configure-default-applications \
-        margine-configure-gnome-app-folders \
         margine-configure-zen-browser \
         margine-configure-darktable-import ; do
       echo
@@ -78,11 +61,10 @@ margine-bootstrap $MODE="interactive":
       echo "== Bootstrap complete with ${#FAILED[@]} failed step(s): =="
       printf '   - %s\n' "${FAILED[@]}"
     fi
-    echo "Log out and back in (or restart GNOME Shell with Alt+F2 → 'r')"
-    echo "to refresh the dock, extensions, keybindings, and bookmarks."
+    echo "Log out and back in to refresh the bookmarks and default applications."
 
-    # Drop a marker so the autostart entry doesn't re-trigger every
-    # session. Re-run `ujust margine-bootstrap` to refresh manually.
+    # Marker: when the bootstrap last ran. Re-run `ujust margine-bootstrap`
+    # to refresh.
     mkdir -p "$HOME/.config/margine"
     date -uIs > "$HOME/.config/margine/bootstrapped"
 
