@@ -501,7 +501,6 @@ flatpaks:
       - com.bitwarden.desktop
       - org.mozilla.thunderbird_esr
       - org.libreoffice.LibreOffice
-      - com.mattjakeman.ExtensionManager
       - com.github.jeromerobert.pdfarranger  # merge, split, reorder PDF pages (2026-09-19)
       - com.github.johnfactotum.Foliate  # e-book reader: EPUB, MOBI, FB2, CBZ (2026-10-09)
       - com.visualstudio.code  # VS Code (2026-10-10); `ujust margine-vscode` layers the RPM instead
@@ -548,7 +547,6 @@ flatpaks:
       - io.missioncenter.MissionCenter
       - org.gnome.DejaDup
       - org.gnome.Firmware
-      - it.mijorus.smile
       - net.sapples.LiveCaptions  # on-device captions for any audio; floats over the video (2026-09-22)
       - io.github.kolunmi.Bazaar  # the app store; in Margine's own lists since 2026-10-10 (it only came from Bluefin's bazaar.preinstall)
     documentation:

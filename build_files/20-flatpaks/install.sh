@@ -101,7 +101,6 @@ mkdir -p /usr/share/flatpak/preinstall.d
       org.mozilla.thunderbird_esr \
       com.bitwarden.desktop \
       org.libreoffice.LibreOffice \
-      com.mattjakeman.ExtensionManager \
       com.visualstudio.code \
       org.gnome.Snapshot \
       org.gnome.Showtime \
@@ -139,7 +138,6 @@ mkdir -p /usr/share/flatpak/preinstall.d
       io.missioncenter.MissionCenter \
       org.gnome.DejaDup \
       org.gnome.Firmware \
-      it.mijorus.smile \
       io.github.kolunmi.Bazaar ; do
     # Only the "macigni" (~500-700 MB Flatpak each + heavy runtimes)
     # are deferred to flatpak-preinstall.service first-boot. They take

@@ -6,7 +6,6 @@ app.zen_browser.zen
 org.mozilla.thunderbird_esr
 com.bitwarden.desktop
 org.libreoffice.LibreOffice
-com.mattjakeman.ExtensionManager
 org.gnome.Snapshot
 org.gnome.Showtime
 org.gnome.Papers
@@ -71,4 +70,3 @@ io.gitlab.adhami3310.Impression    # USB / image writer
 io.missioncenter.MissionCenter     # task manager (System Monitor alt)
 org.gnome.DejaDup                  # backup tool
 org.gnome.Firmware                 # firmware updater (fwupd GUI)
-it.mijorus.smile                   # emoji picker

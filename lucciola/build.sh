@@ -13,7 +13,6 @@
 #       the base's extension RPMs, the Shell sections of the
 #       30-gnome-defaults overrides, its dconf defaults, and the
 #       first-boot autostart entries from system_files;
-#   2d  takes Smile out of the preinstall list 20-flatpaks writes;
 #   3   rewrites the os-release 10-os-identity writes;
 #   the closing dnf clean repeats what 99-cleanup.sh does anyway.
 set -euo pipefail
@@ -168,29 +167,6 @@ for t in standard administrator; do
   sed -i 's/^Session=.*/Session=lucciola/' "$f"
   grep -q '^Session=lucciola$' "$f" || { echo "ERROR: $f not rewritten" >&2; exit 1; }
 done
-
-# 2d. Flatpaks for the GNOME that 2b takes apart are not preinstalled.
-#     Emoji: Noctalia's launcher has an emoji picker (Mod+Period opens it
-#     on "/emo"), so Margine's Smile, an emoji picker for GNOME paired with
-#     a Shell extension 2b removes, is not needed. Extension Manager has no
-#     Shell extensions left to manage. Only new installs change: an install
-#     that already has them keeps them; Bazaar removes them.
-pre=/usr/share/flatpak/preinstall.d/margine-defaults.preinstall
-bake=/usr/share/margine/installer-flatpaks-base
-for app in it.mijorus.smile com.mattjakeman.ExtensionManager; do
-  rx="${app//./\\.}"
-  grep -q "^\[Flatpak Preinstall ${rx}\]$" "$pre" || { echo "ERROR: $app is no longer in $pre: drop it from step 2d" >&2; exit 1; }
-  python3 - "$pre" "$app" <<'PY'
-import re, sys
-p, app = sys.argv[1], sys.argv[2]
-s = open(p).read()
-s = re.sub(r"\[Flatpak Preinstall " + re.escape(app) + r"\]\n(?:[^\[\n].*\n)*\n?", "", s)
-open(p, "w").write(s)
-PY
-  sed -i -E "/^${rx}([[:space:]]|$)/d" "$bake"
-  if grep -q "$rx" "$pre" "$bake"; then echo "ERROR: $app still preinstalled" >&2; exit 1; fi
-done
-log "Smile and Extension Manager left out of the preinstalled Flatpaks (no GNOME Shell extensions here)"
 
 # 3. Identity. Only the public name changes: ID, VARIANT_ID and the rest stay
 #    Margine's, because the tooling underneath (validators, status, update
