@@ -146,8 +146,8 @@ esac
 
 # 9. The in-image acceptance test (audit 2026-06-05 §8 rec #19, open
 #    until now): the same validator users run, in its smoke-boot context.
-if MARGINE_VALIDATE_CONTEXT=smoke-boot timeout 180 /usr/bin/margine-validate-margine-system > /tmp/validate.log 2>&1; then
-  res validator PASS "margine-validate-margine-system"
+if MARGINE_VALIDATE_CONTEXT=smoke-boot timeout 180 /usr/bin/lucciola-validate-margine-system > /tmp/validate.log 2>&1; then
+  res validator PASS "lucciola-validate-margine-system"
 else
   res validator WARN "$(sed 's/\x1b\[[0-9;]*m//g' /tmp/validate.log | grep -m3 'FAIL' | tr '\n' ' ' | cut -c1-220)"
 fi

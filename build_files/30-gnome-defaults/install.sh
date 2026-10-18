@@ -8,8 +8,8 @@ set -euo pipefail
 
 # Seahorse: the GUI for saved passwords (any Secret Service, oo7 from
 # Fedora 45) and for SSH and GPG keys. On Fedora 44 it backed
-# `ujust margine-keyring blank`; oo7 has no empty keyring password, and
-# margine-keyring uses a TPM-bound credential instead (see that script).
+# `ujust lucciola-keyring blank`; oo7 has no empty keyring password, and
+# lucciola-keyring uses a TPM-bound credential instead (see that script).
 log "Installing seahorse (saved passwords and keys GUI)"
 dnf -y install --setopt=install_weak_deps=False seahorse
 

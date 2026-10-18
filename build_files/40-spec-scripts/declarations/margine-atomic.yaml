@@ -24,7 +24,7 @@ base:
     display_manager: greetd
     greeter: noctalia-greeter   # built from a pinned upstream tag (Containerfile greeter-rpm stage)
     pam_service: greetd         # /usr/lib/pam.d/greetd, Fedora's, plus pam_oo7 (password) and pam_env lines
-    autologin: greetd initial_session   # ujust margine-autologin
+    autologin: greetd initial_session   # ujust lucciola-autologin
     fallback: gdm               # greetd.service OnFailure=
   architecture: x86_64
   update_engine: bootc
@@ -94,7 +94,7 @@ updates:
     automatic: false
     reason: requires-hardware-runbook
   validators_on_demand:
-    # The 7 validators shipped in the image as /usr/bin/margine-validate-*
+    # The 7 validators shipped in the image as /usr/bin/lucciola-validate-*
     # (fetched by margine-image 40-spec-scripts; run together by
     # `ujust margine-doctor`). Kept in sync with that fetch list —
     # this list rotted at 4 entries while the image shipped 7
@@ -626,7 +626,7 @@ gnome:
 
 home:
   # Margine's layout. Opt-in in Lucciola since 2026-10-18: new accounts
-  # keep the standard XDG folders; margine-configure-home-layout --apply
+  # keep the standard XDG folders; lucciola-configure-home-layout --apply
   # (the only reader of this section) sets it on purpose, and
   # `ujust margine-home-stock` goes back.
   roots:

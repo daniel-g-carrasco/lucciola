@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # Margine System — the graphical answer to "is my machine current and healthy?"
 #
-# Everything here already existed as CLI (margine-status, ujust
+# Everything here already existed as CLI (lucciola-status, ujust
 # margine-update, ujust margine-doctor, rpm-ostree rollback). This app
 # is not a reimplementation: it drives the same scripts, so there is
 # exactly one definition of "how Margine updates" and the GUI can never
@@ -18,7 +18,7 @@
 # Read-only state comes from unprivileged sources on purpose:
 # `rpm-ostree status --json` for the local deployments (bootc status
 # requires root), skopeo for the published image of the tag this machine
-# follows, and the margine-validate-* scripts, which are all
+# follows, and the lucciola-validate-* scripts, which are all
 # user-runnable by design.
 
 import json
@@ -54,7 +54,7 @@ def followed_image(origin):
     """The published image to compare against: the tag this machine follows
     (:stable, :candidate, a dated tag...), read from the booted origin.
     Comparing every machine with :stable told every install on another tag
-    that an update was available, forever. Same rule as margine-status, keep the two
+    that an update was available, forever. Same rule as lucciola-status, keep the two
     in step: only tags of this image's repository count; a digest pin or
     another image keeps the :stable comparison."""
     ref = origin.partition(":")[2].removeprefix("docker://")
@@ -79,7 +79,7 @@ def local_state():
         version = dep.get("version") or (dep.get("checksum") or "")[:12]
         # The manifest digest is the only identity that survives two builds
         # published under the same version label (both stable builds of
-        # 2026-08-30 were candidate.20260830): margine-status already judges
+        # 2026-08-30 were candidate.20260830): lucciola-status already judges
         # by digest, this GUI said "Up to Date" on the older one.
         digest = (dep.get("base-commit-meta") or {}).get("ostree.manifest-digest") or ""
         if dep.get("staged"):
@@ -316,7 +316,7 @@ class SystemWindow(Adw.ApplicationWindow):
         booted_digest = self._state.get("booted_digest") or ""
         latest_digest = getattr(self, "_latest_digest", "") or ""
         if booted_digest and latest_digest:
-            # Same identity check margine-status uses: digests, not labels.
+            # Same identity check lucciola-status uses: digests, not labels.
             if booted_digest != latest_digest:
                 self._hero_icon.set_from_icon_name("software-update-available-symbolic")
                 self._hero_title.set_text("Update Available")
@@ -549,7 +549,7 @@ class SystemWindow(Adw.ApplicationWindow):
         def worker():
             results = []
             validators = sorted(
-                p for p in os.listdir("/usr/bin") if p.startswith("margine-validate-")
+                p for p in os.listdir("/usr/bin") if p.startswith("lucciola-validate-")
             )
             for path in validators:
                 try:
@@ -560,7 +560,7 @@ class SystemWindow(Adw.ApplicationWindow):
                     detail = (res.stdout + res.stderr).strip()
                 except (OSError, subprocess.TimeoutExpired):
                     ok, detail = False, "the check did not finish"
-                nice = path.replace("margine-validate-", "").replace("-", " ").capitalize()
+                nice = path.replace("lucciola-validate-", "").replace("-", " ").capitalize()
                 results.append((nice, ok, detail))
             GLib.idle_add(self._show_check_results, results)
 
@@ -693,10 +693,10 @@ class SystemWindow(Adw.ApplicationWindow):
             issue_url="https://github.com/daniel-g-carrasco/lucciola/issues",
             license_type=Gtk.License.GPL_3_0,
         )
-        status = run(["/usr/bin/margine-status"], timeout=90)
+        status = run(["/usr/bin/lucciola-status"], timeout=90)
         if status:
             about.set_debug_info(status)
-            about.set_debug_info_filename("margine-status.txt")
+            about.set_debug_info_filename("lucciola-status.txt")
         about.present(self)
 
 

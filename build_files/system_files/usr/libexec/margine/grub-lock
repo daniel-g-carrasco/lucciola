@@ -2,7 +2,7 @@
 # Lock the GRUB menu: booting stays free, EDITING needs a password
 # (2026-10-04).
 #
-# Why this exists: TPM2 disk unlock (margine-tpm-unlock) binds the key to
+# Why this exists: TPM2 disk unlock (lucciola-tpm-unlock) binds the key to
 # PCR 7, the Secure Boot state. PCR 7 does not see the kernel command
 # line. With an open GRUB, anyone at the keyboard presses `e`, appends
 # init=/bin/bash, and boots: Secure Boot is satisfied, PCR 7 is unchanged,

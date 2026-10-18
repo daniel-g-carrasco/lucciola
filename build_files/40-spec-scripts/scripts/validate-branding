@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# margine-validate-branding — assert the distro logo actually resolves
+# lucciola-validate-branding — assert the distro logo actually resolves
 # everywhere it is consumed. Born from the 2026-06-11/12 debugging
 # session: the welcome dialogs hardcode the icon NAME fedora-logo-icon
 # (anaconda-live's fedora-welcome, gnome-initial-setup maps ID=fedora
@@ -145,7 +145,7 @@ PY
 fi
 
 if [[ "$fail" -ne 0 ]]; then
-  echo "margine-validate-branding: FAIL"
+  echo "lucciola-validate-branding: FAIL"
   exit 1
 fi
-echo "margine-validate-branding: PASS"
+echo "lucciola-validate-branding: PASS"

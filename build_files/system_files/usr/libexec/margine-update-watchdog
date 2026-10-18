@@ -18,7 +18,7 @@
 #   2. only if it is an extra-data app, record a strike;
 #   3. at 2 strikes in 7 days, `flatpak mask` it so unattended updates
 #      complete again, and record it in blocked/ for the session
-#      notifier (margine-staged-notify) and margine-status to surface.
+#      notifier (margine-staged-notify) and lucciola-status to surface.
 # Recovery: `ujust margine-update-unblock` (unmask + foreground update).
 set -uo pipefail
 

@@ -5,7 +5,7 @@ Description=Add wheel members to the docker, incus-admin and libvirt groups
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/margine-dev-groups
+ExecStart=/usr/bin/lucciola-dev-groups
 Restart=on-failure
 RestartSec=30
 StartLimitInterval=0

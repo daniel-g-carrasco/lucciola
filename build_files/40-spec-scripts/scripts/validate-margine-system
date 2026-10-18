@@ -22,7 +22,7 @@
 #   qcow2|      B/C, manual VM tests) — BAKE check is skipped because no
 #   non-iso     Anaconda %post ever ran there.
 #   image       the build container itself (`podman run --rm -e
-#               MARGINE_VALIDATE_CONTEXT=image $IMG margine-validate-margine-system`)
+#               MARGINE_VALIDATE_CONTEXT=image $IMG lucciola-validate-margine-system`)
 #               — only filesystem-level checks run; anything that needs a
 #               booted system (running kernel, bootc status, EFI/mokutil,
 #               dconf/gsettings, systemd state, installed Flatpaks) is
@@ -36,7 +36,7 @@ set -u
 
 case "${1:-}" in
   -h|--help)
-    sed -n '2,40p' "${BASH_SOURCE[0]:-/usr/bin/margine-validate-margine-system}" 2>/dev/null \
+    sed -n '2,40p' "${BASH_SOURCE[0]:-/usr/bin/lucciola-validate-margine-system}" 2>/dev/null \
       || echo "Margine acceptance test. See script header for MARGINE_VALIDATE_CONTEXT values."
     exit 0
     ;;
@@ -107,7 +107,7 @@ fi
 # GNOME bootstrap sections this validator had for Margine are gone.
 
 EXPECTED_MARGINE_HELPERS=(
-  margine-fetch
+  lucciola-fetch
 )
 
 # Services that are expected to fail and are NOT counted as
@@ -244,7 +244,7 @@ done
 # A failure here means the user has to manually `sudo usermod -aG ...`
 # or stay sudo-bound for docker/incus/libvirt commands.
 if (( ! IS_LIVE )); then
-  info "wheel-membership check skipped (image context: margine-dev-groups applies it at boot)"
+  info "wheel-membership check skipped (image context: lucciola-dev-groups applies it at boot)"
 elif WHEEL_USERS=$(getent group wheel 2>/dev/null | cut -d: -f4 | tr ',' ' '); [[ -z "${WHEEL_USERS// /}" ]]; then
   warn "wheel group is empty — no admin users to check group membership for"
 else
@@ -262,9 +262,9 @@ else
     rpm -q incus >/dev/null 2>&1 && REQUIRED_GROUPS+=(incus-admin)
     for required in "${REQUIRED_GROUPS[@]}"; do
       if [[ "$USER_GROUPS" == *" $required "* ]]; then
-        ok "user '$u' is in group '$required' (margine-dev-groups effect OK)"
+        ok "user '$u' is in group '$required' (lucciola-dev-groups effect OK)"
       else
-        bad "user '$u' is NOT in group '$required': margine-dev-groups may have failed at boot. Manual fix: sudo usermod -aG $required $u && relogin"
+        bad "user '$u' is NOT in group '$required': lucciola-dev-groups may have failed at boot. Manual fix: sudo usermod -aG $required $u && relogin"
       fi
     done
   done
@@ -320,7 +320,7 @@ LOGO_KEY=$(grep -E '^LOGO=' /etc/os-release | cut -d= -f2- | tr -d '"')
 # vanilla `fastfetch` (no --config flag) picks up. Without it,
 # fastfetch falls back to its built-in default → Fedora ASCII +
 # generic modules instead of Margine ASCII. Fixed 2026-06-02
-# (commit f40d793 margine-image). margine-fetch wrapper still works
+# (commit f40d793 margine-image). lucciola-fetch wrapper still works
 # regardless because it explicitly passes --config.
 [[ -f /etc/fastfetch/config.jsonc ]] \
   && ok "/etc/fastfetch/config.jsonc present (vanilla fastfetch → Margine config)" \

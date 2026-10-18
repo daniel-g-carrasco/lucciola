@@ -207,12 +207,19 @@ fi
 [[ -f "$ROOTFS/usr/libexec/margine/boot-writable.sh" ]] \
   || { echo "::error::usr/libexec/margine/boot-writable.sh missing: grub-lock and grub-hidpi-apply cannot write to a read-only /boot (A.4.grub-lock)"; fail=1; }
 
-# A.4.keyring — login keyring on oo7 (Fedora 45). margine-keyring opens the
+# A.4.keyring — login keyring on oo7 (Fedora 45). lucciola-keyring opens the
 # keyring at login with a TPM-bound credential (fingerprint, autologin);
 # keyring-legacy-aside runs before oo7-daemon so a Fedora 44 plaintext
 # keyring cannot stop it, keyring-import-legacy moves its items over; the
 # D-Bus activation file starts oo7 outside GNOME's session target (Lucciola).
-check_exec "usr/bin/margine-keyring" "A.4.keyring"
+check_exec "usr/bin/lucciola-keyring" "A.4.keyring"
+# A.4.names: the commands are lucciola-* since 2026-10-18; the margine-*
+# names stay as links to them while installs and habits move over.
+for n in autologin dev-groups fetch keyring status tpm-unlock validate-margine-system validate-branding; do
+  check_exec "usr/bin/lucciola-$n" "A.4.names"
+  [[ "$(readlink "$ROOTFS/usr/bin/margine-$n" 2>/dev/null)" == "lucciola-$n" ]] \
+    || { echo "::error::A.4.names usr/bin/margine-$n is not a link to lucciola-$n"; fail=1; }
+done
 check_exec "usr/bin/seahorse" "A.4.keyring"
 check_exec "usr/libexec/margine/keyring-legacy-aside" "A.4.keyring"
 check_exec "usr/libexec/margine/keyring-import-legacy" "A.4.keyring"

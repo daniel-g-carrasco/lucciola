@@ -293,7 +293,7 @@ EOF
 chmod 0644 /etc/issue
 log "Installed: /etc/issue"
 
-# (f) Fastfetch config + margine-fetch wrapper.
+# (f) Fastfetch config + lucciola-fetch wrapper.
 # Fetch the ASCII logo and use it as fastfetch's --logo source.
 mkdir -p /usr/share/fastfetch /usr/share/margine
 # Lucciola's firefly in shaded blocks over the name; margine.jsonc colours
@@ -302,7 +302,7 @@ need "$A/fastfetch-logo.txt"
 cp "$A/fastfetch-logo.txt" /usr/share/margine/ascii-logo.txt
 chmod 0644 /usr/share/margine/ascii-logo.txt
 
-# margine.jsonc + the margine-fetch wrapper ship as tracked files via
+# margine.jsonc + the lucciola-fetch wrapper ship as tracked files via
 # system_files (migrated out of heredocs 2026-06-12 so linters and
 # reviewers actually see them).
 

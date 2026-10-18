@@ -322,10 +322,10 @@ def main():
     say("gaming-native dry run: " + (out or "").strip().replace("\n", " | ")[-400:])
     if rc != 0:
         fail("the gaming-native layer does not resolve on the new deployment")
-    rc, out = capture(sudo + "MARGINE_VALIDATE_CONTEXT=live margine-validate-margine-system 2>&1 | grep -E 'FAIL|PASSED|FAILED|WARN' | tail -25", 900)
+    rc, out = capture(sudo + "MARGINE_VALIDATE_CONTEXT=live lucciola-validate-margine-system 2>&1 | grep -E 'FAIL|PASSED|FAILED|WARN' | tail -25", 900)
     say("validator:\n" + (out or ""))
     if not out or "PASSED" not in out:
-        fail("margine-validate-margine-system did not pass")
+        fail("lucciola-validate-margine-system did not pass")
     rc, out = capture("journalctl -b -p err --no-pager 2>/dev/null | tail -15", 60)
     say("journal errors (this boot, last 15):\n" + (out or ""))
     rc, out = capture("df -h / | tail -1; rpm-ostree status | grep -c '^ *ostree-image' ", 60)

@@ -282,7 +282,7 @@ systemctl --global mask flatpak-user-update.timer >/dev/null
 # Group membership is Margine's job on every base (2026-10-10): the base's
 # bluefin-dx-groups expects the docker and incus-admin groups, which left
 # the image with Docker CE and incus, and it restarts every 30 s when
-# usermod fails. margine-dev-groups adds wheel users to the groups that
+# usermod fails. lucciola-dev-groups adds wheel users to the groups that
 # exist (libvirt after `ujust margine-vm`, docker after
 # `ujust margine-docker`), every boot. margine-libvirt-workaround only runs
 # where /var/lib/libvirt exists, i.e. once libvirt is layered.

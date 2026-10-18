@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 """keyring-import-legacy: move a plaintext gnome-keyring login keyring into oo7.
 
-`ujust margine-keyring blank` (Fedora 44 and older) set the login keyring's
+`ujust lucciola-keyring blank` (Fedora 44 and older) set the login keyring's
 password to empty, and gnome-keyring then keeps the keyring as a plaintext
 key file ("[keyring]" ...). oo7, the Secret Service from Fedora 45, migrates
 only gnome-keyring's encrypted format, so keyring-legacy-aside renames the
@@ -127,8 +127,8 @@ def notify_locked():
             NOTIFY, "-i", "dialog-password",
             "Saved passwords from Fedora 44 are waiting",
             "Margine now uses oo7 for saved passwords. The old login keyring is kept "
-            "aside until the new one is unlocked: run ujust margine-keyring import, "
-            "or ujust margine-keyring tpm to have it open at every login.",
+            "aside until the new one is unlocked: run ujust lucciola-keyring import, "
+            "or ujust lucciola-keyring tpm to have it open at every login.",
         ], check=False)
 
 

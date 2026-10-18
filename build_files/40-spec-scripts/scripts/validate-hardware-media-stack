@@ -228,8 +228,8 @@ section "Summary"
 printf 'Warnings: %d  Failures: %d\n' "$warnings" "$failures"
 
 if (( failures > 0 )); then
-  echo "margine-validate-hardware-media-stack: FAIL"
+  echo "lucciola-validate-hardware-media-stack: FAIL"
   exit 1
 fi
-echo "margine-validate-hardware-media-stack: PASS"
+echo "lucciola-validate-hardware-media-stack: PASS"
 exit 0

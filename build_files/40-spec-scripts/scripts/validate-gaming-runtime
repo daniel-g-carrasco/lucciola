@@ -204,8 +204,8 @@ section "Summary"
 printf 'Warnings: %d  Failures: %d\n' "$warnings" "$failures"
 
 if (( failures > 0 )); then
-  echo "margine-validate-gaming-runtime: FAIL"
+  echo "lucciola-validate-gaming-runtime: FAIL"
   exit 1
 fi
-echo "margine-validate-gaming-runtime: PASS"
+echo "lucciola-validate-gaming-runtime: PASS"
 exit 0

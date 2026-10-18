@@ -497,7 +497,7 @@ jobs:
         run: |
           set -euo pipefail
           IMG="localhost/${{ env.IMAGE_NAME }}:${{ steps.metadata.outputs.version }}"
-          for v in margine-validate-margine-system margine-validate-branding; do
+          for v in lucciola-validate-margine-system lucciola-validate-branding; do
             echo "=== $v (MARGINE_VALIDATE_CONTEXT=image) ==="
             sudo podman run --rm \
               -e MARGINE_VALIDATE_CONTEXT=image \

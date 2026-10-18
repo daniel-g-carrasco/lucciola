@@ -39,7 +39,7 @@ install -Dm0644 /ctx/60-ujust-services/gaming-native-packages.txt \
 # hand, `ujust margine-bootstrap`. Margine's home layout (~/data, ~/dev,
 # ~/scratch) is not part of it since 2026-10-18: new accounts keep the
 # standard XDG folders (Fedora's /etc/xdg/user-dirs.defaults, untouched),
-# and margine-configure-home-layout --apply sets the layout on purpose.
+# and lucciola-configure-home-layout --apply sets the layout on purpose.
 # ---------------------------------------------------------------------------
 # 5c. Mask systemd-remount-fs.service (Bug 8 — composefs noise)
 # ---------------------------------------------------------------------------

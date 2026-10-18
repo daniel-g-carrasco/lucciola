@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Tests for /usr/bin/margine-autologin on throwaway files. No root, no greetd:
+# Tests for /usr/bin/lucciola-autologin on throwaway files. No root, no greetd:
 # MARGINE_AUTOLOGIN_* point the helper at temp files, `id` and `getent` are
 # stubbed over a fake passwd (and `id -u` with no user says 0, so the helper
 # takes itself for root and never calls sudo).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-HELPER="$ROOT/build_files/system_files/usr/bin/margine-autologin"
+HELPER="$ROOT/build_files/system_files/usr/bin/lucciola-autologin"
 TEMPLATE="$ROOT/lucciola/system_files/usr/share/lucciola/greetd/config.toml"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 fails=0
@@ -72,7 +72,7 @@ check "on alice: comments kept"                                                 
 check "on alice: mirrored into GDM's custom.conf (enable)"                        gdm_has 'AutomaticLoginEnable=True'
 check "on alice: mirrored into GDM's custom.conf (user)"                          gdm_has 'AutomaticLogin=alice'
 check "on alice: a backup of the greetd config"                                  has_backup
-check "on alice: the keyring hint"                                               says "ujust margine-keyring tpm"
+check "on alice: the keyring hint"                                               says "ujust lucciola-keyring tpm"
 run status;            check "status after on: ENABLED for alice"               says 'autologin: ENABLED for user "alice"'
 run on alice;          check "on again: still one [initial_session]"            one_section
 run on carol;          check "on carol: replaces alice"                          toml 'd["initial_session"]["user"] == "carol"'
@@ -106,4 +106,4 @@ DM=gdm.service run off; check "GDM as the login screen: off"                    
 
 echo
 if (( fails )); then echo "$fails test(s) FAILED"; exit 1; fi
-echo "all margine-autologin tests passed"
+echo "all lucciola-autologin tests passed"
