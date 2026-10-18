@@ -571,7 +571,10 @@ All under `build_files/system_files/`. All autostart entries follow Golden Rules
   `91-bluefin-aliases.sh`) are deleted from **both** `/etc/profile.d` and
   `/usr/etc/profile.d` (Golden Rule 1).
 - **`/etc/issue`:** first line `Lucciola \r (\m): Fedora Silverblue + CachyOS signed
-  kernel`, second line `\d \t` (emergency console only).
+  kernel`, second line `\d \t` (emergency console only). The kernel reserve
+  (`:fedora-kernel`, `/usr/share/margine/kernel-flavor` = `fedora`) writes
+  `Fedora's kernel` in place of `CachyOS signed kernel`; the CPU Scheduler's
+  description and `lucciola-status` name the kernel that runs the same way.
 - **ujust:** recipes live in `build_files/60-custom.just`, mostly under
   `[group('Lucciola')]` (`lucciola-bootstrap`, `lucciola-ai`, `lucciola-test-vm`, …;
   `lucciola-gaming` sits under `[group('Gaming')]`), discoverable via

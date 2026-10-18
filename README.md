@@ -22,7 +22,7 @@ A 64-bit x86 processor with x86-64-v3 support, which most made since about 2015 
 /lib64/ld-linux-x86-64.so.2 --help | grep x86-64-v3
 ```
 
-A line that says "supported" means you are ready; no output means Lucciola will not start on that PC. AMD and Intel graphics work out of the box; there is no build with NVIDIA's own driver.
+A line that says "supported" means you are ready. No output means the CachyOS kernel will not start on that PC: use the [kernel reserve](#fedoras-kernel-the-kernel-reserve), the same system with Fedora's kernel. AMD and Intel graphics work out of the box; there is no build with NVIDIA's own driver.
 
 ## Install
 
@@ -41,6 +41,22 @@ Lucciola has no installer image yet: you switch to it from a Fedora Atomic syste
 
 The commands begin with `lucciola-`: `ujust lucciola-update`, `ujust lucciola-status`, and `ujust --list` for the rest. Their old `margine-` names, from Margine OS, the project Lucciola grew from, still work.
 
+## Fedora's kernel (the kernel reserve)
+
+`ghcr.io/daniel-g-carrasco/lucciola:fedora-kernel` is Lucciola with Fedora's own kernel in place of the CachyOS one, and nothing else changed: it is built from the same commit and the same base image as the current `:stable`, after each promotion, and goes through the same boot test and signing. Fedora's kernel is built for any x86-64 processor and signed by Fedora, so it is the image for processors without x86-64-v3, and the way out when a CachyOS kernel update misbehaves on your PC. The scheduler picker (sched_ext) works on it too; the default scheduler is Fedora's EEVDF instead of BORE.
+
+Switch an installed system, then restart:
+
+```sh
+ujust lucciola-kernel fedora     # Fedora's kernel (:fedora-kernel)
+ujust lucciola-kernel cachyos    # back to the CachyOS kernel (:stable)
+ujust lucciola-kernel            # which kernel runs, which image the system follows
+```
+
+Updates then follow the image you switched to; the system you left stays in the boot menu. The switch refuses the CachyOS kernel on a processor without x86-64-v3, or with Secure Boot on and Lucciola's key not enrolled, where it could not start. To install straight onto Fedora's kernel, use `lucciola:fedora-kernel` in step 2 of the install; it starts with Secure Boot on, so step 1 is not needed.
+
+If the disk unlocks with the TPM: with Secure Boot on, the TPM measurements (PCR 7) include which key signed the kernel, Lucciola's for the CachyOS kernel and Fedora's for Fedora's. So the first boot after a switch asks for the disk passphrase; after it, `ujust lucciola-tpm-unlock enable` enrolls the TPM again. The boot menu lock (`ujust lucciola-grub-lock`) is not affected: picking an entry needs no password.
+
 ## Verify the image signature
 
 Every image is signed with [cosign](https://github.com/sigstore/cosign) by digest:
@@ -57,7 +73,7 @@ A valid signature prints the verified payload and exits 0. The public key is [`s
 
 - `Containerfile` and `build_files/`: the build, as numbered steps on top of `ghcr.io/ublue-os/silverblue-main:45`.
 - `lucciola/`: the desktop, with niri's and Noctalia's defaults and the session; `lucciola/assets/` holds the logo, the wallpaper and the boot splash ([`docs/BRANDING.md`](docs/BRANDING.md) maps where each appears).
-- `.github/workflows/`: every change builds a candidate image, boots it in a virtual machine with Secure Boot and a TPM, and only then promotes it to `:stable`; another test updates a machine from the previous image to the new one.
+- `.github/workflows/`: every change builds a candidate image, boots it in a virtual machine with Secure Boot and a TPM, and only then promotes it to `:stable`; another test updates a machine from the previous image to the new one. After each promotion `build-fedora-kernel.yml` builds the kernel reserve from the same commit (`--build-arg KERNEL_FLAVOR=fedora`); run by hand, it publishes only `:fedora-kernel-test`.
 
 To build locally you need a MOK key and certificate to sign the kernel with (an image signed with your own key starts with Secure Boot on only after you enroll that key):
 
