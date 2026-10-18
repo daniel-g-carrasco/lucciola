@@ -91,8 +91,8 @@ DECLARED_PKGS=(
   rocminfo rocm-opencl                     # amd_gpu_extras
   lm_sensors powertop powerstat smartmontools  # hardware_diagnostics
   nautilus-python                          # gnome_tools: Files extensions (Spola's sync emblems)
-  libappindicator-gtk3                     # gnome_tools: the tray library Koofr's GUI dlopens (47-koofr-tray-fix);
-                                           # came as a dependency of the AppIndicator extension until 2026-10-18
+  # libappindicator-gtk3 left on 2026-10-18 with the Koofr tray shim: only
+  # Koofr Desktop's GUI used it, and Spola replaced Koofr Desktop.
   jetbrains-mono-fonts cascadia-code-fonts # fonts
   tmux glow                                # core_cli
   podman-tui                               # container_tooling

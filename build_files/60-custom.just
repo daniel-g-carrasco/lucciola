@@ -1575,8 +1575,14 @@ margine-vm ACTION="install":
     esac
 
 # Install/reinstall Koofr Desktop (native, rootless, autostart hidden).
+# Spola (ujust install-spola) replaced it; this stays for whoever still
+# needs the vendor client, and for `ujust install-koofr remove` after a
+# migration. Its tray icon may not work: Koofr re-announces the icon every
+# second, Noctalia rebuilds the tray each time and hover and clicks stop
+# working (noctalia-dev/noctalia#4537), and since 2026-10-18 the image
+# carries neither the shim that worked around it nor libappindicator-gtk3.
 # `ujust install-koofr launchers` only rewrites the menu and autostart
-# entries of an existing install (e.g. to pick up the tray fix).
+# entries of an existing install (e.g. to drop the old tray shim).
 [group('Apps')]
 install-koofr ACTION="install":
     #!/usr/bin/bash
@@ -1586,13 +1592,7 @@ install-koofr ACTION="install":
     AUTOSTART="${HOME}/.config/autostart/koofr.desktop"
     CFG="${HOME}/.koofr/config.json"
     URL="https://app.koofr.net/dl/apps/linux64"
-    # Koofr re-announces the same tray icon every second through a new temp
-    # file; the image's shim passes it on only when it really changes (see
-    # build_files/47-koofr-tray-fix). Without it tray hosts that rebuild on
-    # every change (Noctalia) lose hover and clicks on all tray icons.
-    FIX=/usr/lib64/margine/koofr-tray-fix.so
     RUN="${DEST}/storagegui"
-    [ -f "${FIX}" ] && RUN="env LD_PRELOAD=${FIX} ${DEST}/storagegui"
 
     write_launchers() {
       # Menu launcher: NO flag -> a manual launch opens the window normally.
@@ -1614,7 +1614,7 @@ install-koofr ACTION="install":
     if [ "{{ ACTION }}" = "launchers" ]; then
       [ -x "${DEST}/storagegui" ] || { echo "Koofr is not installed (no ${DEST}/storagegui)."; exit 1; }
       write_launchers
-      echo "Koofr launchers rewritten$([ -f "${FIX}" ] && echo ' with the tray fix'). It applies from the next start of Koofr (log out and back in)."
+      echo "Koofr launchers rewritten. It applies from the next start of Koofr (log out and back in)."
       exit 0
     fi
 
@@ -1650,6 +1650,7 @@ install-koofr ACTION="install":
     fi
 
     echo; echo "Koofr installed in ${DEST}. Autostart = hidden to tray; menu launch = normal window."
+    echo "Its tray icon may not show or respond under Noctalia; Spola (ujust install-spola) is the supported client."
 
 # Install Spola, the Koofr sync client that replaces Koofr Desktop
 # (https://spola.neistar.com): a Flatpak from its own signed repository,

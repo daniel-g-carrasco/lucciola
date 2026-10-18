@@ -346,7 +346,6 @@ host_packages:
       - smartmontools
     gnome_tools:
       - gnome-tweaks
-      - libappindicator-gtk3
       - nautilus-python
       - adw-gtk3-theme
       - showtime
