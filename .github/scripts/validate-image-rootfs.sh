@@ -56,12 +56,12 @@ if grep -Eiq '<image[[:space:]>]|data:image/' "$ROOTFS/usr/share/icons/Adwaita/s
 fi
 
 # A.3: Lucciola, niri + Noctalia, and GNOME as a STOCK fallback session.
-# The Margine steps bake GNOME extensions, their dconf defaults and a GNOME
-# first-login bootstrap; lucciola/build.sh then removes them (the Margine
-# checks that used to sit here asserted the opposite). Assert the outcome
-# Lucciola ships: none of Margine's extensions, none of its Shell dconf
-# defaults or first-login autostarts, the Lucciola session on the login
-# screen and preselected for new users.
+# Since 2026-10-18 the build adds no GNOME extensions, Shell dconf defaults
+# or GNOME first-login bootstrap at all (until then lucciola/build.sh
+# removed what the Margine steps added; the Margine checks that used to sit
+# here asserted the opposite). Assert the outcome: none of Margine's
+# extensions, none of its Shell dconf defaults or first-login autostarts,
+# the Lucciola session on the login screen and preselected for new users.
 for uuid in \
   appindicatorsupport@rgcjonas.gmail.com \
   bazaar-integration@kolunmi.github.io \
@@ -322,9 +322,9 @@ grep -qxF 'Icon=margine-documentation' "$ROOTFS/usr/share/applications/margine-d
 # GNOME 47/48; the keys we tried to set are ignored. Icon-size drift
 # between app-grid/folder is a CSS theme issue, not a gschema one).
 
-# A.3.bis: the dconf profile still reads the distro database. Lucciola
-# drops Margine's Shell defaults from it (A.3), the database itself stays
-# for what remains (authselect's defaults).
+# A.3.bis: the dconf profile still reads the distro database. The build
+# puts no Shell defaults there (A.3); the database stays for authselect's
+# defaults.
 grep -qxF 'system-db:distro' "$ROOTFS/etc/dconf/profile/user" || { echo "::error::A.3.bis /etc/dconf/profile/user lacks system-db:distro"; fail=1; }
 
 # A.3.ter — downstream patches + branding must land on the FINAL image

@@ -189,16 +189,23 @@ else
   check NOCTALIA_LOOK 1 "expected the custom Margine palette, dark (scheme=${SCHEME:-no answer} mode=${MODE:-no answer} WAYLAND_DISPLAY=${WL:-unset})"
 fi
 
-# 7. GNOME is the stock fallback: Lucciola drops every extension Margine
-#    adds, o-tiling first, from disk and from the defaults a user gets.
-OTILING_UUID='o-tiling@oliwebd.github.com'
+# 7. GNOME is the stock fallback: on disk only the extensions of Fedora's
+#    gnome-shell-extensions package (the GNOME Classic set), and none
+#    enabled in the defaults a user gets. The build adds none of Margine's
+#    (o-tiling and the rest) since 2026-10-18.
+NONSTOCK=""
+for d in /usr/share/gnome-shell/extensions/*/; do
+  [[ -d "$d" ]] || continue
+  u="$(basename "$d")"
+  [[ "$u" == *@gnome-shell-extensions.gcampax.github.com ]] || NONSTOCK+=" $u"
+done
 ENABLED_LIST="$(usettings org.gnome.shell enabled-extensions)"
-if [[ -e "/usr/share/gnome-shell/extensions/${OTILING_UUID}" ]]; then
-  check GNOME_STOCK 1 "o-tiling is installed (enabled-extensions=$ENABLED_LIST)"
-elif [[ "$ENABLED_LIST" == *o-tiling* || "$ENABLED_LIST" == *search-light* ]]; then
-  check GNOME_STOCK 1 "Margine extensions enabled for $SMOKE_USER: $ENABLED_LIST"
+if [[ -n "$NONSTOCK" ]]; then
+  check GNOME_STOCK 1 "extensions outside GNOME's own set:$NONSTOCK (enabled-extensions=${ENABLED_LIST:-?})"
+elif [[ -n "$ENABLED_LIST" && "$ENABLED_LIST" != "@as []" ]]; then
+  check GNOME_STOCK 1 "extensions enabled for $SMOKE_USER by default: $ENABLED_LIST"
 else
-  check GNOME_STOCK 0 "no Margine extension (enabled-extensions=${ENABLED_LIST:-?})"
+  check GNOME_STOCK 0 "only GNOME's own extensions, none enabled (enabled-extensions=${ENABLED_LIST:-?})"
 fi
 
 # 8. Gaming ujust recipe exists: `ujust --list` shows margine-gaming*.
@@ -217,10 +224,10 @@ else
   check GAMING_UJUST 1 "ujust binary not found"
 fi
 
-# 9. zz1-margine gschema applied where Lucciola keeps it: accent-color=yellow
-#    (not a GNOME default) serves the GTK applications of the niri session.
-#    num-workspaces, checked here on Margine, went with the Shell and
-#    window-manager defaults lucciola/build.sh drops.
+# 9. zz1-margine gschema applied: accent-color=yellow (not a GNOME default)
+#    serves the GTK applications of the niri session. num-workspaces,
+#    checked here on Margine, went with the Shell and window-manager
+#    defaults Lucciola does not ship.
 ACCENT="$(usettings org.gnome.desktop.interface accent-color)"
 if [[ "$ACCENT" == *yellow* ]]; then
   check GSCHEMA 0 "accent=$ACCENT"

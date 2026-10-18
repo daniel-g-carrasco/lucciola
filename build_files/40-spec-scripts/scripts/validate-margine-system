@@ -4,8 +4,8 @@
 # Run this on a booted Margine system to photograph the current state
 # and compare it against the canonical expected state. Catches drift
 # that the build-time Layer A checks and the pre-reboot
-# validate-staged-deployment cannot see: GNOME settings as actually
-# applied by GDM/Shell, the login screen (greetd on Lucciola), Flatpaks
+# validate-staged-deployment cannot see: the GDM fallback's settings
+# as GDM reads them, the login screen (greetd on Lucciola), Flatpaks
 # really installed (not just declared),
 # system users present at runtime (Bug 6 post-rebase), running kernel
 # signature, no failed services, branding assets in place, etc.
@@ -102,27 +102,9 @@ if [[ -f "$PREINSTALL_FILE" ]]; then
   )
 fi
 
-EXPECTED_EXTENSIONS=(
-  appindicatorsupport@rgcjonas.gmail.com
-  bazaar-integration@kolunmi.github.io
-  dash-to-dock@micxgx.gmail.com
-  gradia-integration@alexandervanhee.github.io
-  gsconnect@andyholmes.github.io
-  hide-cursor@elcste.com
-  caffeine@patapon.info
-  o-tiling@oliwebd.github.com
-  smile-extension@mijorus.it
-)
-# search-light@icedman.github.com was dropped from the default enable set
-# 2026-06-14 (GNOME-50 crash class; replaced by GNOME-native search). smile
-# was added 2026-06-13. blur-my-shell@aunetx was dropped 2026-06-16 (dynamic
-# per-frame Gaussian blur janked the 120Hz HiDPI iGPU — its own transitions
-# AND o-tiling animations — plus 3 unfixed-upstream GNOME-50 bugs). All three
-# stay INSTALLED but are not in the enabled set. Keep this list in lockstep
-# with the enabled-extensions line in build_files/30-gnome-defaults/install.sh
-# (zz1-margine override).
-# NOTE: tilingshell@ferrarodomenico.com is installed but NOT in the
-# default enable list (superseded by o-tiling on 2026-05-31).
+# No GNOME Shell extensions are expected: GNOME is Lucciola's stock
+# fallback session (2026-10-18), so the extension, Shell-defaults and
+# GNOME bootstrap sections this validator had for Margine are gone.
 
 EXPECTED_MARGINE_HELPERS=(
   margine-fetch
@@ -476,8 +458,7 @@ fi
 # ---------------------------------------------------------------------------
 hdr "6. GDM greeter overrides (Bug 7 guardrail)"
 # ---------------------------------------------------------------------------
-# Resolved wallpaper path is shared by sections 6 and 7 — compute it
-# outside the live-only gate so section 7 never sees it unset.
+# Resolved wallpaper path, computed outside the live-only gate.
 exp_path="${EXPECTED_WALLPAPER#file://}"
 exp_real=$(readlink -f "$exp_path" 2>/dev/null || echo "$exp_path")
 if (( ! IS_LIVE )); then
@@ -592,89 +573,11 @@ PY
 fi
 
 # ---------------------------------------------------------------------------
-hdr "7. GNOME Shell defaults (user session)"
-if [[ "$EXPECTED_OS_NAME" == "Lucciola" ]]; then
-  info "skipped: Lucciola keeps GNOME stock as a fallback session, without Margine's Shell defaults"
-else
+hdr "7. Margine launchers"
 # ---------------------------------------------------------------------------
-# This needs the user's dconf, not root's. Skip if we are root (curl|sudo bash)
-# or in a build container (no session dconf at all).
-if (( ! IS_LIVE )); then
-  info "skipped (image context — no user session)"
-elif [[ ${EUID:-$(id -u)} -ne 0 ]]; then
-  CUR_EXTS=$(gsettings get org.gnome.shell enabled-extensions 2>/dev/null | tr -d "[](),'" | tr ' ' '\n' | grep . | sort)
-  EXP_EXTS=$(printf '%s\n' "${EXPECTED_EXTENSIONS[@]}" | sort)
-  MISSING=$(comm -23 <(echo "$EXP_EXTS") <(echo "$CUR_EXTS"))
-  EXTRA=$(comm -13   <(echo "$EXP_EXTS") <(echo "$CUR_EXTS"))
-  if [[ -z "$MISSING" && -z "$EXTRA" ]]; then
-    ok "enabled-extensions matches Margine canonical set"
-  else
-    [[ -n "$MISSING" ]] && bad "extensions MISSING: $(echo $MISSING)"
-    [[ -n "$EXTRA"   ]] && warn "extensions EXTRA (user-added?): $(echo $EXTRA)"
-  fi
-
-  # Per-extension schema visibility check. On the 2026-06-04 fresh
-  # install search-light was enabled in dconf but its gschema XML
-  # never made it into the compiled /usr/share/glib-2.0/schemas/
-  # gschemas.compiled — so `gsettings get
-  # org.gnome.shell.extensions.search-light shortcut-search`
-  # returned "Schema inesistente". Extension loads but keybindings
-  # have no effect. Check each Margine-enabled extension's gsettings
-  # schema is registered, when it's reasonable to expect one.
-  # blur-my-shell + search-light were REMOVED from the image (2026-06-16), so
-  # their schemas are intentionally absent — not listed here.
-  EXT_SCHEMA_MAP=(
-    "dash-to-dock@micxgx.gmail.com=org.gnome.shell.extensions.dash-to-dock"
-    "caffeine@patapon.info=org.gnome.shell.extensions.caffeine"
-    "o-tiling@oliwebd.github.com=org.gnome.shell.extensions.o-tiling"
-  )
-  REGISTERED_SCHEMAS=$(gsettings list-schemas 2>/dev/null)
-  for entry in "${EXT_SCHEMA_MAP[@]}"; do
-    uuid=${entry%%=*}
-    schema=${entry#*=}
-    if echo "$REGISTERED_SCHEMAS" | grep -qxF "$schema"; then
-      ok "schema $schema registered (extension $uuid configurable via gsettings)"
-    else
-      bad "schema $schema NOT registered — extension $uuid loads but its settings (keybindings, prefs) cannot be read/applied. Build-time glib-compile-schemas didn't pick it up."
-    fi
-  done
-
-  CUR_ACCENT=$(gsettings get org.gnome.desktop.interface accent-color 2>/dev/null | tr -d "'")
-  [[ "$CUR_ACCENT" == "yellow" ]] && ok "GNOME accent-color = yellow" \
-    || warn "accent-color is '$CUR_ACCENT' (expected 'yellow') — user may have customized"
-
-  CUR_BG=$(gsettings get org.gnome.desktop.background picture-uri 2>/dev/null | tr -d "'")
-  cur_bg_real=$(readlink -f "${CUR_BG#file://}" 2>/dev/null || echo "${CUR_BG#file://}")
-  if [[ "$cur_bg_real" == "$exp_real" ]]; then
-    if [[ "$CUR_BG" == "$EXPECTED_WALLPAPER" ]]; then
-      ok "desktop wallpaper = Margine default"
-    else
-      ok "desktop wallpaper resolves to Margine via symlink (dconf still references old path)"
-    fi
-  else
-    warn "desktop wallpaper resolves to '$cur_bg_real' (expected '$exp_real'; user may have changed)"
-  fi
-
-  # 10 workspaces — Margine ships fixed (not dynamic) workspaces so the
-  # Hyprland-style SUPER+1..0 keybinds land on stable targets. Set by
-  # zz1-margine.gschema.override.
-  CUR_NW=$(gsettings get org.gnome.desktop.wm.preferences num-workspaces 2>/dev/null)
-  [[ "$CUR_NW" == "5" ]] \
-    && ok "num-workspaces = 5 (Margine fixed-workspaces layout — Daniel's standing preference)" \
-    || bad "num-workspaces = $CUR_NW (expected 5) — zz1-margine override missing or shadowed"
-
-  CUR_DYN=$(gsettings get org.gnome.mutter dynamic-workspaces 2>/dev/null)
-  [[ "$CUR_DYN" == "false" ]] \
-    && ok "dynamic-workspaces disabled (required for SUPER+N binds)" \
-    || bad "dynamic-workspaces = $CUR_DYN (expected false) — SUPER+1..0 binds will misbehave"
-else
-  warn "running as root — skipping GNOME session-level gsettings checks"
-fi
-
-# Margine-branded replacements for the 3 Bluefin app-menu entries we
-# stripped (system-update, documentation). Reasonable Margine should
-# offer its own versions in their place rather than leaving holes in
-# the app menu.
+# Margine-branded replacements for the Bluefin app-menu entries we
+# stripped (system-update, documentation): the launcher should offer
+# Margine's own versions in their place rather than leaving holes.
 declare -A MARGINE_DESKTOP_REPLACEMENTS=(
   ['Margine System Update']='/usr/share/applications/margine-system-update.desktop'
   ['Margine Documentation']='/usr/share/applications/margine-documentation.desktop'
@@ -684,12 +587,9 @@ for label in "${!MARGINE_DESKTOP_REPLACEMENTS[@]}"; do
   if [[ -f "$p" ]]; then
     ok "$label present at $p"
   else
-    warn "$label missing ($p) — stripped Bluefin entry has no Margine replacement in app menu"
+    warn "$label missing ($p): the stripped Bluefin entry has no Margine replacement in the app menu"
   fi
 done
-
-# ---------------------------------------------------------------------------
-fi
 
 hdr "8. Default Flatpak applications (Bug 9 guardrail)"
 # ---------------------------------------------------------------------------
@@ -775,175 +675,6 @@ if command -v ujust >/dev/null; then
   else
     warn "ujust has no margine-* recipes — check /usr/share/ublue-os/just/60-custom.just (must use this name; 00-entry.just only \`import?\`s 60-custom.just)"
   fi
-fi
-
-# ---------------------------------------------------------------------------
-hdr "9a. GNOME extensions: filesystem presence (A.3 guardrail)"
-if [[ "$EXPECTED_OS_NAME" == "Lucciola" ]]; then
-  info "skipped: Lucciola ships no GNOME extensions"
-else
-# ---------------------------------------------------------------------------
-# Section 7 verified gsettings sees enabled-extensions matching the
-# expected set, and that 5 extensions' schemas are registered. That
-# is necessary but not sufficient: the extension code itself has to
-# live on disk under /usr/share/gnome-shell/extensions/<uuid>/ for
-# GNOME Shell to actually load it. If the UUID is in
-# enabled-extensions but the dir is missing, the extension silently
-# does nothing (GNOME 47/48 logs a warning but never surfaces it).
-# This check runs without gsettings (system-wide), so it works under
-# root and under curl|bash.
-EXT_DIR_BASE=/usr/share/gnome-shell/extensions
-if [[ -d "$EXT_DIR_BASE" ]]; then
-  for uuid in "${EXPECTED_EXTENSIONS[@]}"; do
-    if [[ -d "$EXT_DIR_BASE/$uuid" ]]; then
-      ok "extension $uuid installed at $EXT_DIR_BASE/$uuid"
-    else
-      bad "extension $uuid LISTED IN enabled-extensions BUT NOT INSTALLED at $EXT_DIR_BASE/$uuid — GNOME Shell will silently skip it"
-    fi
-  done
-else
-  bad "$EXT_DIR_BASE does not exist — no system-wide GNOME extensions on this image"
-fi
-
-# ---------------------------------------------------------------------------
-fi
-
-hdr "9b1. First-boot autostart wiring (A.4 guardrail)"
-if [[ "$EXPECTED_OS_NAME" == "Lucciola" ]]; then
-  info "skipped: Lucciola has no GNOME first-login bootstrap"
-else
-# ---------------------------------------------------------------------------
-# Two .desktop files in /etc/xdg/autostart/ drive the Margine first-boot
-# user experience:
-#   - margine-first-boot.desktop          → ujust margine-bootstrap unattended
-#   - margine-first-boot-status.desktop   → /usr/libexec/margine-first-boot-status
-#                                            (posts the "background Flatpak
-#                                            installation in progress" toast)
-# Until 2026-06-06 the second one was missing, so the libexec script
-# was shipped but never invoked — daniel saw no notification on first
-# login while flatpak-preinstall.service was downloading GIMP/Inkscape/
-# darktable/OBS in the background. Add a guardrail for both.
-for entry in margine-first-boot.desktop margine-first-boot-status.desktop; do
-  if [[ -f /etc/xdg/autostart/$entry ]]; then
-    ok "/etc/xdg/autostart/$entry present"
-  else
-    bad "/etc/xdg/autostart/$entry MISSING — autostart chain broken"
-  fi
-done
-if [[ -x /usr/libexec/margine-first-boot-status ]]; then
-  ok "/usr/libexec/margine-first-boot-status executable"
-else
-  bad "/usr/libexec/margine-first-boot-status missing or not executable — status notifier cannot run"
-fi
-
-# (Former section 9b2 — org.gnome.shell.app-grid icon-size coherence —
-# removed 2026-06-12: that schema does not exist in GNOME 47/48, so the
-# probe emitted a permanent WARN on every healthy system. CI dropped
-# its twin check earlier with the same rationale.)
-
-# ---------------------------------------------------------------------------
-fi
-
-hdr "9b. Bootstrap effects on user state (the configure-* chain ran)"
-if [[ "$EXPECTED_OS_NAME" == "Lucciola" ]]; then
-  info "skipped: Lucciola runs no GNOME bootstrap"
-else
-# ---------------------------------------------------------------------------
-# Bootstrap orchestration (Bug 11): without these, the distro ships
-# with the right specs but the user session never applied them.
-if (( ! IS_LIVE )); then
-  info "skipped (image context — no user accounts or session state)"
-elif [[ ${EUID:-$(id -u)} -ne 0 ]]; then
-  # Marker dropped by `ujust margine-bootstrap` (autostart or manual)
-  if [[ -f "$HOME/.config/margine/bootstrapped" ]]; then
-    ok "user bootstrap marker present ($(cat "$HOME/.config/margine/bootstrapped" 2>/dev/null))"
-  else
-    warn "no ~/.config/margine/bootstrapped marker — bootstrap never ran on this account"
-  fi
-
-  # Home layout (Margine-specific directories created)
-  for d in data dev scratch; do
-    # "~/" below is display text in the log line, not a path to expand;
-    # the test itself uses $HOME.
-    # shellcheck disable=SC2088
-    [[ -d "$HOME/$d" ]] && ok "~/$d exists" || bad "~/$d missing (configure-home-layout didn't run)"
-  done
-
-  # Dark theme — Margine canonical default
-  CUR_SCHEME=$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null | tr -d "'")
-  [[ "$CUR_SCHEME" == "prefer-dark" ]] \
-    && ok "color-scheme = prefer-dark" \
-    || bad "color-scheme is '$CUR_SCHEME' (expected 'prefer-dark') — configure-gnome-appearance didn't run"
-
-  # o-tiling extension — system-wide since 2026-06-03 PR A (was
-  # ~/.local/share/gnome-shell/extensions/ before, but per-user
-  # install caused shadow/race bugs documented in margine-image
-  # PR #20). Check system-wide first, then fall back to user-dir.
-  OT_SYS="/usr/share/gnome-shell/extensions/o-tiling@oliwebd.github.com"
-  OT_USER="$HOME/.local/share/gnome-shell/extensions/o-tiling@oliwebd.github.com"
-  if [[ -d "$OT_SYS" ]]; then
-    ok "o-tiling installed system-wide (PR A pattern)"
-    # SHADOW (the recurring "tiling toggle doesn't work" root cause,
-    # 2026-06-16): a user-level copy shadows the system one — GNOME loads
-    # ~/.local and refuses /usr/share ("...will not be loaded"), so every
-    # system-side fix (version bumps, schema registration, the session-only
-    # toggle patch) is invisible. It also re-appears nowhere now that o-tiling
-    # is removed_user_install, so once cleared it stays cleared.
-    if [[ -d "$OT_USER" ]]; then
-      bad "o-tiling USER SHADOW present at ~/.local — it masks the system copy and breaks the tiling toggle. Remove with: rm -rf '$OT_USER' (then log out/in). It will NOT come back."
-    fi
-    # Session-only toggle marker (margine-image PR #165): the toggle must not
-    # persist tile-by-default into the user dconf layer. Assert it on the copy
-    # GNOME actually loads (system, now that the shadow is gone).
-    if grep -q '"unlock-dialog"' "$OT_SYS/metadata.json" 2>/dev/null; then
-      ok "o-tiling survives the lock screen (session-modes includes unlock-dialog)"
-    else
-      warn "o-tiling metadata.json lacks session-modes unlock-dialog: it is torn down at every lock and windows may slide workspaces on unlock"
-    fi
-    if grep -q 'margine: lock-screen hygiene' "$OT_SYS/extension.js" 2>/dev/null; then
-      ok "o-tiling hides its panel and Quick Settings UI on the lock screen"
-    else
-      warn "o-tiling lock-screen UI patch NOT in the loaded extension.js: its workspace switcher and toggle stay usable on the lock screen"
-    fi
-    if grep -q 'margine: session-only toggle' "$OT_SYS/extension.js" 2>/dev/null; then
-      ok "o-tiling session-only toggle patch present (no dconf foot-gun)"
-    else
-      warn "o-tiling session-only toggle patch NOT in the loaded extension.js — pre-#165 image, or a copy that missed the patch"
-    fi
-  elif [[ -d "$OT_USER" ]]; then
-    warn "o-tiling installed under ~/.local (pre-PR-A legacy location)"
-  else
-    bad "o-tiling NOT installed — system-wide install at OCI build time failed"
-  fi
-  # Stale Tiling Shell warning (was Margine default until 2026-06-02).
-  if compgen -G "$HOME/.local/share/gnome-shell/extensions/tilingshell@*" >/dev/null; then
-    warn "Tiling Shell present under ~/.local — stale (removed from Margine defaults 2026-06-02). Remove with: rm -rf ~/.local/share/gnome-shell/extensions/tilingshell@ferrarodomenico.com"
-  fi
-
-  # App folders configured (Margine canonical set vs empty/Bluefin default).
-  # 2026-06-07: split the previous "System & Utilities" folder into
-  # four semantically distinct folders — Apps / Dev / System / Utilities.
-  # Still accept the older Italian names (Grafica / Foto / Sistema) and
-  # the older single-System name until all in-the-wild deployments have
-  # been re-bootstrapped past the rename.
-  CUR_FOLDERS=$(gsettings get org.gnome.desktop.app-folders folder-children 2>/dev/null)
-  if echo "$CUR_FOLDERS" | grep -qE "'(Office|Graphics|Photography|Audio|Video|Apps|Dev|System|Utilities|Grafica|Foto|Sistema)'"; then
-    ok "app folders configured by Margine (Office/Graphics/Photography/Audio/Video/Apps/Dev/System/Utilities)"
-  else
-    warn "app folders not Margine-configured: $CUR_FOLDERS (configure-gnome-app-folders may have failed)"
-  fi
-
-  # Nautilus bookmarks under ~/.config/gtk-3.0/bookmarks
-  if [[ -f "$HOME/.config/gtk-3.0/bookmarks" ]] && grep -q "$HOME/data" "$HOME/.config/gtk-3.0/bookmarks"; then
-    ok "Nautilus bookmarks include Margine ~/data"
-  else
-    warn "Nautilus bookmarks don't reference ~/data (configure-home-layout incomplete?)"
-  fi
-else
-  warn "running as root — skipping user-state bootstrap effect checks"
-fi
-
-# ---------------------------------------------------------------------------
 fi
 
 hdr "9c. Gaming layer (opt-in — checks only run if the layer was installed)"
