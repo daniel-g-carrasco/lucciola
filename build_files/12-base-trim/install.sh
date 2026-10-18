@@ -37,8 +37,9 @@
 #     meta package): 57 packages, 1088 MB. Margine's VMs
 #     (margine-test-vm, virt-manager, podman-machine) are x86 only.
 #   - wine and mingw64, 1.9 GB: weak dependencies of lutris left behind by
-#     the gaming bake in custom-kernel. The bake no longer installs weak
-#     dependencies; this is the guard.
+#     the gaming bake in custom-kernel. The bake ran without weak
+#     dependencies from 2026-10-10 and left the build on 2026-10-18 (the
+#     gaming chain is layered on demand); this is the guard.
 #   - fluid soundfonts and wildmidi (330 MB), python3-boto3/botocore
 #     (130 MB), gnome-user-docs and yelp (65 MB; Margine ships its own
 #     offline docs and Bluefin itself excludes yelp): orphans.

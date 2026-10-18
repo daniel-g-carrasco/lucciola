@@ -53,15 +53,15 @@ done
 # issue #333): fetch the key from the authoritative place, then confirm
 # the fingerprint instead of assuming it.
 #
-# Verified 2026-08-21 against rpmfusion-{free,nonfree}-release-44 and the
+# Verified 2026-08-21 against rpmfusion-free-release-44 and the
 # fingerprints published on https://rpmfusion.org/keys. These rotate
 # rarely; when they do, this fails loudly and the new fingerprint must be
 # checked by hand before it is written here. That is the intended
 # behaviour: a silent key change is exactly what this exists to catch.
+# Only RPMFusion free is used now (v4l2loopback's akmod); the nonfree
+# fingerprint left with the gaming closure on 2026-10-18.
 # shellcheck disable=SC2034  # read indirectly as ${!fprvar} in verify_rpmfusion_keys
 RPMFUSION_FREE_FPR="E9A491A3DE247814E7E067EAE06F8ECDD651FF2E"
-# shellcheck disable=SC2034  # read indirectly as ${!fprvar}
-RPMFUSION_NONFREE_FPR="79BDB88F9BBF73910FD4095B6A2AF96194843C65"
 
 # negativo17 "fedora-multimedia": where gstreamer1-plugins-bad and -ugly come
 # from. Verified 2026-08-25 against https://negativo17.org/repos/RPM-GPG-KEY-slaanesh
@@ -472,41 +472,17 @@ log "Disabling scx_loader.service by default (opt-in via margine-scheduler)"
 systemctl disable scx_loader.service 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
-# Gaming-tier userland tools that ALSO benefit creators (promoted 2026-06-05)
+# Codecs and controller rules
 # ---------------------------------------------------------------------------
-# These three RPMs used to live in the gaming variant only. Moved
-# to the base image because their utility is broader than gaming:
-#
-#   * mangohud      — Vulkan/OpenGL overlay (FPS, CPU, GPU, RAM,
-#                     temp, power, frametime). Activated per-app
-#                     via `MANGOHUD=1` env var or LD_PRELOAD.
-#                     Zero overhead when not used. Creators:
-#                     monitor GPU/CPU/RAM during DaVinci/Blender
-#                     renders, OBS recording, ffmpeg encoding,
-#                     BricsCAD modelling.
-#   * goverlay      — Qt GUI to configure MangoHud + vkBasalt
-#                     without hand-editing ~/.config/MangoHud/
-#                     MangoHud.conf. Pairs with MangoHud.
-#   * steam-devices — udev rules for USB game controllers
-#                     (Steam, Xbox, PS, generic gamepads).
-#                     Zero footprint when no controller plugged
-#                     in. Useful for creators using controllers
-#                     as jog wheels / foot pedals / generic input.
-#
-# RPMFusion is REQUIRED for these (the gaming-variant install.sh
-# pulls RPMFusion separately + keeps it post-install). For the
-# base image we transiently enable RPMFusion ONLY for this install,
-# then disable and remove the .repo file so the base stays clean
-# of third-party repos (same pattern as kernel-cachyos COPR above).
-# gstreamer1-plugins-bad / -ugly resolve from negativo17's fedora-multimedia,
-# NOT from RPMFusion. On Bluefin DX that repo file ships in the base
-# (enabled=0) and the packages are already installed, so the install below
-# was silently a no-op and nobody noticed the repo was never enabled. On a
-# base without negativo17 (projectbluefin/bluefin, 2026-08-25 trial) the
-# same line dies with "No match for argument: gstreamer1-plugins-bad". So:
-# make sure the repo exists, with its key verified first, enable it for
-# this one transaction only, and leave it disabled like every other
-# third-party repo in the image.
+# gstreamer1-plugins-bad / -ugly resolve from negativo17's fedora-multimedia.
+# On Bluefin DX that repo file shipped in the base (enabled=0) and the
+# packages were already installed, so the install below was silently a
+# no-op and nobody noticed the repo was never enabled. On a base without
+# negativo17 (projectbluefin/bluefin, 2026-08-25 trial) the same line dies
+# with "No match for argument: gstreamer1-plugins-bad". So: make sure the
+# repo exists, with its key verified first, enable it for this one
+# transaction only, and leave it disabled like every other third-party repo
+# in the image.
 if [[ ! -f /etc/yum.repos.d/negativo17-fedora-multimedia.repo ]]; then
   log "negativo17 fedora-multimedia repo absent from the base, adding it (key pinned)"
   retry_curl_strict https://negativo17.org/repos/RPM-GPG-KEY-slaanesh /run/negativo17.asc
@@ -517,107 +493,112 @@ if [[ ! -f /etc/yum.repos.d/negativo17-fedora-multimedia.repo ]]; then
   rm -f /run/negativo17.asc
 fi
 
-log "Enabling RPMFusion transiently for mangohud + goverlay + steam-devices"
-FEDORA_VER=$(rpm -E %fedora)
-dnf -y install \
-  "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-${FEDORA_VER}.noarch.rpm" \
-  "https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-${FEDORA_VER}.noarch.rpm"
-
-# Both keys checked before a single package is pulled from either repo.
-verify_rpmfusion_keys free nonfree || exit 1
-
 # gstreamer1-plugins-{bad,ugly} complete the codec swap the declarations
-# YAML specifies (host_packages.baseline.codec_replacement.install) —
+# YAML specifies (host_packages.baseline.codec_replacement.install);
 # ffmpeg full already comes from the base. BOTH resolve from negativo17
-# (the base's own multimedia family), NOT from the transient RPMFusion
-# enablement above: RPMFusion's bad-freeworld links libx265.so.215 while
-# negativo17 ships x265 4.2 (.216) — since 2026-07-04 the two can no
-# longer coexist and the build died here for 5 straight retries.
-# negativo17's gstreamer1-plugins-bad (epoch 1) is a superset of the
-# freeworld build (verified: bundles libgstx265.so, libgstva.so,
-# nvcodec/msdk/qsv, fdkaac), so the handbook's codec promises hold.
-# RPMFusion stays enabled ONLY for mangohud/goverlay/steam-devices.
-retry 5 30 bash -c 'dnf -y clean metadata >/dev/null 2>&1 || true; exec dnf -y install --refresh --enablerepo=fedora-multimedia mangohud goverlay steam-devices gstreamer1-plugins-bad gstreamer1-plugins-ugly' \
-  || { err "creator-tier RPM install failed after 5 attempts; aborting"; exit 1; }
+# (the base's own multimedia family), NOT from RPMFusion: RPMFusion's
+# bad-freeworld links libx265.so.215 while negativo17 ships x265 4.2 (.216);
+# since 2026-07-04 the two can no longer coexist. negativo17's
+# gstreamer1-plugins-bad (epoch 1) is a superset of the freeworld build
+# (verified: bundles libgstx265.so, libgstva.so, nvcodec/msdk/qsv,
+# fdkaac), so the handbook's codec promises hold.
+# steam-devices: udev rules for USB game controllers (Steam, Xbox, PS,
+# generic gamepads), a few kilobytes; the Flatpak Steam of
+# `ujust margine-gaming` needs them on the host. From Fedora.
+#
+# What left this step on 2026-10-18 (Lucciola):
+#   - mangohud and goverlay (vkBasalt came with them): `ujust margine-gaming`
+#     and `ujust margine-gaming-native` layer them when someone asks for
+#     the gaming layer.
+#   - RPMFusion: it was enabled here only for mangohud, goverlay,
+#     steam-devices and the gaming closure below; Fedora has the first
+#     three and steam comes from negativo17.
+retry 5 30 bash -c 'dnf -y clean metadata >/dev/null 2>&1 || true; exec dnf -y install --refresh --enablerepo=fedora-multimedia steam-devices gstreamer1-plugins-bad gstreamer1-plugins-ugly' \
+  || { err "codec and controller-rule install failed after 5 attempts; aborting"; exit 1; }
+log "Base now ships: steam-devices + the gstreamer bad/ugly codecs (negativo17)"
 
 # ---------------------------------------------------------------------------
-# Native-gaming 32-bit dependency closure — baked + version-locked
+# Native gaming: align the image with the layer, do not bake the layer
 # ---------------------------------------------------------------------------
-# `ujust margine-gaming-native` layers steam, whose 32-bit (i686) deps pull
-# a deep multilib chain: mesa/llvm, SDL3, gtk3, gdk-pixbuf2, glycin, libheif,
-# libde265, libdecor, ... Multilib demands every i686 lib match its x86_64
-# twin EXACTLY. Layered at RUNTIME against a frozen base, the i686 libs come
-# from whatever the live repos offer, and the moment any one drifts past the
-# baked x86_64 version the whole transaction fails to depsolve — the repeated
-# 2026-06-13 breakages (first mesa/llvm, then SDL3/libheif/libde265/...).
+# `ujust margine-gaming-native` layers steam, whose 32-bit (i686) chain is
+# about 200 packages: mesa/llvm, SDL3, gtk3, glycin, NetworkManager-libnm,
+# ... rpm-ostree cannot touch an image package while it layers, so every
+# i686 library must fit the x86_64 packages the image ships. The base
+# (silverblue-main) is built from its own snapshot of Fedora and lags the
+# repositories by days; on a branched release (Fedora 45 until its GA)
+# superseded builds vanish from the repositories, so the base's versions
+# have no i686 twin left to install.
 #
-# Fix (Bazzite's approach): install the full native-gaming app set HERE so
-# dnf resolves the entire i686+x86_64 closure in ONE transaction (version-
-# locked to this build), then remove ONLY the apps with --no-autoremove so
-# their whole dependency closure stays baked in the base. The opt-in gaming-
-# native layer then re-adds the apps against deps already satisfied by
-# @System — no runtime i686 fetch, no skew, ever. RPMFusion is still enabled
-# here (scrubbed just below), which is where steam resolves at build time.
+# Until 2026-10-18 the whole chain was installed here and the four
+# applications removed again (--no-autoremove): 209 i686 packages, about
+# 731 MiB installed in every image, so that the layer only ever added the
+# applications. Installing the chain had a side effect that mattered as
+# much: dnf upgraded the image packages the chain needed newer (30 of them
+# on 2026-10-18: NetworkManager, glib2, glycin, libcurl, expat...).
 #
-# vkBasalt is intentionally NOT in this set: it already ships in the base, so
-# install would be a no-op and remove would strip a base package. Keep this
-# list in sync with build_files/60-ujust-services/gaming-native-packages.txt
-# (minus vkBasalt). Hard-fail on any error: a build that cannot bake the
-# closure must stop, never promote a :stable where margine-gaming-native is
-# broken. The smoke-boot dry-run guard (.github/smoke/gui-probe.sh) then
-# re-verifies the full recipe set resolves on the booted image.
-GAMING_BAKE=(steam lutris retroarch gamescope)
-log "Baking native-gaming 32-bit dependency closure: ${GAMING_BAKE[*]}"
-# --enablerepo=fedora-multimedia, for the same reason the codec block
-# needs it: multilib wants each i686 library from the SAME family as its
-# installed x86_64 twin. The base's libfdk-aac is negativo17's (epoch 1)
-# and it obsoletes Fedora's and RPMFusion's fdk-aac, so steam's chain
-# (steam -> pipewire-alsa.i686 -> pipewire-libs.i686 -> libfdk-aac.so.2)
-# can only close with negativo17's own libfdk-aac.i686. On Bluefin DX that
-# i686 twin is already in the base and the repo is not consulted; on a
-# base without it (projectbluefin/bluefin:testing, 2026-08-25 trial) the
-# transaction is unresolvable without the repo. Enabled for this one
-# transaction, left disabled after, like everywhere else in this file.
+# Now only that side effect is kept. dnf plans the layer's transaction
+# without running it; every x86_64 or noarch package of the plan that
+# replaces an image package (an upgrade, or an obsolete: negativo17's
+# openh264 replaces Fedora's noopenh264 stub, as it did in the bake) is
+# installed at exactly that build; the i686 chain itself is not
+# installed. The plan is then asked again, and the build stops unless the
+# layer resolves with installs only, which is what rpm-ostree needs.
+# Weak dependencies stay out of the plan, as they did in the bake: lutris
+# recommends wine and the mingw libraries (1.9 GB).
 #
-# No weak dependencies (2026-10-10). Steam's i686 chain is all hard
-# Requires, so it is baked either way; what install_weak_deps added was
-# lutris's Recommends: wine-core (x86_64 and i686), the mingw64 libraries
-# behind it, fluid-soundfont-gs, p7zip... Stripping the apps left all of
-# that in every image: 1.9 GB of wine and mingw plus 330 MB of soundfonts,
-# required by nothing (measured on lucciola.20261009). Lutris brings its
-# own wine builds, and a user who layers lutris gets rpm's own dependency
-# handling anyway. 12-base-trim removes the same families again, as a guard.
-retry 5 30 bash -c 'dnf -y clean metadata >/dev/null 2>&1 || true; exec dnf -y install --refresh --setopt=install_weak_deps=False --enablerepo=fedora-multimedia "$@"' _ "${GAMING_BAKE[@]}" \
-  || { err "native-gaming closure install failed after 5 attempts (repo down or unresolvable multilib at build?); aborting"; exit 1; }
-# Remove by RESOLVED name, not by request name. dnf resolves the
-# install request "retroarch" to negativo17's RetroArch (it Provides
-# retroarch), but `dnf remove retroarch` matches only the literal
-# package name — so RetroArch silently stayed in every base image. That
-# leftover then broke `rpm-ostree upgrade` for gaming-native users on
-# 2026-09-02: their origin's dormant "retroarch" request hit
-# "installed RetroArch obsoletes retroarch provided by retroarch from
-# fedora - conflicting requests" (smoke run 33525326721 predicted it,
-# warn-only at the time).
-GAMING_BAKE_RESOLVED=()
-for p in "${GAMING_BAKE[@]}"; do
-  r="$(rpm -q --whatprovides "$p" --qf '%{NAME}\n' 2>/dev/null | head -1)"
-  [[ -n "$r" && "$r" != *"no package provides"* ]] || { err "cannot resolve baked app '$p' to an installed package; aborting"; exit 1; }
-  GAMING_BAKE_RESOLVED+=("$r")
-done
-log "Stripping baked gaming apps (resolved): ${GAMING_BAKE_RESOLVED[*]}"
-dnf -y remove --no-autoremove "${GAMING_BAKE_RESOLVED[@]}" \
-  || { err "failed to strip gaming apps while keeping their deps; aborting"; exit 1; }
-log "Native-gaming 32-bit closure baked (apps removed, deps version-locked in base)"
-
-# Scrub RPMFusion from the base image — gaming variant will re-add
-# it (and keep it) for the gamescope+vkBasalt install. Base stays
-# clean of third-party repos. NB: we deliberately do NOT
-# `dnf autoremove` here (see margine-image PR #26 — autoremove
-# strips the kernel-cachyos chain whose COPR was just disabled).
-log "Removing RPMFusion .repo files from base"
-dnf -y remove rpmfusion-free-release rpmfusion-nonfree-release || true
-rm -f /etc/yum.repos.d/rpmfusion-*.repo
-log "Base now ships: mangohud + goverlay + steam-devices + gstreamer freeworld/ugly codecs"
+# This makes the layer resolvable against the image as built. It still
+# downloads its chain when someone runs the recipe, against whatever the
+# repositories hold that day: on a branched release a build pushed after
+# the image can replace the version the image needs, until the next image.
+# CI checks the full layer twice: build.yml right after the build
+# (.github/scripts/gaming-native-resolve.sh, every installed package locked
+# at its version) and smoke-boot with rpm-ostree on the booted image; a
+# failure of either stops the image.
+mapfile -t GAMING_LAYER < <(grep -vE '^[[:space:]]*(#|$)' /ctx/60-ujust-services/gaming-native-packages.txt)
+(( ${#GAMING_LAYER[@]} )) || { err "gaming-native-packages.txt lists no package"; exit 1; }
+gaming_plan() {
+  local out attempt
+  for attempt in 1 2 3 4 5; do
+    out="$(dnf install --assumeno --refresh --setopt=install_weak_deps=False --enablerepo=fedora-multimedia "${GAMING_LAYER[@]}" 2>&1 || true)"
+    if grep -q '^Transaction Summary' <<<"$out"; then printf '%s\n' "$out"; return 0; fi
+    if grep -qE '^Failed to resolve the transaction|^Problem' <<<"$out"; then
+      printf '%s\n' "$out" | tail -n 40 >&2
+      err "the gaming-native layer does not resolve against the image even with upgrades allowed"
+      return 1
+    fi
+    log "gaming plan attempt $attempt: no verdict from dnf, retrying in 30 s" >&2
+    sleep 30
+  done
+  err "dnf gave no gaming plan in five attempts (repositories down?)"
+  return 1
+}
+log "Planning the gaming-native layer (${GAMING_LAYER[*]}) against the image"
+_plan="$(gaming_plan)" || exit 1
+# Rows are " <name> <arch> <epoch:version-release> <repo> <size>", and a
+# row that takes the place of an installed package is followed by
+# "   replacing <old>" rows. Install exactly those builds (not the i686 ones).
+mapfile -t _align < <(awk '
+  /^ [^ ]/          { cand = ($2 == "i686") ? "" : $1 "-" $3 "." $2; next }
+  /^   replacing /  { if (cand != "") print cand; cand = ""; next }
+                    { cand = "" }' <<<"$_plan" | sort -u)
+if (( ${#_align[@]} )); then
+  log "Aligning ${#_align[@]} image packages with the gaming-native layer: ${_align[*]}"
+  retry 5 30 bash -c 'dnf -y clean metadata >/dev/null 2>&1 || true; exec dnf -y install --refresh --setopt=install_weak_deps=False --enablerepo=fedora-multimedia "$@"' _ "${_align[@]}" \
+    || { err "aligning the image packages failed after 5 attempts; aborting"; exit 1; }
+else
+  log "No image package needs upgrading for the gaming-native layer"
+fi
+_plan="$(gaming_plan)" || exit 1
+if grep -qE '^ ?(Upgrading|Downgrading|Replacing|Reinstalling|Removing)' <<<"$_plan"; then
+  printf '%s\n' "$_plan" | tail -n 40 >&2
+  err "the gaming-native layer still needs to change image packages after the alignment"
+  exit 1
+fi
+log "gaming-native layer resolves against the image with installs only: $(grep -E '^ Installing:' <<<"$_plan" | tr -s ' ')"
+_n686="$(rpm -qa --qf '%{ARCH}\n' | awk '$1 == "i686"' | wc -l)"
+if (( _n686 > 0 )); then
+  err "$_n686 i686 packages in the image: the gaming chain must not be baked"; exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # Signing

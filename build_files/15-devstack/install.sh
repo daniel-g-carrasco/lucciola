@@ -76,14 +76,11 @@ fi
 # Lucciola's stock fallback session, and the four Margine enabled
 # (AppIndicator, Dash to Dock, Caffeine, GSConnect) went with the rest of
 # Margine's Shell customisation.
-# vkBasalt is declared (desktop_host_helpers) and present in today's image,
-# but not because DX ships it: it was a leftover of the GAMING_BAKE
-# transaction in custom-kernel (lutris dragged in vkBasalt and wine as
-# weak dependencies, the four gaming packages were removed afterwards,
-# their dependencies stayed). Since 2026-10-10 the bake installs without
-# weak dependencies and 12-base-trim removes the wine family, so it no
-# longer lingers. The gaming layer is the user's (ujust margine-gaming),
-# so it is not backfilled here.
+# vkBasalt, mangohud and goverlay are not backfilled: the gaming layer is
+# the user's (ujust margine-gaming, ujust margine-gaming-native). Until
+# 2026-10-18 the image carried all three: custom-kernel installed mangohud
+# and goverlay, and vkBasalt came as goverlay's weak dependency (with
+# mesa-demos and vulkan-tools).
 DECLARED_PKGS=(
   mesa-demos vulkan-tools                  # media_diagnostics
   rocminfo rocm-opencl                     # amd_gpu_extras

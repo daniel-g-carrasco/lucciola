@@ -248,30 +248,26 @@ host_packages:
   baseline:
     # ---------------------------------------------------------------------
     # creator_tier: shared userland tools that benefit BOTH creator
-    # workflows and gaming. Promoted from the opt-in gaming layer into the
-    # base on 2026-06-03 (scx-scheds) and 2026-06-05 (mangohud + goverlay
-    # + steam-devices). margine-image installs them via the same RPMFusion
-    # transient block as the codec replacement; gaming variant inherits.
-    # See margine-image/build_files/build.sh "Gaming-tier userland tools
-    # that ALSO benefit creators" section and the 2026-06-05 audit.
+    # workflows and gaming. scx-scheds since 2026-06-03, steam-devices
+    # since 2026-06-05. mangohud and goverlay were here from 2026-06-05 to
+    # 2026-10-18; they moved to the opt-in gaming layer (ujust
+    # margine-gaming, ujust margine-gaming-native), see gaming_runtime.
     # ---------------------------------------------------------------------
     creator_tier:
       install:
         - scx-scheds         # sched_ext schedulers (CachyOS addons COPR); pro-audio + interactive
-        - mangohud           # Vulkan/OpenGL overlay (FPS/CPU/GPU/RAM/temp) — opt-in per-app
-        - goverlay           # GUI configurator for mangohud
         - steam-devices      # udev rules for controllers/jog wheels (creator + gaming)
       source_notes: |
         scx-scheds comes from copr:bieszczaders/kernel-cachyos-addons
         (same maintainer as the kernel COPR; released as a pair).
-        mangohud, goverlay, steam-devices come from RPMFusion (transient
-        enable at image-build time, scrubbed at end). See
-        margine-image/build_files/custom-kernel/install.sh +
-        build_files/build.sh.
+        steam-devices comes from Fedora. See
+        build_files/custom-kernel/install.sh.
     rpmfusion:
+      # Free only, at build time, for v4l2loopback's akmod (custom-kernel);
+      # nonfree is no longer enabled anywhere (2026-10-18).
       enable_free: true
-      enable_nonfree: true
-      install_release_rpms_from: https://mirrors.rpmfusion.org/{free,nonfree}/fedora/rpmfusion-{free,nonfree}-release-$(rpm -E %fedora).noarch.rpm
+      enable_nonfree: false
+      install_release_rpms_from: https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
     codec_replacement:
       override_remove:
         - ffmpeg-free
@@ -438,6 +434,10 @@ host_packages:
       - lsp-plugins-ladspa
       - lsp-plugins-vst3
     gaming_runtime:
+      # Layered by ujust margine-gaming (gamescope, mangohud, vkBasalt,
+      # goverlay); gamemode comes with the base, steam-devices with the image.
+      # ujust margine-gaming-native layers its own list,
+      # /usr/share/margine/gaming-native-packages.txt.
       desktop_host_helpers:
         - gamescope
         - mangohud
