@@ -15,15 +15,17 @@ boot script, hand-synced):
 Local /etc lines override factory ones for the same name, so a custom
 root shell or a real user account is never clobbered.
 
-Then, every time: an account or group that has a passwd or group line but
-no /etc/shadow or /etc/gshadow line gets a locked one (2026-10-18). Seeding
-copies system accounts into /etc/passwd only; systemd-sysusers later finds
-such an account already there and does not write its shadow line, so PAM
-could not look it up ("unix_chkpwd: could not obtain user info"), and
-user@<uid>.service failed for greetd on a machine updated from margine:lucciola
-whose /etc/passwd had been seeded. Existing shadow lines are never touched;
-missing ones are appended in place, which keeps each file's mode, owner and
-SELinux label.
+Then, every time: an account or group the system knows (from /etc or from
+the image's /usr/lib through nss-altfiles) that has no /etc/shadow or
+/etc/gshadow line gets one, copied from the image's default in /usr/etc, or
+locked when the image has none (2026-10-18). A machine with layered packages
+gets its system accounts moved to /usr/lib/passwd by rpm-ostree, while its
+own /etc/shadow survives the update without the new account's line;
+systemd-sysusers then finds the account and writes nothing, PAM cannot look
+it up ("unix_chkpwd: could not obtain user info"), and user@<uid>.service
+failed for greetd after the move from margine:lucciola (upgrade-smoke).
+Existing lines are never touched; missing ones are appended in place, which
+keeps each file's mode, owner and SELinux label.
 """
 
 import os
@@ -77,25 +79,36 @@ for kind in ("passwd", "group") if need_seed else ():
     print(f"/etc/{kind}: was {len(local)} → now {len(merged)} (+{len(merged) - len(local)} from factory)")
 
 
-def add_missing_shadow(table, shadow, line_for):
-    """Append a locked shadow line for every shadowed entry of /etc/<table>
-    that has none in /etc/<shadow>."""
+def add_missing_shadow(table, shadow, fallback):
+    """Append the missing /etc/<shadow> line of every account (or group) the
+    system knows, from /etc/<table> or the image's /usr/lib/<table>
+    (nss-altfiles). The line comes from the image's own default,
+    /usr/etc/<shadow>, when it has one; a shadowed /etc/<table> entry the
+    image does not know gets a locked line from `fallback`."""
     path = f"/etc/{shadow}"
     if not os.path.exists(path):
         return
     have = by_name(load(path))
+    image = by_name(load(f"/usr/etc/{shadow}"))
     missing = []
-    for line in load(f"/etc/{table}"):
-        fields = line.split(":")
-        if len(fields) < 2 or fields[0] in have or fields[1] != "x":
-            continue
-        missing.append(line_for(fields))
+    seen = set()
+    for source in (f"/etc/{table}", f"/usr/lib/{table}"):
+        for line in load(source):
+            fields = line.split(":")
+            name = fields[0]
+            if len(fields) < 2 or name in have or name in seen:
+                continue
+            seen.add(name)
+            if name in image:
+                missing.append(image[name])
+            elif source.startswith("/etc/") and fields[1] == "x":
+                missing.append(fallback(fields))
     if not missing:
         return
     with open(path, "a") as f:
         f.write("".join(m + "\n" for m in missing))
     names = ", ".join(m.split(":", 1)[0] for m in missing)
-    print(f"/etc/{shadow}: added locked entries for {names}")
+    print(f"/etc/{shadow}: added entries for {names}")
 
 
 today = int(time.time() // 86400)
