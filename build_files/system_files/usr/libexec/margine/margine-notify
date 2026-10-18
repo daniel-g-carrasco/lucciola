@@ -16,17 +16,33 @@
 # .desktop via hint never showed up on the lock screen at all in the
 # same tests. Don't "simplify" back to notify-send or hints.
 #
-# Usage: margine-notify [-u low|normal|critical] [-i ICON] [-d DESKTOP_ID]
-#                       SUMMARY BODY
-# Defaults: -u normal, -i margine-logo, app name "Margine".
+# Usage: margine-notify [-u low|normal|critical] [-i ICON] [-a APP_NAME]
+#                       [-d DESKTOP_ID] SUMMARY BODY
+# Defaults: -u normal; the product's icon and name, so the sender shown
+# in the notification list and on the lock screen is the system's own:
+#   icon  os-release LOGO (lucciola-logo, the firefly on its tile), else
+#         margine-logo (in the image as an alias of the same tile);
+#   name  /usr/share/margine/product-name (Lucciola), else os-release
+#         NAME, else "Margine OS".
 # Exit: non-zero when no notification daemon answered (callers use this
 # to retry at the next tick instead of burning their once-only stamps).
 set -euo pipefail
 
+os_release_value() {  # os_release_value KEY: the value, quotes removed
+  local line
+  line="$(/usr/bin/grep -m1 "^$1=" /etc/os-release 2>/dev/null || true)"
+  line="${line#*=}"; line="${line#\"}"; line="${line%\"}"
+  printf '%s' "$line"
+}
+
 URGENCY=1
-ICON="margine-logo"
+ICON="$(os_release_value LOGO)"
+ICON="${ICON:-margine-logo}"
+APP_NAME="$(head -n1 /usr/share/margine/product-name 2>/dev/null || true)"
+[[ -n "$APP_NAME" ]] || APP_NAME="$(os_release_value NAME)"
+APP_NAME="${APP_NAME:-Margine OS}"
 DESKTOP_ID=""
-while getopts "u:i:d:" opt; do
+while getopts "u:i:a:d:" opt; do
   case "$opt" in
     u) case "$OPTARG" in
          low) URGENCY=0 ;;
@@ -35,17 +51,19 @@ while getopts "u:i:d:" opt; do
          *) echo "margine-notify: bad urgency '$OPTARG'" >&2; exit 2 ;;
        esac ;;
     i) ICON="$OPTARG" ;;
+    a) APP_NAME="$OPTARG" ;;
     d) DESKTOP_ID="$OPTARG" ;;
     *) exit 2 ;;
   esac
 done
 shift $((OPTIND - 1))
-SUMMARY="${1:?usage: margine-notify [-u urgency] [-i icon] [-d desktop-id] SUMMARY BODY}"
+SUMMARY="${1:?usage: margine-notify [-u urgency] [-i icon] [-a app-name] [-d desktop-id] SUMMARY BODY}"
 BODY="${2:-}"
 
 # ICON/DESKTOP_ID land inside GVariant text; they are controlled values
 # (icon names, reverse-DNS ids), but refuse quotes rather than corrupt
-# the dict syntax if a caller ever gets creative.
+# the dict syntax if a caller ever gets creative. APP_NAME, SUMMARY and
+# BODY are plain string arguments, which gdbus quotes itself.
 case "${ICON}${DESKTOP_ID}" in
   *"'"*) echo "margine-notify: quotes not allowed in icon/desktop id" >&2; exit 2 ;;
 esac
@@ -59,4 +77,4 @@ exec gdbus call --session \
   --dest org.freedesktop.Notifications \
   --object-path /org/freedesktop/Notifications \
   --method org.freedesktop.Notifications.Notify -- \
-  "Margine" 0 "$ICON" "$SUMMARY" "$BODY" "[]" "$HINTS" "-1" >/dev/null
+  "$APP_NAME" 0 "$ICON" "$SUMMARY" "$BODY" "[]" "$HINTS" "-1" >/dev/null
