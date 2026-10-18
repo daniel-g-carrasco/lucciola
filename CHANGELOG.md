@@ -240,6 +240,14 @@ stable release is cut.
   GNOME release.
 
 ### Changed (login screen)
+- **A calmer login screen.** The wallpaper behind the login card is
+  Lucciola's own, blurred and a little darker, so the card and the firefly
+  logo stand out; the card and the fields take the deep blues of its sky
+  instead of the desktop's greys, and the palette button in the top right
+  corner is gone. Installed systems get it with the update, nothing to do.
+  The look is now fixed in the image: Noctalia's Sync Now still brings the
+  screen layout, and a wallpaper you picked in Noctalia, but no longer the
+  desktop's colours and font.
 - **The login screen is Noctalia Greeter on greetd**, in place of GDM: the
   same look as the desktop (dark, the Lucciola palette, JetBrains Mono, the
   Margine wallpaper), Lucciola preselected, GNOME and GNOME Classic in the

@@ -297,8 +297,9 @@ log "greetd PAM stack: $(grep -cvE '^[[:space:]]*(#|$)' /usr/lib/pam.d/greetd) l
 #     systems that never had one.
 install -m 0644 /usr/share/lucciola/greetd/config.toml /etc/greetd/config.toml
 rm -f /etc/greetd/config.toml.rpmnew /etc/greetd/config.toml.rpmsave
-python3 - /etc/greetd/config.toml /usr/share/wayland-sessions/lucciola.desktop /usr/share/lucciola/greeter/sync.toml <<'PY'
-import sys, tomllib
+python3 - /etc/greetd/config.toml /usr/share/wayland-sessions/lucciola.desktop /usr/share/lucciola/greeter/sync.toml \
+  /usr/share/lucciola/greeter/greeter.toml <<'PY'
+import os, sys, tomllib
 conf = tomllib.load(open(sys.argv[1], "rb"))
 d = conf.get("default_session", {})
 if not d.get("command", "").endswith("/usr/bin/noctalia-greeter-session") or d.get("user") != "greetd":
@@ -309,6 +310,23 @@ name = next((l.split("=", 1)[1].strip() for l in open(sys.argv[2]) if l.startswi
 last = tomllib.load(open(sys.argv[3], "rb")).get("session", {}).get("last")
 if last != name:
     sys.exit(f"ERROR: the greeter's seeded session '{last}' is not the session file's Name= '{name}'")
+# The look in greeter.toml (see its header): the greeter takes colours, font
+# and corners from it only with a complete palette, so a missing role would
+# silently hand the login screen back to sync.toml.
+roles = {"primary", "on_primary", "secondary", "on_secondary", "tertiary", "on_tertiary", "error", "on_error",
+         "surface", "on_surface", "surface_variant", "on_surface_variant", "outline", "shadow", "hover", "on_hover"}
+a = tomllib.load(open(sys.argv[4], "rb")).get("appearance", {})
+missing = sorted(roles - set(a.get("palette", {})))
+if missing:
+    sys.exit(f"ERROR: {sys.argv[4]} has an incomplete [appearance.palette], missing {missing}")
+for key in ("font_family", "corner_radius_scale", "theme_mode"):
+    if key not in a:
+        sys.exit(f"ERROR: {sys.argv[4]} sets the palette without {key}, which then falls back to the greeter's default")
+if a.get("scheme") != "Synced":
+    sys.exit(f"ERROR: {sys.argv[4]} must pin scheme = \"Synced\" for its palette to show")
+wall = a.get("wallpaper", {}).get("path", "")
+if not os.path.isfile(wall) or os.path.getsize(wall) == 0:
+    sys.exit(f"ERROR: the login wallpaper '{wall}' named in {sys.argv[4]} is missing")
 PY
 sessions="$(noctalia-greeter sessions)"
 grep -qx 'Lucciola' <<<"$sessions" && grep -qx 'GNOME' <<<"$sessions" \

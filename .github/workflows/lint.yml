@@ -113,6 +113,14 @@ jobs:
         # is tested. See tests/login-migrate.test.sh.
         run: bash tests/login-migrate.test.sh
 
+      - name: Login screen look (Noctalia Greeter)
+        # The greeter uses greeter.toml's colours, font and corners only
+        # with a complete palette, and installed systems get the look only
+        # through that file: what it must hold, and that the wallpaper SVGs
+        # are what make-wallpaper.py writes, is tested.
+        # See tests/greeter-look.test.sh.
+        run: bash tests/greeter-look.test.sh
+
       - name: Welcome window at the first login
         # session-start opens it for new users until it is closed once, and
         # never for accounts that had Lucciola sessions before it existed.
