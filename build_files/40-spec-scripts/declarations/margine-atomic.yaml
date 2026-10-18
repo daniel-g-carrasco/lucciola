@@ -405,6 +405,7 @@ host_packages:
       - nautilus
       - gnome-system-monitor
       - gnome-bluetooth
+      - zenity          # Noctalia, distrobox-export, gnome-session; came with the gaming bake until 2026-10-18
       # Fedora 45's base dropped these; Margine kept them (15-devstack).
       - NetworkManager-ssh-gnome
       - nm-connection-editor

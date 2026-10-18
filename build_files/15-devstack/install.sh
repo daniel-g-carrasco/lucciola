@@ -101,6 +101,11 @@ DECLARED_PKGS=(
   jetbrains-mono-fonts cascadia-code-fonts # fonts
   tmux                                     # core_cli (the base ships it)
   btop                                     # Lucciola's system monitor: Mod+Ctrl+T in the niri config
+  # zenity: Noctalia, distrobox-export and gnome-session call it, and the
+  # validator's desktop list expects it. silverblue-main lacks it; until
+  # 2026-10-18 it was in the image only as a dependency of steam left behind
+  # by the gaming bake in custom-kernel.
+  zenity
   # Bluefin shipped it; Universal Blue's main images do not (silverblue-main
   # trial, 2026-10-10). fastfetch is what 50-branding configures.
   fastfetch
