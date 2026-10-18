@@ -127,13 +127,20 @@ FROM ${BASE_IMAGE}
 # would also work and is what proved the diagnosis, but the runner's
 # buildah drops --mount=type=secret in that mode, and the kernel layer
 # is the one place we need the MOK key.)
+# Kernel flavour (2026-10-18). cachyos = kernel-cachyos from COPR, built
+# for x86-64-v3, MOK-signed: every published tag but one. fedora = the
+# kernel reserve: the base's own Fedora kernel stays, signed by Fedora and
+# built for any x86-64 CPU; everything else is the same build.
+# build-fedora-kernel.yml passes --build-arg KERNEL_FLAVOR=fedora and
+# publishes :fedora-kernel (custom-kernel/install.sh says what differs).
+ARG KERNEL_FLAVOR=cachyos
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache \
     --mount=type=cache,dst=/var/log \
     --mount=type=tmpfs,dst=/tmp \
     --mount=type=secret,id=mok-key,target=/run/margine-certs/MOK.key \
     --mount=type=secret,id=mok-cert,target=/run/margine-certs/MOK.pem \
-    /ctx/custom-kernel/install.sh \
+    env KERNEL_FLAVOR="${KERNEL_FLAVOR}" /ctx/custom-kernel/install.sh \
  && /ctx/build.sh
 
 # ----- Lucciola: niri + Noctalia, GNOME kept stock as the fallback session -----

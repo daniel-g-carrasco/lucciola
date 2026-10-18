@@ -285,9 +285,12 @@ fi
 log "Installed: GDM background + greeter logo overrides"
 
 # (e) /etc/issue — text-mode banner shown on console (e.g. emergency shell)
-cat > /etc/issue <<'EOF'
-Lucciola \r (\m): Fedora Silverblue + CachyOS signed kernel
-\d \t
+# The kernel reserve (custom-kernel's kernel-flavor marker) names its own.
+kernel_desc="CachyOS signed kernel"
+[[ "$(cat /usr/share/margine/kernel-flavor 2>/dev/null)" == fedora ]] && kernel_desc="Fedora's kernel"
+cat > /etc/issue <<EOF
+Lucciola \\r (\\m): Fedora Silverblue + ${kernel_desc}
+\\d \\t
 
 EOF
 chmod 0644 /etc/issue
