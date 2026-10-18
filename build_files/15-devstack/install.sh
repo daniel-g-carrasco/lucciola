@@ -198,11 +198,12 @@ fi
 # from Docker's repository (key pinned by fingerprint, same as the key
 # check here used to do) for the few tools wired to Docker's own daemon.
 
-# --- 3. VS Code: a Flatpak since 2026-10-10 ------------------------------
-# com.visualstudio.code is in the preinstall list (20-flatpaks); the RPM a
-# base ships is removed by 12-base-trim, and `ujust margine-vscode` layers
-# it from Microsoft's repository (key pinned) for whoever needs the native
-# build, e.g. extensions that run host tools.
+# --- 3. VS Code: on demand ------------------------------------------------
+# The RPM a base ships is removed by 12-base-trim; `ujust margine-vscode`
+# layers it from Microsoft's repository (key pinned) for whoever needs the
+# native build, e.g. extensions that run host tools. The Flatpak
+# (com.visualstudio.code) was preinstalled from 2026-10-10 to 2026-10-18;
+# now it is in Bazaar like any other app.
 
 # --- 3b. uupd, the updater margine-update drives ---------------------------
 # Bluefin ships it; Universal Blue's main images install ublue-os-just and

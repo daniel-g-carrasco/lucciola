@@ -119,7 +119,7 @@ TRIM_PKGS=(
   sysprof sysprof-cli libsysprof-capture igt-gpu-tools
   gcc gcc-c++ cpp gcc-plugin-annobin glibc-devel libstdc++-devel kernel-headers kernel-cachyos-devel systemtap-devel
   tailscale incus incus-agent rclone restic borgbackup
-  code                                                      # VS Code RPM: the Flatpak is preinstalled, `ujust margine-vscode` layers the RPM
+  code                                                      # VS Code RPM: `ujust margine-vscode` layers it
 )
 
 # What the x86 VMs keep: the x86 system emulator with its UEFI firmware,

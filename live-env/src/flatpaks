@@ -9,7 +9,6 @@
 # written by build_files/build.sh. Kept in sync manually for now.
 app.zen_browser.zen
 org.mozilla.thunderbird_esr
-com.bitwarden.desktop
 org.libreoffice.LibreOffice
 org.gnome.Snapshot
 org.gnome.Showtime
@@ -20,8 +19,6 @@ org.gnome.Calculator
 org.gnome.Calendar
 org.gnome.clocks
 org.gnome.Contacts
-org.gnome.Weather
-org.gnome.Maps
 org.gnome.TextEditor
 org.gnome.baobab
 org.gnome.Characters
@@ -53,8 +50,6 @@ com.github.wwmm.easyeffects
 # min instead of instant — acceptable for a DAW that's not in the
 # first-5-minute critical path).
 com.github.neithern.g4music
-com.rafaelmardojai.Blanket
-de.haeckerfelix.Fragments
 # DistroShelf — pet-container manager (distrobox GUI). Bluefin DX
 # installs it via /usr/share/ublue-os/homebrew/system-flatpaks.Brewfile
 # at first boot. Margine does not go through brew for system Flatpaks

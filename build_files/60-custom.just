@@ -607,10 +607,10 @@ margine-slim:
         creator apps: GIMP, Inkscape, darktable, OBS Studio — and
         stops it re-installing anything removed below at every boot)
       - remove the tinkerer apps: Apostrophe, Audacity, EasyEffects,
-        DistroShelf, Extension Manager, Fragments, Pinta, G4Music,
-        Blanket
-      - keep: Zen, Thunderbird, Bitwarden, LibreOffice and the whole
-        GNOME core suite
+        DistroShelf, Pinta, G4Music (and Extension Manager, Fragments,
+        Blanket where an older install still has them)
+      - keep: Zen, Thunderbird, LibreOffice and the whole GNOME core
+        suite
 
     Everything is reversible: ujust margine-slim-restore brings the
     stock set back, and single apps can be reinstalled from Bazaar.
@@ -644,8 +644,9 @@ margine-naked: margine-slim
     cat <<'EOF'
     == Margine naked profile (on top of slim) ==
 
-    This ALSO removes: LibreOffice, Thunderbird, Bitwarden, Maps,
-    Weather, Contacts, Sound Recorder, Impression, Deja Dup.
+    This ALSO removes: LibreOffice, Thunderbird, Contacts, Sound
+    Recorder, Impression, Deja Dup (and Bitwarden, Maps, Weather where
+    an older install still has them).
     EOF
     read -rp "Continue? [y/N] " ans
     case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted (slim profile already applied)."; exit 0 ;; esac
@@ -1456,10 +1457,11 @@ margine-tailscale ACTION="install":
       *) echo "usage: ujust margine-tailscale [install|remove|status]"; exit 2 ;;
     esac
 
-# VS Code as an RPM, on demand. The image preinstalls the Flatpak
-# (com.visualstudio.code); extensions that run host tools (a terminal on the
-# host, gh, podman, rpm-ostree) need the native build. Layers it from
-# Microsoft's repository, signing key pinned by fingerprint.
+# VS Code as an RPM, on demand. Nothing is preinstalled since 2026-10-18
+# (the Flatpak com.visualstudio.code is in Bazaar); extensions that run
+# host tools (a terminal on the host, gh, podman, rpm-ostree) need the
+# native build. Layers it from Microsoft's repository, signing key pinned
+# by fingerprint.
 # VS Code native RPM from Microsoft's repository: install (default) / remove / status.
 [group('Developer')]
 margine-vscode ACTION="install":
@@ -1467,11 +1469,11 @@ margine-vscode ACTION="install":
     set -euo pipefail
     case "{{ ACTION }}" in
       status)
-        rpm -q code >/dev/null 2>&1 && echo "VS Code RPM: installed ($(rpm -q --qf '%{VERSION}' code))" || echo "VS Code RPM: not installed (the Flatpak com.visualstudio.code is the default)" ;;
+        rpm -q code >/dev/null 2>&1 && echo "VS Code RPM: installed ($(rpm -q --qf '%{VERSION}' code))" || echo "VS Code RPM: not installed (the Flatpak com.visualstudio.code is in Bazaar)" ;;
       remove)
         sudo rpm-ostree uninstall code
         sudo rm -f /etc/yum.repos.d/vscode.repo
-        echo "VS Code RPM removed; the Flatpak stays. Reboot to apply." ;;
+        echo "VS Code RPM removed (a Flatpak VS Code, if installed, stays). Reboot to apply." ;;
       install)
         tmp="$(mktemp)"
         printf '%s\n' '[code]' 'name=Visual Studio Code' 'baseurl=https://packages.microsoft.com/yumrepos/vscode' \
@@ -1480,7 +1482,7 @@ margine-vscode ACTION="install":
           https://packages.microsoft.com/keys/microsoft.asc BC528686B50D79E339D3721CEB3E94ADBE1229CF
         rm -f "$tmp"
         sudo rpm-ostree install --idempotent code
-        echo "VS Code RPM layered. Reboot; both the Flatpak and the RPM then appear in the Dev folder." ;;
+        echo "VS Code RPM layered. Reboot to use it." ;;
       *) echo "usage: ujust margine-vscode [install|remove|status]"; exit 2 ;;
     esac
 

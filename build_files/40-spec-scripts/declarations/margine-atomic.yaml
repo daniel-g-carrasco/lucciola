@@ -470,16 +470,17 @@ flatpaks:
     # This list had rotted to 13 entries (one with a wrong id:
     # org.mozilla.Thunderbird vs the shipped thunderbird_esr) by
     # 2026-06-12; realigned during the code-quality review.
+    # Not preinstalled since 2026-10-18: com.visualstudio.code (`ujust
+    # margine-vscode` layers the RPM), com.bitwarden.desktop,
+    # org.gnome.Weather, org.gnome.Maps, com.rafaelmardojai.Blanket,
+    # de.haeckerfelix.Fragments. Installed systems keep them.
     internet:
       - app.zen_browser.zen
-      - de.haeckerfelix.Fragments
     productivity:
-      - com.bitwarden.desktop
       - org.mozilla.thunderbird_esr
       - org.libreoffice.LibreOffice
       - com.github.jeromerobert.pdfarranger  # merge, split, reorder PDF pages (2026-09-19)
       - com.github.johnfactotum.Foliate  # e-book reader: EPUB, MOBI, FB2, CBZ (2026-10-09)
-      - com.visualstudio.code  # VS Code (2026-10-10); `ujust margine-vscode` layers the RPM instead
     gnome_core:
       # Silverblue ships these as RPMs; Bluefin DX strips them; Margine
       # restores them as Flatpaks for a complete GNOME desktop without
@@ -488,8 +489,6 @@ flatpaks:
       - org.gnome.Calendar
       - org.gnome.clocks
       - org.gnome.Contacts
-      - org.gnome.Weather
-      - org.gnome.Maps
       - org.gnome.TextEditor
       - org.gnome.baobab
       - org.gnome.Characters
@@ -514,7 +513,6 @@ flatpaks:
       - com.obsproject.Studio
       - io.github.wartybix.Constrict  # video compression to a target size (2026-09-19)
       - com.github.wwmm.easyeffects
-      - com.rafaelmardojai.Blanket
     system_utilities:
       - com.ranfdev.DistroShelf
       - com.github.tchx84.Flatseal
