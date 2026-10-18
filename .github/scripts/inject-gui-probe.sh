@@ -141,8 +141,12 @@ tee -a "$ETC/passwd" >/dev/null <<<'smoke:x:1010:1010:GUI smoke:/var/home/smoke:
 tee -a "$ETC/group"  >/dev/null <<<'smoke:x:1010:'
 tee -a "$ETC/shadow" >/dev/null <<<"smoke:${SMOKE_HASH}:20000:0:99999:7:::"
 tee -a "$ETC/gshadow" >/dev/null <<<'smoke:!::'
-mkdir -p "$VAR/home/smoke/.config"
+#    welcome-seen keeps Lucciola's first-login welcome window closed: the
+#    probes only ask niri and Noctalia over IPC, but a window nobody reads
+#    is one more thing starting during the measured boot.
+mkdir -p "$VAR/home/smoke/.config" "$VAR/home/smoke/.local/state/lucciola"
 touch "$VAR/home/smoke/.config/gnome-initial-setup-done"
+touch "$VAR/home/smoke/.local/state/lucciola/welcome-seen"
 chown -R 1010:1010 "$VAR/home/smoke"
 mkdir -p "$ETC/margine-smoke"
 ( umask 077; printf '%s\n' "$SMOKE_PW" > "$ETC/margine-smoke/smoke-password" )

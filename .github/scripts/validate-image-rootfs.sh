@@ -308,6 +308,15 @@ check_nonempty "usr/share/icons/hicolor/scalable/apps/lucciola-guide.svg" "A.4.b
 check_nonempty "usr/share/lucciola/guide/index.html" "A.4.bis"
 check_exec "usr/libexec/margine/guide-open" "A.4.bis"
 grep -q 'id="guide"' "$ROOTFS/usr/share/lucciola/guide/index.html" 2>/dev/null || { echo "::error::A.4.bis the shipped guide page has no guide view"; fail=1; }
+# The first-login welcome window: its launcher (named after the app id, so
+# the window matches it) and the session hook that opens it.
+check_exec "usr/libexec/margine/welcome" "A.4.bis"
+grep -qxF 'Exec=/usr/libexec/margine/welcome' "$ROOTFS/usr/share/applications/dev.margine.Welcome.desktop" 2>/dev/null \
+  || { echo "::error::A.4.bis the Lucciola Welcome launcher is missing or does not run /usr/libexec/margine/welcome"; fail=1; }
+grep -qF 'const APP_ID = "dev.margine.Welcome";' "$ROOTFS/usr/libexec/margine/welcome" 2>/dev/null \
+  || { echo "::error::A.4.bis the welcome window's app id no longer matches dev.margine.Welcome.desktop"; fail=1; }
+grep -qF -- '--first-login' "$ROOTFS/usr/libexec/lucciola/session-start" 2>/dev/null \
+  || { echo "::error::A.4.bis session-start no longer opens the welcome window at the first login"; fail=1; }
 check_nonempty "usr/share/icons/hicolor/scalable/apps/margine-scheduler.svg" "A.4.bis"
 grep -qxF 'Icon=margine-scheduler' "$ROOTFS/usr/share/applications/margine-scheduler.desktop" || { echo "::error::A.4.bis scheduler launcher does not use margine-scheduler icon"; fail=1; }
 for f in usr/share/margine/offline-docs usr/share/applications/margine-documentation.desktop \
