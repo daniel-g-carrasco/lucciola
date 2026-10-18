@@ -18,7 +18,7 @@
 # depend on. Two classes: the virtualisation/container/IDE stack (sections
 # 1-4), and the host packages margine-atomic.yaml declares that were only
 # ever present because DX shipped them (section 1b: diagnostics, fonts,
-# the tray extension the dconf defaults enable, tmux, rocminfo...). Found
+# tmux, rocminfo...). Found
 # by diffing a build on the plain base against today's image (2026-08-25:
 # 418 packages present today and absent there; 17 of them declared).
 # Nothing more: DX also ships cockpit, bpf tooling, the rest of rocm,
@@ -71,9 +71,11 @@ fi
 # rule: install only what is missing, so today's base sees no change.
 # google-noto-sans-cjk-fonts is deliberately absent: the plain base ships
 # its successor google-noto-sans-cjk-vf-fonts, and 14-fonts (separate PR
-# from main) moves the declaration and today's image to the vf package. dash-to-dock is not an RPM on any base:
-# Bluefin bakes it from upstream as an unpackaged extension (#379 fixed
-# the declaration that listed the Fedora package).
+# from main) moves the declaration and today's image to the vf package.
+# No GNOME Shell extension is installed here (2026-10-18): GNOME is
+# Lucciola's stock fallback session, and the four Margine enabled
+# (AppIndicator, Dash to Dock, Caffeine, GSConnect) went with the rest of
+# Margine's Shell customisation.
 # vkBasalt is declared (desktop_host_helpers) and present in today's image,
 # but not because DX ships it: it was a leftover of the GAMING_BAKE
 # transaction in custom-kernel (lutris dragged in vkBasalt and wine as
@@ -86,20 +88,15 @@ DECLARED_PKGS=(
   mesa-demos vulkan-tools                  # media_diagnostics
   rocminfo rocm-opencl                     # amd_gpu_extras
   lm_sensors powertop powerstat smartmontools  # hardware_diagnostics
-  gnome-shell-extension-appindicator       # gnome_tools: enabled by 30-gnome-defaults
-  nautilus-python                          # gnome_tools: Files extensions (Spola's sync emblems);
-                                           # today in the image only as a dependency of gsconnect
+  nautilus-python                          # gnome_tools: Files extensions (Spola's sync emblems)
   jetbrains-mono-fonts cascadia-code-fonts # fonts
   tmux glow                                # core_cli
   podman-tui                               # container_tooling
   python3-pip                              # build_essentials
   virt-install                             # not declared: the margine-vm just recipes call it
-  # Bluefin shipped these; Universal Blue's main images do not (silverblue-main
-  # trial, 2026-10-10). fastfetch is what 50-branding configures; the three
-  # extensions are in 30-gnome-defaults' enabled set (Bluefin built the first
-  # two from git, Fedora packages them).
+  # Bluefin shipped it; Universal Blue's main images do not (silverblue-main
+  # trial, 2026-10-10). fastfetch is what 50-branding configures.
   fastfetch
-  gnome-shell-extension-dash-to-dock gnome-shell-extension-caffeine gnome-shell-extension-gsconnect
   # Found by diffing the last Bluefin DX image against the first on
   # silverblue-main (2026-10-11): users had these, the new base lacks them.
   ptyxis                                   # THE terminal: Super+Return, ujust recipes, the dconf default
@@ -116,17 +113,6 @@ DECLARED_PKGS=(
   # retired it (NetworkManager 1.58 Obsoletes NetworkManager-vpnc{,-gnome}).
   NetworkManager-ssh-gnome sshpass nm-connection-editor
 )
-# Bluefin ships Dash to Dock and Caffeine as plain directories built from
-# git; Fedora's packages install into the same directories. A package laid
-# over a directory nothing owns would mix two versions, so a directory the
-# rpm database does not know goes before its package comes in.
-for uuid in dash-to-dock@micxgx.gmail.com caffeine@patapon.info gsconnect@andyholmes.github.io; do
-  d="/usr/share/gnome-shell/extensions/$uuid"
-  [[ -d "$d" ]] || continue
-  rpm -qf "$d" >/dev/null 2>&1 && continue
-  log "removing the base's unpackaged $uuid before the Fedora package"
-  rm -rf "$d"
-done
 mapfile -t NEED < <(missing "${DECLARED_PKGS[@]}")
 if (( ${#NEED[@]} == 0 )); then
   log "declared host packages already in the base (${#DECLARED_PKGS[@]} present)"

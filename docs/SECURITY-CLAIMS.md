@@ -45,7 +45,7 @@ monthly review lists it until then.
 | D2 | Default firewall zone | keep `FedoraWorkstation` (high ports open, Fedora default) or ship a stricter Margine zone | 2026-10-31 |
 | D3 | LLMNR (systemd-resolved, port 5355 on all interfaces) | keep the Fedora default or turn it off | 2026-11-30 |
 | D4 | `tailscaled` is enabled by default (inherited from Bluefin) and opens a UDP port on all interfaces | decided 2026-10-10: not shipped; `ujust margine-tailscale` layers and enables it on request | done |
-| D5 | GSConnect (KDE Connect protocol) listens on port 1716 TCP/UDP on every interface by default, paired phone or not, and the default firewall zone lets the LAN reach it | keep it on, ship it off until the user enables it, or restrict 1716 to the home/trusted zone | 2026-10-31 |
+| D5 | GSConnect (KDE Connect protocol) listens on port 1716 TCP/UDP on every interface by default, paired phone or not, and the default firewall zone lets the LAN reach it | moot since 2026-10-18: GSConnect left the image with the other GNOME Shell extensions (the Lucciola layer had removed it at build time since 2026-10-11) | done |
 
 ## Engineering items
 

@@ -126,27 +126,12 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     /ctx/custom-kernel/install.sh \
  && /ctx/build.sh
 
-# ----- Margine GNOME extensions: bake o-tiling + hide-cursor system-wide -----
-# Replaces the old per-user "install at first login via autostart"
-# pattern (margine-install-user-extensions) that was racy, shadowed
-# Bluefin's own search-light, and silently failed if the user logged
-# in before flatpak-preinstall.service had network. Bluefin + Bazzite
-# do this exact thing — extensions live in /usr/share/gnome-shell/
-# extensions/<uuid>/ at build time, dconf enables them, GDM picks them
-# up on first login with zero per-user state.
-RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
-    --mount=type=cache,dst=/var/cache \
-    --mount=type=cache,dst=/var/log \
-    --mount=type=tmpfs,dst=/tmp \
-    /ctx/build-margine-extensions.sh
-
 # ----- Lucciola: niri + Noctalia, GNOME kept stock as the fallback session -----
 # What used to be the second build FROM the published Margine image
 # (lucciola/Containerfile until 2026-10), now a step of this one: the
-# Lucciola files, then lucciola/build.sh, which installs niri and Noctalia,
-# removes the GNOME extensions and Shell defaults the steps above added, and
-# sets the public name. It still assumes it runs on the finished Margine
-# tree, so it stays after every Margine step.
+# Lucciola files, then lucciola/build.sh, which installs niri, Noctalia and
+# the greetd login screen and sets the public name. It still assumes it runs
+# on the finished Margine tree, so it stays after every Margine step.
 # Bump only together with a test boot: see the comment in lucciola/build.sh.
 # Version and release only: build.sh adds the base's Fedora tag (.fc44, .fc45).
 ARG NOCTALIA_VR=5.3.0-1

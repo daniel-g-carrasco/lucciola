@@ -19,7 +19,7 @@ on:
       - "build_files/60-custom.just"
       - ".github/scripts/validate-flatpak-refs.sh"
   schedule:
-    - cron: "23 8 * * 1" # Monday morning, alongside check-upstream-pins
+    - cron: "23 8 * * 1" # Monday morning
   workflow_dispatch:
 
 permissions:

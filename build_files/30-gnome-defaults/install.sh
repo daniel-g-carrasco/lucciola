@@ -186,25 +186,6 @@ else
 fi
 rm -f "$MOREWAITA_TMP"
 
-# Copy every GNOME extension's schema XML from its extension dir to the
-# global /usr/share/glib-2.0/schemas/ before compiling. Runtime
-# extension defaults live in dconf keyfiles above; this copy remains so
-# `gsettings get org.gnome.shell.extensions.* ...` works for diagnostics
-# and schema validation tools that only inspect the global schema source.
-log "Copying GNOME extension gschema files to /usr/share/glib-2.0/schemas/"
-for ext_dir in /usr/share/gnome-shell/extensions/*/; do
-  ext_schemas="${ext_dir}schemas"
-  [[ -d "$ext_schemas" ]] || continue
-  for xml in "$ext_schemas"/*.gschema.xml; do
-    [[ -f "$xml" ]] || continue
-    base=$(basename "$xml")
-    if [[ ! -f "/usr/share/glib-2.0/schemas/$base" ]]; then
-      cp "$xml" "/usr/share/glib-2.0/schemas/$base"
-      echo "  copied $base from $(basename "$(dirname "$ext_schemas")")"
-    fi
-  done
-done
-
 log "Compiling glib schemas"
 glib-compile-schemas /usr/share/glib-2.0/schemas
 

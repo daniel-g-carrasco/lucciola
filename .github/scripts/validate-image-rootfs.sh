@@ -342,18 +342,6 @@ fi
 test -x "$ROOTFS/usr/libexec/margine/staged-update-notify" \
   || { echo "::error::A.3.ter staged-update-notify missing"; fail=1; }
 
-# A.3.quater — legacy icon-name compat shims (2026-06-13). adwaita-icon-
-# theme 50 dropped these symbolic names, but the baked o-tiling extension
-# still references them and renders the broken-image placeholder without a
-# shim (build-margine-extensions.sh copies the closest Adwaita symbolic under
-# each legacy name). Assert the OUTCOME so a vanished source — which the build
-# only warns about — cannot silently re-introduce the placeholders.
-ICON_ACT="$ROOTFS/usr/share/icons/hicolor/scalable/actions"
-for ic in view-quilt-symbolic view-compact-symbolic border-all-symbolic; do
-  test -s "$ICON_ACT/${ic}.svg" \
-    || { echo "::error::A.3.quater icon shim ${ic}.svg missing/empty — baked extensions will show placeholder icons"; fail=1; }
-done
-
 if (( fail != 0 )); then
   echo "::error::First-boot asset validation FAILED — blocking rechunk/push/sign."
   exit 1
