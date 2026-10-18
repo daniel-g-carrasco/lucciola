@@ -190,9 +190,11 @@ else
 fi
 
 # 7. GNOME is the stock fallback: on disk only the extensions of Fedora's
-#    gnome-shell-extensions package (the GNOME Classic set), and none
-#    enabled in the defaults a user gets. The build adds none of Margine's
-#    (o-tiling and the rest) since 2026-10-18.
+#    gnome-shell-extensions package (the GNOME Classic set), and nothing
+#    but Fedora's own in the enabled list a user gets (Fedora's override
+#    names background-logo, which the image does not ship). The build adds
+#    none of Margine's (o-tiling and the rest) since 2026-10-18.
+stock_uuid() { [[ "$1" == *@gnome-shell-extensions.gcampax.github.com || "$1" == background-logo@fedorahosted.org ]]; }
 NONSTOCK=""
 for d in /usr/share/gnome-shell/extensions/*/; do
   [[ -d "$d" ]] || continue
@@ -200,12 +202,16 @@ for d in /usr/share/gnome-shell/extensions/*/; do
   [[ "$u" == *@gnome-shell-extensions.gcampax.github.com ]] || NONSTOCK+=" $u"
 done
 ENABLED_LIST="$(usettings org.gnome.shell enabled-extensions)"
+NONSTOCK_ON=""
+for u in $(sed -e 's/^@as //' -e "s/[][',]/ /g" <<<"$ENABLED_LIST"); do
+  stock_uuid "$u" || NONSTOCK_ON+=" $u"
+done
 if [[ -n "$NONSTOCK" ]]; then
   check GNOME_STOCK 1 "extensions outside GNOME's own set:$NONSTOCK (enabled-extensions=${ENABLED_LIST:-?})"
-elif [[ -n "$ENABLED_LIST" && "$ENABLED_LIST" != "@as []" ]]; then
-  check GNOME_STOCK 1 "extensions enabled for $SMOKE_USER by default: $ENABLED_LIST"
+elif [[ -n "$NONSTOCK_ON" ]]; then
+  check GNOME_STOCK 1 "extensions enabled for $SMOKE_USER by default:$NONSTOCK_ON"
 else
-  check GNOME_STOCK 0 "only GNOME's own extensions, none enabled (enabled-extensions=${ENABLED_LIST:-?})"
+  check GNOME_STOCK 0 "only GNOME's own extensions (enabled-extensions=${ENABLED_LIST:-?})"
 fi
 
 # 8. Gaming ujust recipe exists: `ujust --list` shows margine-gaming*.
