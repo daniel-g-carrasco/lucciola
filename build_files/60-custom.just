@@ -893,6 +893,24 @@ lucciola-update FORCE="":
     # layered systems must go through rpm-ostree.)
     sudo /usr/libexec/margine/system-update
 
+# Kernel: which one runs, or switch between the CachyOS kernel (:stable) and
+# Fedora's (the kernel reserve, :fedora-kernel): status / cachyos / fedora.
+# A bootc image carries one kernel, so this moves the install to the other
+# image (same commit, same base) at the next restart; the logic, the TPM
+# notice and the refusals live in /usr/libexec/margine/kernel-switch.
+[doc("Kernel: status, or switch between the CachyOS kernel (:stable) and Fedora's (:fedora-kernel).")]
+[group('Lucciola')]
+lucciola-kernel $ACTION="status":
+    #!/usr/bin/bash
+    set -uo pipefail
+    # ACTION arrives as an exported env var ($ on the param): a hostile
+    # argument stays inert data.
+    case "$ACTION" in
+      status|"")      exec /usr/libexec/margine/kernel-switch status ;;
+      cachyos|fedora) exec sudo /usr/libexec/margine/kernel-switch "$ACTION" ;;
+      *) echo "usage: ujust lucciola-kernel [status|cachyos|fedora]"; exit 1 ;;
+    esac
+
 # Enable/disable/inspect autologin on the login screen (greetd; default: status, read-only).
 [group('Lucciola')]
 lucciola-autologin ACTION="status" USER="":
@@ -2060,6 +2078,7 @@ alias margine-gaming-remove := lucciola-gaming-remove
 alias margine-grub-hidpi := lucciola-grub-hidpi
 alias margine-grub-lock := lucciola-grub-lock
 alias margine-home-stock := lucciola-home-stock
+alias margine-kernel := lucciola-kernel
 alias margine-keyring := lucciola-keyring
 alias margine-naked := lucciola-naked
 alias margine-netflix-1080p := lucciola-netflix-1080p

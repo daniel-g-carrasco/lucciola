@@ -1,0 +1,282 @@
+#!/usr/bin/bash
+# Switch an install between Lucciola's two kernels (2026-10-18).
+#
+#   cachyos  ghcr.io/daniel-g-carrasco/lucciola:stable: kernel-cachyos,
+#            built for x86-64-v3 and signed with the Margine key. What
+#            every install starts on.
+#   fedora   ghcr.io/daniel-g-carrasco/lucciola:<reserve tag>, the kernel
+#            reserve: the same image, from the same commit and the same
+#            base, with Fedora's own kernel (any x86-64 CPU, signed by
+#            Fedora). The tag lives in /usr/share/margine/kernel-reserve-tag.
+#
+# A bootc image carries one kernel, so switching kernels is switching
+# images: `rpm-ostree rebase`, as signed-origin does, because it keeps
+# layered packages (bootc switch refuses a layered deployment), verifies
+# the signature before it stages anything on the signed transport, and
+# applies at the next restart. The deployment running now stays in the
+# boot menu as the way back.
+#
+# TPM disk unlock (lucciola-tpm-unlock) binds the key to PCR 7. With
+# Secure Boot on, shim records in PCR 7 which certificate verified what it
+# starts: Fedora's (built into shim) for GRUB and for Fedora's kernel, the
+# Margine key from MokList for the CachyOS kernel. The two kernels give two
+# PCR 7 values, so the first start after a switch asks for the disk
+# passphrase, and `ujust lucciola-tpm-unlock enable` enrolls the TPM again
+# for the new one. This says so, and asks, before it changes anything. (With
+# Secure Boot off shim verifies nothing and records no certificate, so PCR 7
+# does not change.)
+#
+# Refuses, changing nothing: the CachyOS kernel on a CPU without x86-64-v3
+# (it hangs before printing anything), or with Secure Boot on and the
+# Margine key not enrolled (shim would refuse it); an install that follows
+# another image, a digest pin or an ostree remote.
+#
+# Usage: kernel-switch [status|cachyos|fedora]
+# Env:   CONFIRM=yes  answer the question with yes (scripts, tests)
+set -uo pipefail
+
+REPO="ghcr.io/daniel-g-carrasco/lucciola"
+STABLE_TAG="stable"
+TAG_FILE="${MARGINE_KERNEL_RESERVE_TAG_FILE:-/usr/share/margine/kernel-reserve-tag}"
+FLAVOR_FILE="${MARGINE_KERNEL_FLAVOR_FILE:-/usr/share/margine/kernel-flavor}"
+POLICY="${MARGINE_POLICY:-/etc/containers/policy.json}"
+CRYPTTAB="${MARGINE_CRYPTTAB:-/etc/crypttab}"
+LDSO="${MARGINE_LDSO:-/usr/lib64/ld-linux-x86-64.so.2}"
+CPUINFO="${MARGINE_CPUINFO:-/proc/cpuinfo}"
+MOK_HELPER="${MARGINE_MOK_HELPER:-/usr/libexec/margine/mok-enroll}"
+ACTION="${1:-status}"
+
+say() { echo "$*"; }
+die() { echo "error: $*" >&2; exit 1; }
+
+case "$ACTION" in
+  -h|--help|help) sed -n '2,35p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+esac
+
+RESERVE_TAG="$(head -n1 "$TAG_FILE" 2>/dev/null | tr -d '[:space:]')"
+[[ "$RESERVE_TAG" =~ ^[a-z0-9][a-z0-9._-]*$ ]] || die "no kernel reserve tag in $TAG_FILE"
+
+kernel_name() {  # kernel_name cachyos|fedora
+  case "$1" in
+    fedora) echo "Fedora's kernel" ;;
+    *)      echo "the CachyOS kernel" ;;
+  esac
+}
+
+# The flavour a tag of this repository carries: the reserve tag, its dated
+# copies (<tag>.YYYYMMDD) and a manual run's <tag>-test are Fedora's kernel;
+# every other tag (stable, candidate, stable.YYYYMMDD, pr-N) is CachyOS.
+tag_flavor() {
+  case "$1" in
+    "$RESERVE_TAG"|"$RESERVE_TAG".*|"$RESERVE_TAG"-*) echo fedora ;;
+    *) echo cachyos ;;
+  esac
+}
+
+# Booted and staged image references, one per line ("" when absent).
+read_refs() {
+  rpm-ostree status --json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    deps = json.load(sys.stdin).get("deployments", [])
+except ValueError:
+    deps = []
+booted = next((d for d in deps if d.get("booted")), {})
+staged = next((d for d in deps if d.get("staged")), {})
+print(booted.get("container-image-reference") or "")
+print(staged.get("container-image-reference") or "")
+' 2>/dev/null
+}
+
+# parse_ref <ref>: sets TRANSPORT, IMAGE and TAG; returns 1 (with WHY set)
+# for anything that is not a tag of this repository on a known transport.
+parse_ref() {
+  local ref="$1" rest
+  TRANSPORT="" IMAGE="" TAG="" WHY=""
+  [[ -n "$ref" ]] || { WHY="the booted deployment has no container image reference"; return 1; }
+  TRANSPORT="${ref%%:*}"
+  case "$TRANSPORT" in
+    ostree-image-signed|ostree-unverified-registry|ostree-unverified-image) ;;
+    *) WHY="it follows $ref, through a transport this does not handle; switch by hand"; return 1 ;;
+  esac
+  rest="${ref#*:}"; rest="${rest#docker://}"
+  case "$rest" in
+    "$REPO"@*|"$REPO":*@*) WHY="it is pinned to a digest ($rest): there is no tag to move"; return 1 ;;
+    "$REPO":*) IMAGE="$REPO"; TAG="${rest##*:}" ;;
+    *) WHY="it follows $rest, not $REPO"; return 1 ;;
+  esac
+  [[ "$TAG" =~ ^[A-Za-z0-9._-]+$ ]] || { WHY="unexpected tag in $ref"; return 1; }
+  return 0
+}
+
+# How the new reference is written: the signed transport whenever the policy
+# has a signature scope for the repository (signed-origin's rule), else the
+# form the install uses today.
+target_ref() {  # target_ref <tag>
+  if python3 -c "import json,sys; p=json.load(open(sys.argv[1])); r=p['transports']['docker'][sys.argv[2]][0]; sys.exit(0 if r.get('type')=='sigstoreSigned' else 1)" "$POLICY" "$REPO" 2>/dev/null; then
+    echo "ostree-image-signed:docker://${REPO}:$1"
+  elif [[ "$TRANSPORT" == ostree-unverified-registry ]]; then
+    echo "ostree-unverified-registry:${REPO}:$1"
+  else
+    echo "${TRANSPORT}:docker://${REPO}:$1"
+  fi
+}
+
+secure_boot_on() { [[ "$(mokutil --sb-state 2>/dev/null)" == *"SecureBoot enabled"* ]]; }
+
+# 0 = TPM unlock wired in crypttab, 1 = not, 2 = cannot tell (not root).
+tpm_state() {
+  [[ -e "$CRYPTTAB" ]] || return 1
+  [[ -r "$CRYPTTAB" ]] || return 2
+  grep -qE '(^|[,[:space:]])tpm2-device=' "$CRYPTTAB" && return 0
+  return 1
+}
+
+# The CachyOS kernel needs x86-64-v3. glibc's loader knows what the CPU
+# supports; /proc/cpuinfo's flags are the fallback.
+cpu_has_v3() {
+  local out flags f
+  out="$("$LDSO" --help 2>/dev/null)" || out=""
+  [[ "$out" == *"x86-64-v3 (supported"* ]] && return 0
+  [[ "$out" == *"x86-64-v3"* ]] && return 1
+  flags=" $(grep -m1 '^flags' "$CPUINFO" 2>/dev/null | cut -d: -f2) "
+  for f in avx avx2 bmi1 bmi2 f16c fma abm movbe xsave; do
+    [[ "$flags" == *" $f "* ]] || return 1
+  done
+  return 0
+}
+
+confirm() {
+  local ans
+  if [[ "${CONFIRM:-}" == yes ]]; then return 0; fi
+  read -r -p "$1 " ans || ans=""
+  [[ "$ans" == "$2" ]]
+}
+
+mapfile -t REFS < <(read_refs)
+BOOTED_REF="${REFS[0]:-}"
+STAGED_REF="${REFS[1]:-}"
+RUNNING="$(uname -r)"
+# The booted image says which kernel it carries; older images have no
+# marker, and then the release tells.
+RUNNING_FLAVOR="$(head -n1 "$FLAVOR_FILE" 2>/dev/null | tr -d '[:space:]')"
+if [[ "$RUNNING_FLAVOR" != fedora && "$RUNNING_FLAVOR" != cachyos ]]; then
+  RUNNING_FLAVOR=fedora
+  [[ "$RUNNING" == *cachy* ]] && RUNNING_FLAVOR=cachyos
+fi
+
+cmd_status() {
+  local followed="" fl
+  echo
+  printf '  %-14s %s (%s)\n' "Running" "$RUNNING" "$(kernel_name "$RUNNING_FLAVOR")"
+  if parse_ref "$BOOTED_REF"; then
+    fl="$(tag_flavor "$TAG")"
+    followed="$fl"
+    printf '  %-14s %s:%s (%s%s)\n' "Follows" "$IMAGE" "$TAG" "$(kernel_name "$fl")" \
+      "$([[ "$TRANSPORT" == ostree-image-signed ]] && echo ', signature checked' || echo ', signature NOT checked')"
+  else
+    printf '  %-14s %s\n' "Follows" "${BOOTED_REF:-unknown} ($WHY)"
+  fi
+  if [[ -n "$STAGED_REF" && "$STAGED_REF" != "$BOOTED_REF" ]]; then
+    printf '  %-14s %s (applies at the next restart)\n' "Staged" "$STAGED_REF"
+  fi
+  echo
+  if [[ "$followed" == cachyos ]]; then
+    echo "  Fedora's kernel instead (CPUs without x86-64-v3, or a CachyOS kernel"
+    echo "  that misbehaves): ujust lucciola-kernel fedora"
+  elif [[ "$followed" == fedora ]]; then
+    echo "  Back to the CachyOS kernel (:$STABLE_TAG): ujust lucciola-kernel cachyos"
+  fi
+  echo
+}
+
+cmd_switch() {
+  local want="$1" cur_ref cur_flavor target sb tpm=1
+  # A switch already staged counts as the current choice: asking again for
+  # it changes nothing, asking for the other kernel replaces it.
+  cur_ref="$BOOTED_REF"
+  [[ -n "$STAGED_REF" ]] && cur_ref="$STAGED_REF"
+  parse_ref "$cur_ref" || die "not switching: $WHY"
+  cur_flavor="$(tag_flavor "$TAG")"
+  if [[ "$cur_flavor" == "$want" ]]; then
+    if [[ "$cur_ref" == "$STAGED_REF" && "$STAGED_REF" != "$BOOTED_REF" ]]; then
+      say "$(kernel_name "$want") is already staged ($TAG): restart to use it (systemctl reboot)."
+    else
+      say "Already on $(kernel_name "$want") (following :$TAG). Nothing to do."
+    fi
+    return 0
+  fi
+
+  if [[ "$want" == fedora ]]; then
+    target="$(target_ref "$RESERVE_TAG")"
+  else
+    target="$(target_ref "$STABLE_TAG")"
+  fi
+
+  sb=0; secure_boot_on && sb=1
+  if [[ "$want" == cachyos ]]; then
+    cpu_has_v3 || die "this CPU lacks x86-64-v3, which the CachyOS kernel is built for: it would hang at startup before printing anything. Stay on Fedora's kernel. Nothing changed."
+    if (( sb )); then
+      local key
+      key="$("$MOK_HELPER" status 2>/dev/null || echo unknown)"
+      [[ "$key" == enrolled ]] || die "Secure Boot is on and the Margine key is not enrolled ($key): shim would refuse the CachyOS kernel. Enroll it first (ujust lucciola-secureboot enroll, restart, confirm the blue screen), then run this again. Nothing changed."
+    fi
+  fi
+
+  echo
+  say "Switch to $(kernel_name "$want"):"
+  say "  from  ${cur_ref}"
+  say "  to    ${target}"
+  say "It applies at the next restart. The system you run now stays in the boot"
+  say "menu as the way back (picking an entry needs no password, also with"
+  say "ujust lucciola-grub-lock on)."
+  tpm_state; tpm=$?
+  if (( tpm == 0 )) && (( sb )); then
+    echo
+    say "TPM DISK UNLOCK: the first boot of $(kernel_name "$want") will ask for the disk"
+    say "passphrase. The TPM releases the disk key only while the Secure Boot"
+    say "measurements (PCR 7) match the ones it was enrolled with, and they include"
+    say "which key signed the kernel: the Margine key for the CachyOS kernel, Fedora's"
+    say "key for Fedora's. Have the passphrase at hand. After that first boot, enroll"
+    say "the TPM for the new kernel:"
+    say "    ujust lucciola-tpm-unlock enable"
+    say "From then on the old kernel's entry in the boot menu is the one that asks."
+    echo
+    confirm "Type 'yes' to switch:" yes || die "aborted. Nothing changed."
+  else
+    if (( tpm == 0 )); then
+      say "TPM disk unlock: Secure Boot is off, so PCR 7 does not record the kernel's"
+      say "key and the TPM should keep unlocking. If the disk asks for the passphrase"
+      say "anyway, run 'ujust lucciola-tpm-unlock enable' once it has booted."
+    elif (( tpm == 2 )); then
+      say "TPM disk unlock: cannot read $CRYPTTAB (run this with sudo). If the disk"
+      say "unlocks with the TPM and Secure Boot is on, the first boot asks for the"
+      say "passphrase; then run 'ujust lucciola-tpm-unlock enable'."
+    fi
+    echo
+    confirm "Switch? [y/N]" y || die "aborted. Nothing changed."
+  fi
+
+  # Back to what is booted while a switch is staged: drop the staged one
+  # instead of staging a copy of the running system.
+  if [[ -n "$STAGED_REF" && "$target" == "$BOOTED_REF" ]]; then
+    rpm-ostree cleanup --pending || die "could not drop the staged switch"
+    say "The staged switch is dropped: the next boot stays on $(kernel_name "$want")."
+    return 0
+  fi
+  if ! rpm-ostree rebase "$target"; then
+    die "rpm-ostree could not stage $target (network, or the signature did not verify). Nothing changed."
+  fi
+  echo
+  say "Staged: restart to boot $(kernel_name "$want") (systemctl reboot)."
+  if (( tpm == 0 )) && (( sb )); then
+    say "After that first boot: ujust lucciola-tpm-unlock enable"
+  fi
+  return 0
+}
+
+case "$ACTION" in
+  status|"") cmd_status ;;
+  cachyos|fedora) cmd_switch "$ACTION" ;;
+  *) die "usage: ujust lucciola-kernel [status|cachyos|fedora]" ;;
+esac

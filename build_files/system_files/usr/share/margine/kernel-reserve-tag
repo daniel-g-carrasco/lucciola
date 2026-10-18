@@ -1,0 +1,12 @@
+fedora-kernel
+# Line 1 is the tag of the kernel reserve: Lucciola with Fedora's kernel
+# instead of the CachyOS one, ghcr.io/daniel-g-carrasco/lucciola:<tag>.
+# The one place the name lives in code. Read by
+#   /usr/libexec/margine/kernel-switch (ujust lucciola-kernel), on devices
+#   .github/workflows/build-fedora-kernel.yml, which publishes <tag>,
+#     <tag>.YYYYMMDD and the <tag>-test of a manual run
+#   .github/workflows/stale-image-alarm.yml
+# To rename: change line 1, then the "fedora-kernel*" pattern in
+# ghcr-cleanup.yml's exclude-tags and the docs (README, CHANGELOG, the
+# guide in site/index.html). Installs that follow the old tag keep
+# following it after it stops moving: move them before retiring it.
