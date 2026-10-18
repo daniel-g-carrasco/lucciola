@@ -1,5 +1,5 @@
 [Unit]
-Description=Margine: update the Flatpak apps installed for this user
+Description=Lucciola: update the Flatpak apps installed for this user
 Documentation=https://margine.dev/docs/updates-and-rollback
 # Nothing to do for accounts that never installed a per-user app.
 ConditionPathExistsGlob=%h/.local/share/flatpak/app/*

@@ -1,0 +1,22 @@
+# Lucciola: Noctalia Greeter's fixed settings. Linked as
+# /var/lib/noctalia-greeter/greeter.toml (lucciola-greeter.conf in
+# tmpfiles.d), so every image update brings the current version.
+#
+# Only what "Sync with Noctalia" never changes belongs here: a value set in
+# this file wins over sync.toml, so a colour, font or wallpaper set here would
+# make Sync do nothing. Lucciola's look is in sync.toml instead
+# (/usr/share/lucciola/greeter/sync.toml, copied once), where Sync replaces it.
+
+[appearance]
+# The logo at the bottom of the screen is Lucciola's firefly: the RPM puts
+# lucciola-mark.svg in place of Noctalia's logo (noctalia-greeter.spec,
+# Source1), since the greeter has no setting for its own logo. It is drawn
+# about 64 px high, tinted with the palette's on_surface.
+hide_logo = false
+
+[auth]
+# PAM asks one thing at a time. With fingerprint login turned on
+# (authselect's with-fingerprint), pam_fprintd waits for a finger before the
+# password: an empty Enter starts that wait, then a touch logs in. With
+# fingerprint off, an empty Enter just fails like a wrong password.
+allow_empty_password = true

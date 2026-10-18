@@ -1,5 +1,5 @@
 [Unit]
-Description=Margine: diagnose and self-heal a hung unattended update (%i)
+Description=Lucciola: diagnose and self-heal a hung unattended update (%i)
 
 [Service]
 Type=oneshot

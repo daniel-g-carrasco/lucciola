@@ -19,7 +19,9 @@ set -euo pipefail
 MODE="" IMAGE="" LOG="serial.log" TIMEOUT=1800 GUI_WATCH=0 MEM=4096
 SB_VARS="" TPM=0 SEC_WATCH=0 ALLOW_REBOOT=0
 KERNEL="" INITRD="" APPEND=""
-OK_REGEX='Started.*gdm\.service|Reached target graphical\.target|margine login:'
+# greetd is Lucciola's display manager (gdm stays for the live ISO and as
+# greetd's fallback); graphical.target is the marker that matters.
+OK_REGEX='Started.*(greetd|gdm)\.service|Reached target graphical\.target|(margine|lucciola) login:'
 FAIL_REGEX=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -160,14 +162,15 @@ for (( i = 1; i <= TIMEOUT; i++ )); do
     emit "passed=true"
     BOOT_OK=$i
     if (( GUI_WATCH )); then
-      # Layer C window for BOTH verdicts. Worst case from graphical:
-      # the unit's ExecStartPre sleep (~150s) + the niri wait (up to
-      # 300s) + the session settle poll (up to 90s) + the bar poll and
-      # the portal call (up to 135s, both quick when healthy) + branding,
-      # while the gaming dry-run (≤240s + rpm-ostreed wait) runs in the
-      # background. First boot is I/O-heavy, so allow 15 minutes; the
-      # outer --timeout (1800) and the 40-min job timeout still bound it.
-      GUI_DEADLINE=$((i + 900))
+      # Layer C window for BOTH verdicts. From graphical: the greetd login
+      # driver (autologin session up, logout, greeter, password login and
+      # the new session: 2-4 min when healthy), the user-smoke probe, then
+      # the GUI probe (a short settle, the bar poll and the portal call,
+      # up to 135s, quick when healthy, + branding), while the gaming
+      # dry-run (≤240s + rpm-ostreed wait) runs in the background. First
+      # boot is I/O-heavy, so allow 20 minutes; the outer --timeout (1800)
+      # and the job timeout still bound it.
+      GUI_DEADLINE=$((i + 1200))
     else
       break
     fi
@@ -180,7 +183,7 @@ for (( i = 1; i <= TIMEOUT; i++ )); do
     exit 1
   fi
   if [[ -n "$BOOT_OK" ]] && (( GUI_WATCH )); then
-    # Two independent warn-only verdicts share one window: the Layer C
+    # Two independent verdicts share one window: the Layer C
     # GUI probe and the gaming-native dry-run. Break only once BOTH are
     # decided (or the deadline passes) so neither masks the other.
     [[ -z "$GUI_RESULT" ]] && grep -q "MARGINE-GUI-SMOKE: PASS" "$LOG" && GUI_RESULT=pass
@@ -209,11 +212,14 @@ if [[ -n "$BOOT_OK" ]]; then
   if (( GUI_WATCH )); then
     # ---- Layer C verdict — WARN-ONLY until proven stable ----
     # (flip the warning paths to a hard fail after two green runs)
+    # The greetd login driver's steps first (autologin, greeter, password
+    # login, session, SELinux): a GUI FAIL usually starts there.
+    grep -E "MARGINE-GREETD:" "$LOG" | sed 's/^.*MARGINE-GREETD:/MARGINE-GREETD:/' | awk '!seen[$0]++' || true
     grep -E "MARGINE-GUI-SMOKE" "$LOG" || true
     emit "gui=${GUI_RESULT:-none}"
     case "$GUI_RESULT" in
       pass) echo "✓ Layer C GUI probe: PASS" ;;
-      fail) echo "::warning::Layer C GUI probe FAILED: Lucciola session unhealthy (niri/Noctalia/notifications/portal/coredump). See serial log artifact. This will become gating." ;;
+      fail) echo "::warning::Layer C GUI probe FAILED: login or Lucciola session unhealthy (greetd login/keyring/niri/Noctalia/notifications/portal/coredump). See the MARGINE-GREETD lines above and the serial log artifact. This will become gating." ;;
       *)    echo "::warning::Layer C GUI probe gave no verdict (injection skipped or probe stuck) — see inject step + serial log." ;;
     esac
 
@@ -235,16 +241,20 @@ if [[ -n "$BOOT_OK" ]]; then
     # (2026-09-02, after the RetroArch/retroarch depsolve broke
     # updates for gaming-native users while this was warn-only: "questo
     # tipo di cose NON deve ricapitare". A FAIL now blocks promotion;
-    # skip/timeout stay warnings so a stuck probe cannot wedge releases.)
+    # skip/timeout stay warnings so a stuck probe cannot wedge releases.
+    # Since 2026-10-18 the layer brings steam's whole 32-bit chain (the
+    # image no longer carries it) and a missing package list is a FAIL;
+    # build.yml resolves the same layer before the push, so a skip here
+    # is not the only check.)
     grep -E "MARGINE-GAMING-NATIVE" "$LOG" || true
     emit "gaming=${GAMING_RESULT:-none}"
     case "$GAMING_RESULT" in
       pass) echo "✓ Gaming-native layer resolves (rpm-ostree dry-run)" ;;
       fail)
-        echo "::error::Gaming-native layer does NOT resolve — every gaming-native rpm-ostree upgrade (and ujust margine-gaming-native) would fail to depsolve. GATING: not promoting. See serial log artifact."
+        echo "::error::Gaming-native layer does NOT resolve: every gaming-native rpm-ostree upgrade (and ujust lucciola-gaming-native) would fail to depsolve. GATING: not promoting. See serial log artifact."
         emit "passed=false"
         exit 1 ;;
-      skip) echo "::warning::Gaming-native check skipped (package list missing/empty in image)." ;;
+      skip) echo "::warning::Gaming-native check skipped (rpm-ostreed not ready or dry run timed out); build.yml's resolve check still ran." ;;
       *)    echo "::warning::Gaming-native check gave no verdict (probe skipped or stuck) — see inject step + serial log." ;;
     esac
   fi

@@ -1,5 +1,5 @@
 [Unit]
-Description=Margine: periodic check for long-staged updates
+Description=Lucciola: periodic check for long-staged updates
 
 [Timer]
 # Late enough that uupd's daily run (and any boot-time staging) has

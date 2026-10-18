@@ -5,8 +5,9 @@
 # a package, rebases to the NEW image, reboots and checks the result over
 # the serial console: the booted deployment, Secure Boot, failed units, the
 # layered package, the base's masked timers, Flathub only, uupd, the /etc
-# merge, the policy scope the next update is verified against, the
-# gaming-native dry run, the shipped validator. Written in Margine for the
+# merge, the policy scope the next update is verified against, the login
+# screen (GDM on margine:lucciola, greetd with Noctalia Greeter running
+# after the update), the gaming-native dry run, the shipped validator. Written in Margine for the
 # base switch of 2026-10-11 (Bluefin DX to Universal Blue's silverblue-main).
 #
 # In Lucciola its main job is the move real users will make: from

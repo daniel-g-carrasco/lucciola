@@ -14,10 +14,23 @@ boot script, hand-synced):
 
 Local /etc lines override factory ones for the same name, so a custom
 root shell or a real user account is never clobbered.
+
+Then, every time: an account or group the system knows (from /etc or from
+the image's /usr/lib through nss-altfiles) that has no /etc/shadow or
+/etc/gshadow line gets one, copied from the image's default in /usr/etc, or
+locked when the image has none (2026-10-18). A machine with layered packages
+gets its system accounts moved to /usr/lib/passwd by rpm-ostree, while its
+own /etc/shadow survives the update without the new account's line;
+systemd-sysusers then finds the account and writes nothing, PAM cannot look
+it up ("unix_chkpwd: could not obtain user info"), and user@<uid>.service
+failed for greetd after the move from margine:lucciola (upgrade-smoke).
+Existing lines are never touched; missing ones are appended in place, which
+keeps each file's mode, owner and SELinux label.
 """
 
 import os
 import sys
+import time
 
 
 def load(p):
@@ -42,9 +55,10 @@ if not force:
             break
     if not need_seed:
         print("/etc/passwd + /etc/group look populated, no seeding needed")
-        sys.exit(0)
+else:
+    need_seed = True
 
-for kind in ("passwd", "group"):
+for kind in ("passwd", "group") if need_seed else ():
     local = by_name(load(f"/etc/{kind}"))
     factory = by_name(load(f"/usr/lib/{kind}"))
     merged = dict(factory)
@@ -63,3 +77,40 @@ for kind in ("passwd", "group"):
             f.write(line + "\n")
     os.replace(tmp, f"/etc/{kind}")
     print(f"/etc/{kind}: was {len(local)} → now {len(merged)} (+{len(merged) - len(local)} from factory)")
+
+
+def add_missing_shadow(table, shadow, fallback):
+    """Append the missing /etc/<shadow> line of every account (or group) the
+    system knows, from /etc/<table> or the image's /usr/lib/<table>
+    (nss-altfiles). The line comes from the image's own default,
+    /usr/etc/<shadow>, when it has one; a shadowed /etc/<table> entry the
+    image does not know gets a locked line from `fallback`."""
+    path = f"/etc/{shadow}"
+    if not os.path.exists(path):
+        return
+    have = by_name(load(path))
+    image = by_name(load(f"/usr/etc/{shadow}"))
+    missing = []
+    seen = set()
+    for source in (f"/etc/{table}", f"/usr/lib/{table}"):
+        for line in load(source):
+            fields = line.split(":")
+            name = fields[0]
+            if len(fields) < 2 or name in have or name in seen:
+                continue
+            seen.add(name)
+            if name in image:
+                missing.append(image[name])
+            elif source.startswith("/etc/") and fields[1] == "x":
+                missing.append(fallback(fields))
+    if not missing:
+        return
+    with open(path, "a") as f:
+        f.write("".join(m + "\n" for m in missing))
+    names = ", ".join(m.split(":", 1)[0] for m in missing)
+    print(f"/etc/{shadow}: added entries for {names}")
+
+
+today = int(time.time() // 86400)
+add_missing_shadow("passwd", "shadow", lambda f: f"{f[0]}:!*:{today}::::::")
+add_missing_shadow("group", "gshadow", lambda f: f"{f[0]}:!::{f[3] if len(f) > 3 else ''}")

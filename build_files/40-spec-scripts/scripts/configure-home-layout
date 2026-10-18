@@ -2,6 +2,11 @@
 """
 Configure Margine's home layout from declarations.yaml.
 
+Opt-in in Lucciola (2026-10-18): new accounts keep the standard XDG
+folders, `ujust lucciola-bootstrap` no longer runs this, and nothing else
+does. Run it by hand to get Margine's layout; `ujust lucciola-home-stock`
+goes back.
+
 What this does:
   1. Create the home root directories declared in `home.roots`
      (~/data, ~/dev, ~/scratch) plus any subdirectories referenced
@@ -21,8 +26,8 @@ NOT applied here:
     user-dirs.dirs even though the directory is created.
 
 Usage:
-  margine-configure-home-layout            # dry-run (default)
-  margine-configure-home-layout --apply    # do it
+  lucciola-configure-home-layout            # dry-run (default)
+  lucciola-configure-home-layout --apply    # do it
 """
 import argparse
 import os
@@ -92,7 +97,7 @@ def plan_dirs(home_block: dict) -> list[Path]:
 
 def render_user_dirs(xdg_user_dirs: dict) -> str:
     lines = [
-        "# Written by margine-configure-home-layout.",
+        "# Written by lucciola-configure-home-layout.",
         "# Read by xdg-user-dirs-update (session start) and by GTK apps.",
         "",
     ]

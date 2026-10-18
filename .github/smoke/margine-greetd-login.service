@@ -1,0 +1,14 @@
+[Unit]
+Description=Margine Layer C login driver (greetd autologin, logout, greeter, password login)
+# Same rule as the other probes: After=graphical.target with the
+# wants-symlink in graphical.target.wants (an ordering cycle otherwise).
+# greetd is display-manager.service, part of graphical.target.
+After=graphical.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /etc/margine-smoke/greetd-login.py
+# Bounded inside (every wait has a timeout); this is the net.
+TimeoutStartSec=20min
+# The verdicts are the markers on the console; the unit never fails.
+SuccessExitStatus=0 1

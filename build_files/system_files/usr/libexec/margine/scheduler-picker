@@ -62,7 +62,7 @@ const META = {
     tag: "Gaming & low latency",
     blurb:
       "Latency-Aware Virtual Deadline. Keeps games, real-time audio and the " +
-      "desktop responsive while heavy work runs in the background. Margine's " +
+      "desktop responsive while heavy work runs in the background. Lucciola's " +
       "recommended pick for gaming.",
     star: true,
   },
@@ -177,7 +177,7 @@ function bootDefault() {
 
 function osPretty() {
   const { out } = run(["cat", "/etc/os-release"]);
-  return (out.match(/^PRETTY_NAME="?(.*?)"?\s*$/m) || [])[1] || "Margine";
+  return (out.match(/^PRETTY_NAME="?(.*?)"?\s*$/m) || [])[1] || "Lucciola";
 }
 
 const SchedulerWindow = GObject.registerClass(
@@ -222,7 +222,7 @@ const SchedulerWindow = GObject.registerClass(
       const menu = new Gio.Menu();
       menu.append("Re-check now", "app.refresh");
       menu.append(`Reset to kernel default (${KERNEL_DEFAULT})`, "app.reset");
-      menu.append("About Margine CPU Scheduler", "app.about");
+      menu.append("About Lucciola CPU Scheduler", "app.about");
       header.pack_end(
         new Gtk.MenuButton({ icon_name: "open-menu-symbolic", menu_model: menu, primary: true }),
       );
@@ -261,7 +261,7 @@ const SchedulerWindow = GObject.registerClass(
       this._group = new Adw.PreferencesGroup({
         title: "Choose a scheduler",
         description:
-          `Margine runs a signed CachyOS kernel (${KERNEL_DEFAULT} by default) with pluggable sched_ext ` +
+          `Lucciola runs a signed CachyOS kernel (${KERNEL_DEFAULT} by default) with pluggable sched_ext ` +
           "(BPF) schedulers. Tap one to switch to it — it applies live (no " +
           "reboot) and is saved as the boot default.",
       });
@@ -270,7 +270,7 @@ const SchedulerWindow = GObject.registerClass(
       const foot = new Adw.PreferencesGroup();
       const note = new Adw.ActionRow({
         title: "Prefer a terminal?",
-        subtitle: "Run “ujust margine-scheduler NAME” — same effect as this app.",
+        subtitle: "Run “ujust lucciola-scheduler NAME”: same effect as this app.",
         subtitle_selectable: true,
       });
       note.add_prefix(Gtk.Image.new_from_icon_name("utilities-terminal-symbolic"));
@@ -407,11 +407,11 @@ const SchedulerWindow = GObject.registerClass(
       const kernel = run(["uname", "-r"]).out.trim();
       const scxver = run(["scxctl", "--version"]).out.trim();
       const about = new Adw.AboutDialog({
-        application_name: "Margine CPU Scheduler",
+        application_name: "Lucciola CPU Scheduler",
         application_icon: "margine-scheduler",
-        version: pretty.replace(/^Margine\s*/, "") || "alpha",
-        developer_name: "Margine",
-        website: "https://margine.dev",
+        version: pretty.replace(/^(Lucciola|Margine OS|Margine)\s*/, "") || "alpha",
+        developer_name: "Daniel Grasso",
+        website: "https://github.com/daniel-g-carrasco/lucciola",
         issue_url: "https://github.com/daniel-g-carrasco/lucciola/issues",
         license_type: Gtk.License.APACHE_2_0,
         comments:

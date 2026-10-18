@@ -4,8 +4,9 @@
 # Run this on a booted Margine system to photograph the current state
 # and compare it against the canonical expected state. Catches drift
 # that the build-time Layer A checks and the pre-reboot
-# validate-staged-deployment cannot see: GNOME settings as actually
-# applied by GDM/Shell, Flatpaks really installed (not just declared),
+# validate-staged-deployment cannot see: the GDM fallback's settings
+# as GDM reads them, the login screen (greetd on Lucciola), Flatpaks
+# really installed (not just declared),
 # system users present at runtime (Bug 6 post-rebase), running kernel
 # signature, no failed services, branding assets in place, etc.
 #
@@ -21,7 +22,7 @@
 #   qcow2|      B/C, manual VM tests) — BAKE check is skipped because no
 #   non-iso     Anaconda %post ever ran there.
 #   image       the build container itself (`podman run --rm -e
-#               MARGINE_VALIDATE_CONTEXT=image $IMG margine-validate-margine-system`)
+#               MARGINE_VALIDATE_CONTEXT=image $IMG lucciola-validate-margine-system`)
 #               — only filesystem-level checks run; anything that needs a
 #               booted system (running kernel, bootc status, EFI/mokutil,
 #               dconf/gsettings, systemd state, installed Flatpaks) is
@@ -35,7 +36,7 @@ set -u
 
 case "${1:-}" in
   -h|--help)
-    sed -n '2,40p' "${BASH_SOURCE[0]:-/usr/bin/margine-validate-margine-system}" 2>/dev/null \
+    sed -n '2,40p' "${BASH_SOURCE[0]:-/usr/bin/lucciola-validate-margine-system}" 2>/dev/null \
       || echo "Margine acceptance test. See script header for MARGINE_VALIDATE_CONTEXT values."
     exit 0
     ;;
@@ -83,8 +84,8 @@ fi
 EXPECTED_OS_ID="fedora"
 EXPECTED_OS_VARIANT_ID="margine"
 EXPECTED_KERNEL_PATTERN="cachy"   # kernel-cachyos (cachyos1)
-EXPECTED_PLYMOUTH_THEME="margine"
-EXPECTED_WALLPAPER="file:///usr/share/backgrounds/margine/margine.png"
+EXPECTED_PLYMOUTH_THEME="lucciola"
+EXPECTED_WALLPAPER="file:///usr/share/backgrounds/lucciola/lucciola.png"
 EXPECTED_GDM_LOGO=""   # empty: no logo in greeter, by design (see lessons-learned Bug 7)
 EXPECTED_GHCR_IMAGE="ghcr.io/daniel-g-carrasco/lucciola"
 
@@ -101,31 +102,12 @@ if [[ -f "$PREINSTALL_FILE" ]]; then
   )
 fi
 
-EXPECTED_EXTENSIONS=(
-  appindicatorsupport@rgcjonas.gmail.com
-  bazaar-integration@kolunmi.github.io
-  dash-to-dock@micxgx.gmail.com
-  gradia-integration@alexandervanhee.github.io
-  gsconnect@andyholmes.github.io
-  hide-cursor@elcste.com
-  caffeine@patapon.info
-  o-tiling@oliwebd.github.com
-  smile-extension@mijorus.it
-)
-# search-light@icedman.github.com was dropped from the default enable set
-# 2026-06-14 (GNOME-50 crash class; replaced by GNOME-native search). smile
-# was added 2026-06-13. blur-my-shell@aunetx was dropped 2026-06-16 (dynamic
-# per-frame Gaussian blur janked the 120Hz HiDPI iGPU — its own transitions
-# AND o-tiling animations — plus 3 unfixed-upstream GNOME-50 bugs). All three
-# stay INSTALLED but are not in the enabled set. Keep this list in lockstep
-# with the enabled-extensions line in build_files/30-gnome-defaults/install.sh
-# (zz1-margine override).
-# NOTE: tilingshell@ferrarodomenico.com is installed but NOT in the
-# default enable list (superseded by o-tiling on 2026-05-31).
+# No GNOME Shell extensions are expected: GNOME is Lucciola's stock
+# fallback session (2026-10-18), so the extension, Shell-defaults and
+# GNOME bootstrap sections this validator had for Margine are gone.
 
 EXPECTED_MARGINE_HELPERS=(
-  margine-fetch
-  margine-install-user-extensions
+  lucciola-fetch
 )
 
 # Services that are expected to fail and are NOT counted as
@@ -221,7 +203,7 @@ print(img)
   info "booted image: $BOOTED_IMAGE"
   if [[ -z "$BOOTED_IMAGE" ]]; then
     # `bootc status` needs root and a real booted deployment. Run without
-    # privilege (or in an image/container context, e.g. ujust margine-doctor),
+    # privilege (or in an image/container context, e.g. ujust lucciola-doctor),
     # it returns nothing — that's "can't determine", not "wrong image".
     warn "couldn't read the booted image (need root + a booted deployment; e.g. 'sudo $0')"
   elif [[ "$BOOTED_IMAGE" == ${EXPECTED_GHCR_IMAGE}* ]]; then
@@ -262,7 +244,7 @@ done
 # A failure here means the user has to manually `sudo usermod -aG ...`
 # or stay sudo-bound for docker/incus/libvirt commands.
 if (( ! IS_LIVE )); then
-  info "wheel-membership check skipped (image context: margine-dev-groups applies it at boot)"
+  info "wheel-membership check skipped (image context: lucciola-dev-groups applies it at boot)"
 elif WHEEL_USERS=$(getent group wheel 2>/dev/null | cut -d: -f4 | tr ',' ' '); [[ -z "${WHEEL_USERS// /}" ]]; then
   warn "wheel group is empty — no admin users to check group membership for"
 else
@@ -271,16 +253,18 @@ else
     # id -nG is robust (uses NSS, sees both /etc/group and /etc/passwd
     # secondary groups, plus any LDAP/SSSD source on enterprise installs).
     USER_GROUPS=" $(id -nG "$u" 2>/dev/null) "
-    # libvirt always; docker and incus-admin only when the package that
-    # brings the group is layered (ujust margine-docker, or incus by hand).
-    REQUIRED_GROUPS=(libvirt)
+    # Each group only when the package that brings it is layered: libvirt
+    # (ujust lucciola-vm, since 2026-10-18), docker (ujust lucciola-docker),
+    # incus-admin (incus by hand).
+    REQUIRED_GROUPS=()
+    rpm -q libvirt-daemon >/dev/null 2>&1 && REQUIRED_GROUPS+=(libvirt)
     rpm -q docker-ce >/dev/null 2>&1 && REQUIRED_GROUPS+=(docker)
     rpm -q incus >/dev/null 2>&1 && REQUIRED_GROUPS+=(incus-admin)
     for required in "${REQUIRED_GROUPS[@]}"; do
       if [[ "$USER_GROUPS" == *" $required "* ]]; then
-        ok "user '$u' is in group '$required' (margine-dev-groups effect OK)"
+        ok "user '$u' is in group '$required' (lucciola-dev-groups effect OK)"
       else
-        bad "user '$u' is NOT in group '$required': margine-dev-groups may have failed at boot. Manual fix: sudo usermod -aG $required $u && relogin"
+        bad "user '$u' is NOT in group '$required': lucciola-dev-groups may have failed at boot. Manual fix: sudo usermod -aG $required $u && relogin"
       fi
     done
   done
@@ -309,14 +293,18 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-hdr "5. Margine branding assets"
+hdr "5. Branding assets (Lucciola's)"
 # ---------------------------------------------------------------------------
-[[ -f /usr/share/pixmaps/margine-logo.png ]] && ok "margine-logo.png present" \
-  || bad "/usr/share/pixmaps/margine-logo.png missing"
-[[ -f /usr/share/backgrounds/margine/margine.png ]] && ok "wallpaper present" \
-  || bad "/usr/share/backgrounds/margine/margine.png missing"
-[[ -d /usr/share/plymouth/themes/margine ]] && ok "Plymouth theme dir present" \
-  || bad "/usr/share/plymouth/themes/margine missing"
+[[ -f /usr/share/pixmaps/lucciola-logo.png ]] && ok "lucciola-logo.png present" \
+  || bad "/usr/share/pixmaps/lucciola-logo.png missing"
+[[ -f /usr/share/icons/hicolor/scalable/apps/margine-logo.svg ]] && ok "margine-logo alias present (older references)" \
+  || bad "/usr/share/icons/hicolor/scalable/apps/margine-logo.svg missing"
+[[ -f /usr/share/backgrounds/lucciola/lucciola.png ]] && ok "wallpaper present" \
+  || bad "/usr/share/backgrounds/lucciola/lucciola.png missing"
+[[ -f /usr/share/backgrounds/margine/margine.png ]] && ok "old wallpaper path still resolves (sync.toml and dconf of older installs)" \
+  || bad "/usr/share/backgrounds/margine/margine.png does not resolve"
+[[ -d /usr/share/plymouth/themes/lucciola ]] && ok "Plymouth theme dir present" \
+  || bad "/usr/share/plymouth/themes/lucciola missing"
 [[ -f /usr/share/margine/ascii-logo.txt ]] && ok "fastfetch ASCII logo present" \
   || warn "fastfetch ASCII logo missing (cosmetic)"
 
@@ -324,34 +312,33 @@ hdr "5. Margine branding assets"
 # distro logo. Without LOGO=, GNOME falls back to the inherited Bluefin
 # asset → wrong logo. Fixed 2026-06-02 (commit f40d793 margine-image).
 LOGO_KEY=$(grep -E '^LOGO=' /etc/os-release | cut -d= -f2- | tr -d '"')
-[[ "$LOGO_KEY" == "margine-logo" ]] \
-  && ok "os-release LOGO=margine-logo (GNOME About will find /usr/share/pixmaps/margine-logo.png)" \
-  || bad "os-release LOGO='$LOGO_KEY' (expected 'margine-logo') — GNOME About will show wrong distro logo"
+[[ "$LOGO_KEY" == "lucciola-logo" ]] \
+  && ok "os-release LOGO=lucciola-logo (GNOME About finds it in hicolor)" \
+  || bad "os-release LOGO='$LOGO_KEY' (expected 'lucciola-logo'): GNOME About would show the wrong logo"
 
 # /etc/fastfetch/config.jsonc is the system-wide default config that
 # vanilla `fastfetch` (no --config flag) picks up. Without it,
 # fastfetch falls back to its built-in default → Fedora ASCII +
 # generic modules instead of Margine ASCII. Fixed 2026-06-02
-# (commit f40d793 margine-image). margine-fetch wrapper still works
+# (commit f40d793 margine-image). lucciola-fetch wrapper still works
 # regardless because it explicitly passes --config.
 [[ -f /etc/fastfetch/config.jsonc ]] \
   && ok "/etc/fastfetch/config.jsonc present (vanilla fastfetch → Margine config)" \
   || warn "/etc/fastfetch/config.jsonc missing — vanilla fastfetch will show Fedora default (cosmetic)"
 
-# Plymouth watermark dimensions — Margine ships at 480x120 (≈25% of a
-# 1080p viewport, consistent with Fedora/Bluefin stock).
-# Pre-2026-06-02 was 720x180 (too big, daniel flagged it).
-if command -v identify >/dev/null 2>&1 && [[ -f /usr/share/plymouth/themes/margine/watermark.png ]]; then
-  PLY_DIM=$(identify -format '%wx%h' /usr/share/plymouth/themes/margine/watermark.png 2>/dev/null)
-  [[ "$PLY_DIM" == "480x120" ]] \
-    && ok "Plymouth watermark = 480x120 (expected)" \
-    || warn "Plymouth watermark = '$PLY_DIM' (expected 480x120; cosmetic)"
+# Plymouth: the theme sizes itself in device pixels and needs Plymouth's
+# own HiDPI scale off (DeviceScale=1), or it is drawn at scale 1 and
+# stretched 2x on HiDPI panels (50-branding, lucciola.script).
+if grep -qx 'DeviceScale=1' /etc/plymouth/plymouthd.conf 2>/dev/null; then
+  ok "plymouthd.conf: DeviceScale=1 (the theme sizes itself)"
+else
+  warn "plymouthd.conf has no DeviceScale=1: the boot splash is soft on HiDPI panels (cosmetic)"
 fi
 
 # start-here-symbolic.svg — Bluefin overrides this Adwaita icon with
 # a mascot glyph that bleeds through into gnome-initial-setup's
-# Language page header. Margine overlays a path-based symbolic 'm'
-# glyph. GTK4 symbolic icons reject embedded raster <image> payloads,
+# Language page header. The image overlays Lucciola's symbolic firefly
+# (two circles). GTK4 symbolic icons reject embedded raster <image> payloads,
 # so validate the SVG shape rather than using a file-size heuristic.
 START_HERE=/usr/share/icons/Adwaita/symbolic/places/start-here-symbolic.svg
 if [[ -f "$START_HERE" ]]; then
@@ -450,34 +437,17 @@ else
   bad "fastfetch broken — alias likely still resolves to a removed ublue-fastfetch / ublue-motd"
 fi
 
-# The Margine logo PNG must exist where os-release's LOGO key
-# resolves it (i.e. /usr/share/pixmaps/<LOGO>.png).
-RESOLVED_LOGO="/usr/share/pixmaps/${LOGO_KEY:-margine-logo}.png"
+# The logo PNG must exist where os-release's LOGO key resolves it outside
+# the icon theme (i.e. /usr/share/pixmaps/<LOGO>.png).
+RESOLVED_LOGO="/usr/share/pixmaps/${LOGO_KEY:-lucciola-logo}.png"
 [[ -f "$RESOLVED_LOGO" ]] \
   && ok "LOGO=$LOGO_KEY resolves to $RESOLVED_LOGO" \
   || bad "$RESOLVED_LOGO missing — GNOME About panel will fall back to a generic logo"
 
-# Extension Manager (Margine's chosen GUI for GNOME Shell extensions).
-# Margine preinstalls com.mattjakeman.ExtensionManager via the flatpak
-# preinstall API (commit 517b520). On a fresh-rebased system this
-# triggers async at first user login; warn if absent rather than
-# bad-fail, since it may still be queued. Lucciola leaves it out of the
-# preinstall set (its GNOME has no extensions).
-if [[ "$EXPECTED_OS_NAME" == "Lucciola" ]]; then
-  info "Extension Manager: skipped, Lucciola ships no GNOME extensions"
-elif (( IS_LIVE )) && command -v flatpak >/dev/null 2>&1; then
-  if flatpak info com.mattjakeman.ExtensionManager >/dev/null 2>&1; then
-    ok "Extension Manager (com.mattjakeman.ExtensionManager) installed"
-  else
-    warn "Extension Manager not installed — flatpak preinstall may still be running, or the user removed it"
-  fi
-fi
-
 # ---------------------------------------------------------------------------
 hdr "6. GDM greeter overrides (Bug 7 guardrail)"
 # ---------------------------------------------------------------------------
-# Resolved wallpaper path is shared by sections 6 and 7 — compute it
-# outside the live-only gate so section 7 never sees it unset.
+# Resolved wallpaper path, computed outside the live-only gate.
 exp_path="${EXPECTED_WALLPAPER#file://}"
 exp_real=$(readlink -f "$exp_path" 2>/dev/null || echo "$exp_path")
 if (( ! IS_LIVE )); then
@@ -499,9 +469,9 @@ gdm_bg_path="${GDM_BG#file://}"
 gdm_bg_real=$(readlink -f "$gdm_bg_path" 2>/dev/null || echo "$gdm_bg_path")
 if [[ "$gdm_bg_real" == "$exp_real" ]]; then
   if [[ "$GDM_BG" == "$EXPECTED_WALLPAPER" ]]; then
-    ok "GDM background uses Margine wallpaper"
+    ok "GDM background uses the Lucciola wallpaper"
   else
-    ok "GDM background resolves to Margine wallpaper via symlink (dconf still references the old path)"
+    ok "GDM background resolves to the Lucciola wallpaper via symlink (dconf still references the old path)"
   fi
 else
   bad "GDM background resolves to '$gdm_bg_real' (expected '$exp_real')"
@@ -509,104 +479,106 @@ fi
 fi  # IS_LIVE (section 6)
 
 # ---------------------------------------------------------------------------
-hdr "7. GNOME Shell defaults (user session)"
-if [[ "$EXPECTED_OS_NAME" == "Lucciola" ]]; then
-  info "skipped: Lucciola keeps GNOME stock as a fallback session, without Margine's Shell defaults"
-else
+hdr "6b. Login screen: greetd + Noctalia Greeter (Lucciola)"
+# Lucciola's login screen is greetd running Noctalia Greeter; GDM (section 6)
+# stays installed as the fallback greetd.service starts when it fails
+# (lucciola/build.sh step 5, greetd.service.d/50-lucciola.conf).
 # ---------------------------------------------------------------------------
-# This needs the user's dconf, not root's. Skip if we are root (curl|sudo bash)
-# or in a build container (no session dconf at all).
-if (( ! IS_LIVE )); then
-  info "skipped (image context — no user session)"
-elif [[ ${EUID:-$(id -u)} -ne 0 ]]; then
-  CUR_EXTS=$(gsettings get org.gnome.shell enabled-extensions 2>/dev/null | tr -d "[](),'" | tr ' ' '\n' | grep . | sort)
-  EXP_EXTS=$(printf '%s\n' "${EXPECTED_EXTENSIONS[@]}" | sort)
-  MISSING=$(comm -23 <(echo "$EXP_EXTS") <(echo "$CUR_EXTS"))
-  EXTRA=$(comm -13   <(echo "$EXP_EXTS") <(echo "$CUR_EXTS"))
-  if [[ -z "$MISSING" && -z "$EXTRA" ]]; then
-    ok "enabled-extensions matches Margine canonical set"
-  else
-    [[ -n "$MISSING" ]] && bad "extensions MISSING: $(echo $MISSING)"
-    [[ -n "$EXTRA"   ]] && warn "extensions EXTRA (user-added?): $(echo $EXTRA)"
-  fi
-
-  # Per-extension schema visibility check. On the 2026-06-04 fresh
-  # install search-light was enabled in dconf but its gschema XML
-  # never made it into the compiled /usr/share/glib-2.0/schemas/
-  # gschemas.compiled — so `gsettings get
-  # org.gnome.shell.extensions.search-light shortcut-search`
-  # returned "Schema inesistente". Extension loads but keybindings
-  # have no effect. Check each Margine-enabled extension's gsettings
-  # schema is registered, when it's reasonable to expect one.
-  # blur-my-shell + search-light were REMOVED from the image (2026-06-16), so
-  # their schemas are intentionally absent — not listed here.
-  EXT_SCHEMA_MAP=(
-    "dash-to-dock@micxgx.gmail.com=org.gnome.shell.extensions.dash-to-dock"
-    "caffeine@patapon.info=org.gnome.shell.extensions.caffeine"
-    "o-tiling@oliwebd.github.com=org.gnome.shell.extensions.o-tiling"
-  )
-  REGISTERED_SCHEMAS=$(gsettings list-schemas 2>/dev/null)
-  for entry in "${EXT_SCHEMA_MAP[@]}"; do
-    uuid=${entry%%=*}
-    schema=${entry#*=}
-    if echo "$REGISTERED_SCHEMAS" | grep -qxF "$schema"; then
-      ok "schema $schema registered (extension $uuid configurable via gsettings)"
-    else
-      bad "schema $schema NOT registered — extension $uuid loads but its settings (keybindings, prefs) cannot be read/applied. Build-time glib-compile-schemas didn't pick it up."
-    fi
-  done
-
-  CUR_ACCENT=$(gsettings get org.gnome.desktop.interface accent-color 2>/dev/null | tr -d "'")
-  [[ "$CUR_ACCENT" == "yellow" ]] && ok "GNOME accent-color = yellow" \
-    || warn "accent-color is '$CUR_ACCENT' (expected 'yellow') — user may have customized"
-
-  CUR_BG=$(gsettings get org.gnome.desktop.background picture-uri 2>/dev/null | tr -d "'")
-  cur_bg_real=$(readlink -f "${CUR_BG#file://}" 2>/dev/null || echo "${CUR_BG#file://}")
-  if [[ "$cur_bg_real" == "$exp_real" ]]; then
-    if [[ "$CUR_BG" == "$EXPECTED_WALLPAPER" ]]; then
-      ok "desktop wallpaper = Margine default"
-    else
-      ok "desktop wallpaper resolves to Margine via symlink (dconf still references old path)"
-    fi
-  else
-    warn "desktop wallpaper resolves to '$cur_bg_real' (expected '$exp_real'; user may have changed)"
-  fi
-
-  # 10 workspaces — Margine ships fixed (not dynamic) workspaces so the
-  # Hyprland-style SUPER+1..0 keybinds land on stable targets. Set by
-  # zz1-margine.gschema.override.
-  CUR_NW=$(gsettings get org.gnome.desktop.wm.preferences num-workspaces 2>/dev/null)
-  [[ "$CUR_NW" == "5" ]] \
-    && ok "num-workspaces = 5 (Margine fixed-workspaces layout — Daniel's standing preference)" \
-    || bad "num-workspaces = $CUR_NW (expected 5) — zz1-margine override missing or shadowed"
-
-  CUR_DYN=$(gsettings get org.gnome.mutter dynamic-workspaces 2>/dev/null)
-  [[ "$CUR_DYN" == "false" ]] \
-    && ok "dynamic-workspaces disabled (required for SUPER+N binds)" \
-    || bad "dynamic-workspaces = $CUR_DYN (expected false) — SUPER+1..0 binds will misbehave"
+if [[ "$EXPECTED_OS_NAME" != "Lucciola" ]]; then
+  info "skipped: Margine's login screen is GDM"
 else
-  warn "running as root — skipping GNOME session-level gsettings checks"
+  for p in greetd greetd-selinux noctalia-greeter dbus-daemon gdm; do
+    rpm -q "$p" >/dev/null 2>&1 && ok "$p installed" || bad "$p missing (the login screen or its fallback)"
+  done
+  DM_UNIT="$(readlink /etc/systemd/system/display-manager.service 2>/dev/null)"
+  DM_UNIT="${DM_UNIT##*/}"
+  if [[ "$DM_UNIT" == greetd.service ]]; then
+    ok "display manager: greetd"
+  elif (( IS_LIVE )); then
+    # A machine may go back to GDM on purpose (systemctl enable --force gdm.service).
+    warn "display manager is '${DM_UNIT:-none}', not greetd: switched by hand, or lucciola-login-migrate.service switches it at the next boot. Back to greetd: sudo systemctl enable --force greetd.service"
+  else
+    bad "display-manager.service points to '${DM_UNIT:-nothing}' in the image, not greetd"
+  fi
+  if python3 - /etc/greetd/config.toml <<'PY'
+import sys, tomllib
+d = tomllib.load(open(sys.argv[1], "rb")).get("default_session", {})
+ok = d.get("command", "").endswith("/usr/bin/noctalia-greeter-session") and d.get("user") == "greetd"
+print(f"  {d}")
+sys.exit(0 if ok else 1)
+PY
+  then
+    ok "/etc/greetd/config.toml runs Noctalia Greeter as greetd"
+  else
+    bad "/etc/greetd/config.toml does not run Noctalia Greeter as greetd (reference: /usr/share/lucciola/greetd/config.toml)"
+  fi
+  PAM=/usr/lib/pam.d/greetd
+  pam_ok=1
+  for want in '^-auth[[:space:]]+optional[[:space:]]+pam_oo7\.so' \
+              '^-password[[:space:]]+optional[[:space:]]+pam_oo7\.so[[:space:]]+use_authtok' \
+              '^-session[[:space:]]+optional[[:space:]]+pam_oo7\.so[[:space:]]+auto_start' \
+              '^session[[:space:]]+optional[[:space:]]+pam_env\.so.*session-type\.conf' \
+              '^session[[:space:]]+required[[:space:]]+pam_selinux\.so[[:space:]]+open' \
+              '^session[[:space:]]+required[[:space:]]+pam_loginuid\.so' \
+              '^session[[:space:]]+include[[:space:]]+system-auth'; do
+    grep -qE "$want" "$PAM" 2>/dev/null || { bad "$PAM lacks /$want/ (the greetd PAM stack lucciola/build.sh 5c sets up)"; pam_ok=0; }
+  done
+  (( pam_ok )) && ok "$PAM: pam_oo7 (auth, password, session), the session type, pam_selinux, pam_loginuid, system-auth"
+  if [[ -e /etc/pam.d/greetd ]]; then
+    if (( IS_LIVE )); then
+      warn "/etc/pam.d/greetd exists and shadows the image's $PAM (pam_oo7 and the session type may be missing from it)"
+    else
+      bad "/etc/pam.d/greetd in the image shadows $PAM"
+    fi
+  fi
+  grep -qx 'OnFailure=gdm.service' /usr/lib/systemd/system/greetd.service.d/50-lucciola.conf 2>/dev/null \
+    && ok "greetd falls back to GDM when it cannot start" \
+    || bad "greetd.service has no GDM fallback (greetd.service.d/50-lucciola.conf)"
+  for d in /var/lib/noctalia-greeter /var/lib/greetd; do
+    ctx="$(matchpathcon -n "$d" 2>/dev/null)"
+    [[ "$ctx" == *:xdm_var_lib_t:* ]] && ok "SELinux labels $d xdm_var_lib_t" \
+      || bad "SELinux would label $d '${ctx:-?}', not xdm_var_lib_t: the greeter could not write its state when enforcing"
+  done
+  if (( IS_LIVE )); then
+    getent passwd greetd >/dev/null && ok "account greetd resolves" || bad "account greetd missing (systemd-sysusers creates it at boot)"
+    for d in /var/lib/greetd /var/lib/noctalia-greeter; do
+      [[ "$(stat -c %U "$d" 2>/dev/null)" == greetd ]] && ok "$d owned by greetd" \
+        || bad "$d missing or not owned by greetd (tmpfiles.d/lucciola-greeter.conf at boot)"
+    done
+    if [[ "$DM_UNIT" == greetd.service ]]; then
+      if systemctl is-active --quiet gdm.service; then
+        bad "GDM is running although greetd is the display manager: greetd failed and its fallback took over (journalctl -b -u greetd)"
+      elif systemctl is-active --quiet greetd.service; then
+        ok "greetd.service active"
+      else
+        bad "greetd.service is $(systemctl is-active greetd.service 2>/dev/null) (journalctl -b -u greetd)"
+      fi
+    fi
+    [[ -e /var/lib/lucciola/login-migrated ]] && ok "login screen migration done" \
+      || warn "lucciola-login-migrate.service has not finished yet (journalctl -b -u lucciola-login-migrate)"
+  else
+    info "account, directories and running units: checked on a booted system"
+  fi
 fi
 
-# Margine-branded replacements for the 3 Bluefin app-menu entries we
-# stripped (system-update, documentation). Reasonable Margine should
-# offer its own versions in their place rather than leaving holes in
-# the app menu.
+# ---------------------------------------------------------------------------
+hdr "7. Margine launchers"
+# ---------------------------------------------------------------------------
+# Margine-branded replacements for the Bluefin app-menu entries we
+# stripped: the launcher should offer Margine's own version in their place
+# rather than leaving holes. (Documentation has none since 2026-10-18: the
+# offline docs left, and Lucciola's guide is online.)
 declare -A MARGINE_DESKTOP_REPLACEMENTS=(
-  ['Margine System Update']='/usr/share/applications/margine-system-update.desktop'
-  ['Margine Documentation']='/usr/share/applications/margine-documentation.desktop'
+  ['Lucciola system update']='/usr/share/applications/margine-system-update.desktop'
 )
 for label in "${!MARGINE_DESKTOP_REPLACEMENTS[@]}"; do
   p=${MARGINE_DESKTOP_REPLACEMENTS[$label]}
   if [[ -f "$p" ]]; then
     ok "$label present at $p"
   else
-    warn "$label missing ($p) — stripped Bluefin entry has no Margine replacement in app menu"
+    warn "$label missing ($p): the stripped Bluefin entry has no Margine replacement in the app menu"
   fi
 done
-
-# ---------------------------------------------------------------------------
-fi
 
 hdr "8. Default Flatpak applications (Bug 9 guardrail)"
 # ---------------------------------------------------------------------------
@@ -686,198 +658,36 @@ for bin in "${EXPECTED_MARGINE_HELPERS[@]}"; do
 done
 
 if command -v ujust >/dev/null; then
-  UJUST_MARGINE=$(ujust --list 2>/dev/null | grep -c '^[[:space:]]*margine-' || true)
-  if (( UJUST_MARGINE > 0 )); then
-    ok "ujust has $UJUST_MARGINE margine-* recipe(s)"
+  # lucciola-* since 2026-10-18; ujust --list shows each old margine-*
+  # name as "[alias: ...]" on its recipe's line.
+  UJUST_RECIPES=$(ujust --list 2>/dev/null | grep -c '^[[:space:]]*lucciola-' || true)
+  UJUST_ALIASES=$(ujust --list 2>/dev/null | grep -c '\[alias: margine-' || true)
+  if (( UJUST_RECIPES > 0 )); then
+    ok "ujust has $UJUST_RECIPES lucciola-* recipe(s), $UJUST_ALIASES with their margine-* alias"
   else
-    warn "ujust has no margine-* recipes — check /usr/share/ublue-os/just/60-custom.just (must use this name; 00-entry.just only \`import?\`s 60-custom.just)"
+    warn "ujust has no lucciola-* recipes: check /usr/share/ublue-os/just/60-custom.just (must use this name; 00-entry.just only \`import?\`s 60-custom.just)"
   fi
-fi
-
-# ---------------------------------------------------------------------------
-hdr "9a. GNOME extensions: filesystem presence (A.3 guardrail)"
-if [[ "$EXPECTED_OS_NAME" == "Lucciola" ]]; then
-  info "skipped: Lucciola ships no GNOME extensions"
-else
-# ---------------------------------------------------------------------------
-# Section 7 verified gsettings sees enabled-extensions matching the
-# expected set, and that 5 extensions' schemas are registered. That
-# is necessary but not sufficient: the extension code itself has to
-# live on disk under /usr/share/gnome-shell/extensions/<uuid>/ for
-# GNOME Shell to actually load it. If the UUID is in
-# enabled-extensions but the dir is missing, the extension silently
-# does nothing (GNOME 47/48 logs a warning but never surfaces it).
-# This check runs without gsettings (system-wide), so it works under
-# root and under curl|bash.
-EXT_DIR_BASE=/usr/share/gnome-shell/extensions
-if [[ -d "$EXT_DIR_BASE" ]]; then
-  for uuid in "${EXPECTED_EXTENSIONS[@]}"; do
-    if [[ -d "$EXT_DIR_BASE/$uuid" ]]; then
-      ok "extension $uuid installed at $EXT_DIR_BASE/$uuid"
-    else
-      bad "extension $uuid LISTED IN enabled-extensions BUT NOT INSTALLED at $EXT_DIR_BASE/$uuid — GNOME Shell will silently skip it"
-    fi
-  done
-else
-  bad "$EXT_DIR_BASE does not exist — no system-wide GNOME extensions on this image"
-fi
-
-# ---------------------------------------------------------------------------
-fi
-
-hdr "9b1. First-boot autostart wiring (A.4 guardrail)"
-if [[ "$EXPECTED_OS_NAME" == "Lucciola" ]]; then
-  info "skipped: Lucciola has no GNOME first-login bootstrap"
-else
-# ---------------------------------------------------------------------------
-# Two .desktop files in /etc/xdg/autostart/ drive the Margine first-boot
-# user experience:
-#   - margine-first-boot.desktop          → ujust margine-bootstrap unattended
-#   - margine-first-boot-status.desktop   → /usr/libexec/margine-first-boot-status
-#                                            (posts the "background Flatpak
-#                                            installation in progress" toast)
-# Until 2026-06-06 the second one was missing, so the libexec script
-# was shipped but never invoked — daniel saw no notification on first
-# login while flatpak-preinstall.service was downloading GIMP/Inkscape/
-# darktable/OBS in the background. Add a guardrail for both.
-for entry in margine-first-boot.desktop margine-first-boot-status.desktop; do
-  if [[ -f /etc/xdg/autostart/$entry ]]; then
-    ok "/etc/xdg/autostart/$entry present"
-  else
-    bad "/etc/xdg/autostart/$entry MISSING — autostart chain broken"
-  fi
-done
-if [[ -x /usr/libexec/margine-first-boot-status ]]; then
-  ok "/usr/libexec/margine-first-boot-status executable"
-else
-  bad "/usr/libexec/margine-first-boot-status missing or not executable — status notifier cannot run"
-fi
-
-# (Former section 9b2 — org.gnome.shell.app-grid icon-size coherence —
-# removed 2026-06-12: that schema does not exist in GNOME 47/48, so the
-# probe emitted a permanent WARN on every healthy system. CI dropped
-# its twin check earlier with the same rationale.)
-
-# ---------------------------------------------------------------------------
-fi
-
-hdr "9b. Bootstrap effects on user state (the configure-* chain ran)"
-if [[ "$EXPECTED_OS_NAME" == "Lucciola" ]]; then
-  info "skipped: Lucciola runs no GNOME bootstrap"
-else
-# ---------------------------------------------------------------------------
-# Bootstrap orchestration (Bug 11): without these, the distro ships
-# with the right specs but the user session never applied them.
-if (( ! IS_LIVE )); then
-  info "skipped (image context — no user accounts or session state)"
-elif [[ ${EUID:-$(id -u)} -ne 0 ]]; then
-  # Marker dropped by `ujust margine-bootstrap` (autostart or manual)
-  if [[ -f "$HOME/.config/margine/bootstrapped" ]]; then
-    ok "user bootstrap marker present ($(cat "$HOME/.config/margine/bootstrapped" 2>/dev/null))"
-  else
-    warn "no ~/.config/margine/bootstrapped marker — bootstrap never ran on this account"
-  fi
-
-  # Home layout (Margine-specific directories created)
-  for d in data dev scratch; do
-    # "~/" below is display text in the log line, not a path to expand;
-    # the test itself uses $HOME.
-    # shellcheck disable=SC2088
-    [[ -d "$HOME/$d" ]] && ok "~/$d exists" || bad "~/$d missing (configure-home-layout didn't run)"
-  done
-
-  # Dark theme — Margine canonical default
-  CUR_SCHEME=$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null | tr -d "'")
-  [[ "$CUR_SCHEME" == "prefer-dark" ]] \
-    && ok "color-scheme = prefer-dark" \
-    || bad "color-scheme is '$CUR_SCHEME' (expected 'prefer-dark') — configure-gnome-appearance didn't run"
-
-  # o-tiling extension — system-wide since 2026-06-03 PR A (was
-  # ~/.local/share/gnome-shell/extensions/ before, but per-user
-  # install caused shadow/race bugs documented in margine-image
-  # PR #20). Check system-wide first, then fall back to user-dir.
-  OT_SYS="/usr/share/gnome-shell/extensions/o-tiling@oliwebd.github.com"
-  OT_USER="$HOME/.local/share/gnome-shell/extensions/o-tiling@oliwebd.github.com"
-  if [[ -d "$OT_SYS" ]]; then
-    ok "o-tiling installed system-wide (PR A pattern)"
-    # SHADOW (the recurring "tiling toggle doesn't work" root cause,
-    # 2026-06-16): a user-level copy shadows the system one — GNOME loads
-    # ~/.local and refuses /usr/share ("...will not be loaded"), so every
-    # system-side fix (version bumps, schema registration, the session-only
-    # toggle patch) is invisible. It also re-appears nowhere now that o-tiling
-    # is removed_user_install, so once cleared it stays cleared.
-    if [[ -d "$OT_USER" ]]; then
-      bad "o-tiling USER SHADOW present at ~/.local — it masks the system copy and breaks the tiling toggle. Remove with: rm -rf '$OT_USER' (then log out/in). It will NOT come back."
-    fi
-    # Session-only toggle marker (margine-image PR #165): the toggle must not
-    # persist tile-by-default into the user dconf layer. Assert it on the copy
-    # GNOME actually loads (system, now that the shadow is gone).
-    if grep -q '"unlock-dialog"' "$OT_SYS/metadata.json" 2>/dev/null; then
-      ok "o-tiling survives the lock screen (session-modes includes unlock-dialog)"
-    else
-      warn "o-tiling metadata.json lacks session-modes unlock-dialog: it is torn down at every lock and windows may slide workspaces on unlock"
-    fi
-    if grep -q 'margine: lock-screen hygiene' "$OT_SYS/extension.js" 2>/dev/null; then
-      ok "o-tiling hides its panel and Quick Settings UI on the lock screen"
-    else
-      warn "o-tiling lock-screen UI patch NOT in the loaded extension.js: its workspace switcher and toggle stay usable on the lock screen"
-    fi
-    if grep -q 'margine: session-only toggle' "$OT_SYS/extension.js" 2>/dev/null; then
-      ok "o-tiling session-only toggle patch present (no dconf foot-gun)"
-    else
-      warn "o-tiling session-only toggle patch NOT in the loaded extension.js — pre-#165 image, or a copy that missed the patch"
-    fi
-  elif [[ -d "$OT_USER" ]]; then
-    warn "o-tiling installed under ~/.local (pre-PR-A legacy location)"
-  else
-    bad "o-tiling NOT installed — system-wide install at OCI build time failed"
-  fi
-  # Stale Tiling Shell warning (was Margine default until 2026-06-02).
-  if compgen -G "$HOME/.local/share/gnome-shell/extensions/tilingshell@*" >/dev/null; then
-    warn "Tiling Shell present under ~/.local — stale (removed from Margine defaults 2026-06-02). Remove with: rm -rf ~/.local/share/gnome-shell/extensions/tilingshell@ferrarodomenico.com"
-  fi
-
-  # App folders configured (Margine canonical set vs empty/Bluefin default).
-  # 2026-06-07: split the previous "System & Utilities" folder into
-  # four semantically distinct folders — Apps / Dev / System / Utilities.
-  # Still accept the older Italian names (Grafica / Foto / Sistema) and
-  # the older single-System name until all in-the-wild deployments have
-  # been re-bootstrapped past the rename.
-  CUR_FOLDERS=$(gsettings get org.gnome.desktop.app-folders folder-children 2>/dev/null)
-  if echo "$CUR_FOLDERS" | grep -qE "'(Office|Graphics|Photography|Audio|Video|Apps|Dev|System|Utilities|Grafica|Foto|Sistema)'"; then
-    ok "app folders configured by Margine (Office/Graphics/Photography/Audio/Video/Apps/Dev/System/Utilities)"
-  else
-    warn "app folders not Margine-configured: $CUR_FOLDERS (configure-gnome-app-folders may have failed)"
-  fi
-
-  # Nautilus bookmarks under ~/.config/gtk-3.0/bookmarks
-  if [[ -f "$HOME/.config/gtk-3.0/bookmarks" ]] && grep -q "$HOME/data" "$HOME/.config/gtk-3.0/bookmarks"; then
-    ok "Nautilus bookmarks include Margine ~/data"
-  else
-    warn "Nautilus bookmarks don't reference ~/data (configure-home-layout incomplete?)"
-  fi
-else
-  warn "running as root — skipping user-state bootstrap effect checks"
-fi
-
-# ---------------------------------------------------------------------------
 fi
 
 hdr "9c. Gaming layer (opt-in — checks only run if the layer was installed)"
 # ---------------------------------------------------------------------------
-# Margine gaming layer = `ujust margine-gaming` (Margine Gaming OCI
+# Margine gaming layer = `ujust lucciola-gaming` (Margine Gaming OCI
 # variant + ISO retired 2026-06-06 in favour of this single opt-in
-# path). Installs ~2 layered RPMs (gamescope + vkBasalt, the only
-# strictly gaming-only ones — everything else like mangohud/goverlay/
-# steam-devices/gamemode is already in base) + 7 Flatpaks. Detection
-# via "any gaming-specific RPM layered on top of base" — the heuristic
-# is reliable now that none of those RPMs ship in base.
+# path). Layers gamescope, vkBasalt, mangohud and goverlay (steam-devices
+# and gamemode are in the image) + 7 Flatpaks. Detection via "any
+# gaming-specific RPM layered on top of base": reliable because none of
+# gamescope and vkBasalt ship in the image (vkBasalt did until 2026-10-18,
+# a leftover of the gaming closure, which made every system without the
+# layer report "gaming remnants").
 # Two installation paths exist (60-custom.just):
-#   ujust margine-gaming         → RPMs gamescope+vkBasalt, 7 Flatpaks
-#                                  (incl. Steam/Lutris/RetroArch as Flatpak)
-#   ujust margine-gaming-native  → RPMs steam+lutris+retroarch+gamescope+
-#                                  vkBasalt, 4 Flatpaks (the launchers
-#                                  without an official RPM)
+#   ujust lucciola-gaming         → RPMs gamescope+vkBasalt+mangohud+
+#                                  goverlay, 7 Flatpaks (incl. Steam/
+#                                  Lutris/RetroArch as Flatpak)
+#   ujust lucciola-gaming-native  → the RPMs of gaming-native-packages.txt
+#                                  (steam with its 32-bit chain, lutris,
+#                                  RetroArch, gamescope, vkBasalt,
+#                                  mangohud, goverlay), 4 Flatpaks (the
+#                                  launchers without an official RPM)
 # Until 2026-06-12 only the Flatpak path was modeled, so native users got
 # 3 false FAILs and partial states got 8 misleading ones.
 GAMING_CORE_RPMS=(gamescope vkBasalt)
@@ -924,23 +734,23 @@ if rpm -q steam >/dev/null 2>&1; then
     native_rpms=(steam lutris RetroArch "${GAMING_CORE_RPMS[@]}")
   fi
   for r in "${native_rpms[@]}"; do
-    check_gaming_rpm "$r" "ujust margine-gaming-native"
+    check_gaming_rpm "$r" "ujust lucciola-gaming-native"
   done
   for fp in "${GAMING_FLATPAKS_COMMON[@]}"; do
-    check_gaming_flatpak "$fp" "ujust margine-gaming-native"
+    check_gaming_flatpak "$fp" "ujust lucciola-gaming-native"
   done
 elif flatpak info --system com.valvesoftware.Steam >/dev/null 2>&1 || (( core_present == 2 )); then
   info "Gaming layer detected (Flatpak variant) — validating full set"
   for r in "${GAMING_CORE_RPMS[@]}"; do
-    check_gaming_rpm "$r" "ujust margine-gaming"
+    check_gaming_rpm "$r" "ujust lucciola-gaming"
   done
   for fp in "${GAMING_FLATPAKS_FPPATH[@]}" "${GAMING_FLATPAKS_COMMON[@]}"; do
-    check_gaming_flatpak "$fp" "ujust margine-gaming"
+    check_gaming_flatpak "$fp" "ujust lucciola-gaming"
   done
 elif (( core_present == 1 )); then
-  warn "gaming remnants: ${core_found[*]} is present without the rest of the layer. Converge with 'ujust margine-gaming' or clean up with 'ujust margine-gaming-remove'"
+  warn "gaming remnants: ${core_found[*]} is present without the rest of the layer. Converge with 'ujust lucciola-gaming' or clean up with 'ujust lucciola-gaming-remove'"
 else
-  info "Gaming layer not installed — skipping (run 'ujust margine-gaming' to install)"
+  info "Gaming layer not installed: skipping (run 'ujust lucciola-gaming' to install)"
 fi
 
 if rpm -q steam >/dev/null 2>&1 || flatpak info --system com.valvesoftware.Steam >/dev/null 2>&1 || (( core_present == 2 )); then
@@ -951,7 +761,7 @@ if rpm -q steam >/dev/null 2>&1 || flatpak info --system com.valvesoftware.Steam
     if command -v "$bin" >/dev/null 2>&1; then
       ok "$bin on PATH"
     else
-      warn "$bin not on PATH — did you reboot after 'ujust margine-gaming'?"
+      warn "$bin not on PATH: reboot after 'ujust lucciola-gaming', or re-run it (mangohud and goverlay left the image on 2026-10-18 and are layered by the recipe since)"
     fi
   done
   # tuned daemon present + a profile is active

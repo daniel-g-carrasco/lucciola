@@ -57,7 +57,6 @@ on:
       # this build (the last step of the Containerfile).
       - '.github/workflows/base-watch.yml'
       - '.github/workflows/build-retry.yml'
-      - '.github/workflows/check-upstream-pins.yml'
       - '.github/workflows/check-upstreams.yml'
       - '.github/workflows/ghcr-cleanup.yml'
       - '.github/workflows/lint.yml'
@@ -95,7 +94,6 @@ on:
       # this build (the last step of the Containerfile).
       - '.github/workflows/base-watch.yml'
       - '.github/workflows/build-retry.yml'
-      - '.github/workflows/check-upstream-pins.yml'
       - '.github/workflows/check-upstreams.yml'
       - '.github/workflows/ghcr-cleanup.yml'
       - '.github/workflows/lint.yml'
@@ -490,7 +488,7 @@ jobs:
       # Phase-4 unification (2026-06-12): run the SHIPPED validators
       # inside the freshly built container with the new `image` context
       # (margine-fedora-atomic#56). Single source of truth: the same
-      # checks `ujust margine-doctor` and Layer C run on real systems.
+      # checks `ujust lucciola-doctor` and Layer C run on real systems.
       # Runs ALONGSIDE the grep sentinels below per the adoption policy
       # (two green runs, then the duplicated greps get deleted) — and it
       # implicitly asserts the validators were fetched executable, which
@@ -499,7 +497,7 @@ jobs:
         run: |
           set -euo pipefail
           IMG="localhost/${{ env.IMAGE_NAME }}:${{ steps.metadata.outputs.version }}"
-          for v in margine-validate-margine-system margine-validate-branding; do
+          for v in lucciola-validate-margine-system lucciola-validate-branding; do
             echo "=== $v (MARGINE_VALIDATE_CONTEXT=image) ==="
             sudo podman run --rm \
               -e MARGINE_VALIDATE_CONTEXT=image \
@@ -516,6 +514,27 @@ jobs:
           set -euo pipefail
           sudo .github/scripts/validate-image-rootfs.sh \
             "localhost/${{ env.IMAGE_NAME }}:${{ steps.metadata.outputs.version }}"
+
+      # Gaming-native layer (2026-10-18). The image no longer carries steam's
+      # 32-bit chain: `ujust lucciola-gaming-native` layers it, and it must fit
+      # the packages of this image exactly. dnf resolves the recipe's list in
+      # a throwaway container with every installed package locked at its
+      # version (rpm-ostree's rule when it layers). A depsolve failure stops
+      # the build before the push; "no verdict" (repositories unreachable)
+      # is a warning, smoke-boot's rpm-ostree dry run checks again.
+      - name: Gaming-native layer resolves against the image
+        env:
+          IMG: localhost/${{ env.IMAGE_NAME }}:${{ steps.metadata.outputs.version }}
+        run: |
+          set -uo pipefail
+          rc=0
+          sudo .github/scripts/gaming-native-resolve.sh "$IMG" | tee gaming-resolve.log || rc=$?
+          { echo "### Gaming-native layer"; echo '```'; grep -E 'MARGINE-GAMING-RESOLVE|off their twin|^  [^ ]+ \(' gaming-resolve.log | head -n 40 || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          case "$rc" in
+            0) ;;
+            2) echo "::warning::gaming-native resolve check gave no verdict (repositories unreachable?); smoke-boot's dry run still gates promotion" ;;
+            *) echo "::error::the gaming-native layer does not resolve against this image: ujust lucciola-gaming-native, and updates of machines that have it, would fail"; exit 1 ;;
+          esac
 
       # Security scan (2026-10-07). The image is compared with the reviewed
       # baseline in .github/security-baseline/: setuid/caps, world-writable

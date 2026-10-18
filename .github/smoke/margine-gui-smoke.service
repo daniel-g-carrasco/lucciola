@@ -7,8 +7,15 @@ Description=Margine Layer C GUI smoke probe
 # never ran and Layer C reported "no verdict" (first real run,
 # 2026-06-12, run 27438544775).
 After=graphical.target
+# The session under test is the one greetd-login.py starts with a password
+# login, so this probe waits for that driver. It also waits for the
+# user-smoke probe: this one powers the VM off at the end, and the soft
+# verdicts must reach the console first (until the greetd switch two sleeps,
+# 90 s and 150 s, kept them apart).
+After=margine-greetd-login.service margine-user-smoke.service
 
 [Service]
 Type=oneshot
-ExecStartPre=/bin/sleep 150
+# The driver already waited for the session; a short settle for Noctalia.
+ExecStartPre=/bin/sleep 20
 ExecStart=/etc/margine-smoke/gui-probe.sh

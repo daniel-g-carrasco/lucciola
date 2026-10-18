@@ -1,0 +1,26 @@
+# Lucciola's login screen: greetd running Noctalia Greeter.
+# lucciola/build.sh installs this file as /etc/greetd/config.toml; the copy
+# in /usr/share/lucciola/greetd/ is the reference to go back to.
+#
+# Autologin: `ujust lucciola-autologin on|off` adds or removes an
+# [initial_session] section at the end of this file.
+
+[terminal]
+# The VT greetd and the greeter use; greetd.service conflicts with the getty
+# on tty1.
+vt = 1
+
+[default_session]
+# noctalia-greeter-session starts the greeter's own small wlroots compositor
+# with the greeter in it.
+# - No --session: the greeter preselects the session picked last on this
+#   machine, Lucciola until someone picks another (seeded in
+#   /var/lib/noctalia-greeter/sync.toml), as GDM kept each user's choice. A
+#   --session here would override that memory at every boot.
+# - WLR_RENDERER_ALLOW_SOFTWARE: in a virtual machine without 3D
+#   acceleration wlroots refuses to draw with Mesa's software renderer and
+#   the greeter would not start (then greetd gives up and GDM takes over).
+#   It changes nothing where a GPU renderer exists.
+command = "env WLR_RENDERER_ALLOW_SOFTWARE=1 /usr/bin/noctalia-greeter-session"
+# The account Fedora's greetd package creates (/usr/lib/sysusers.d/greetd.conf).
+user = "greetd"

@@ -1,0 +1,29 @@
+#%PAM-1.0
+auth       substack    system-auth
+-auth       optional    pam_gnome_keyring.so
+-auth       optional    pam_kwallet5.so
+-auth       optional    pam_kwallet.so
+-auth       optional    pam_oo7.so
+auth       include     postlogin
+
+account    required    pam_sepermit.so
+account    required    pam_nologin.so
+account    include     system-auth
+
+password   include     system-auth
+# Lucciola (lucciola/build.sh 5c): as gdm-password, a password changed here re-encrypts the keyring.
+-password  optional    pam_oo7.so use_authtok
+
+session    required    pam_selinux.so close
+session    required    pam_loginuid.so
+session    required    pam_selinux.so open
+session    optional    pam_keyinit.so force revoke
+session    required    pam_namespace.so
+# Lucciola (lucciola/build.sh 5c): wayland unless the greeter said otherwise, before pam_systemd.
+session    optional    pam_env.so readenv=0 user_readenv=0 conffile=/usr/share/lucciola/greetd/session-type.conf
+session    include     system-auth
+-session    optional    pam_gnome_keyring.so auto_start
+-session    optional    pam_kwallet5.so auto_start
+-session    optional    pam_kwallet.so auto_start
+-session    optional    pam_oo7.so auto_start
+session    include     postlogin

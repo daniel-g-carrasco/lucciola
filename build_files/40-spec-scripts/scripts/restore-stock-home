@@ -57,7 +57,7 @@ MARGINE_TREE = ("data", "dev", "scratch")
 def render_user_dirs() -> str:
     lines = [
         "# This file is written by xdg-user-dirs-update",
-        "# Restored to the stock layout by ujust margine-home-stock.",
+        "# Restored to the stock layout by ujust lucciola-home-stock.",
         "",
     ]
     for key, folder in STOCK_DIRS.items():

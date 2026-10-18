@@ -6,109 +6,166 @@
 set -euo pipefail
 . /ctx/00-common.sh
 
-# 4. Margine visual branding (logo, wallpaper, Plymouth, /etc/issue, fastfetch)
+# 4. Visual branding: Lucciola's (logo, wallpaper, Plymouth, /etc/issue, fastfetch)
 # ---------------------------------------------------------------------------
-# Install the branding assets vendored under 50-branding/assets/ and install them in
-# the standard system locations so user-facing surfaces (About panel,
-# desktop wallpaper, login screen, boot splash, console, fastfetch) all
-# show Margine identity instead of inheriting Bluefin's.
-log "Installing Margine visual branding"
+# The assets are Lucciola's brand, lucciola/assets/ in the repository
+# (mounted at /ctx/lucciola-assets; the PNGs are rendered there by
+# render.sh and committed). They go to the standard system locations so
+# every surface that shows the system's identity (About panel, wallpaper,
+# login screens, boot splash, console, fastfetch, notifications) shows
+# Lucciola's, not the base's. Margine OS's own assets left on 2026-10-18;
+# the names Fedora, GNOME and older files hardcode stay, as aliases.
+log "Installing Lucciola visual branding"
+A=/ctx/lucciola-assets
+need() { [[ -s "$1" ]] || { log "FATAL: required branding asset is empty or missing: $1"; exit 1; }; }
 
-# (a) Logo → /etc/os-release's LOGO=margine-logo. GNOME 47/48 About
-# panel uses GTK4 gtk_icon_theme_lookup_icon("margine-logo") with the
-# GTK_ICON_LOOKUP_FORCE_REGULAR flag, which means the lookup is
-# RESTRICTED to icon themes (hicolor/Adwaita) and does NOT fall back
-# to /usr/share/pixmaps/. Until 2026-06-07 we shipped the asset only
-# in pixmaps, so the About panel rendered nothing (verified live on
-# daniel's VM via QGA).
-#
-# Install in both places:
-#   /usr/share/icons/hicolor/scalable/apps/margine-logo.svg    (primary
-#       — what GNOME About actually consumes)
-#   /usr/share/pixmaps/margine-logo.png                        (fallback
-#       — other consumers like systemd-logo, /etc/issue tooling)
-# Both use the square margine-m source asset.
-mkdir -p /usr/share/icons/hicolor/scalable/apps /usr/share/pixmaps
-cp /ctx/50-branding/assets/margine-logo-square.svg /usr/share/icons/hicolor/scalable/apps/margine-logo.svg
-[[ -s /usr/share/icons/hicolor/scalable/apps/margine-logo.svg ]] || { log "FATAL: required branding asset is empty: /usr/share/icons/hicolor/scalable/apps/margine-logo.svg"; exit 1; }
-chmod 0644 /usr/share/icons/hicolor/scalable/apps/margine-logo.svg
-cp /ctx/50-branding/assets/margine-logo-square.png /usr/share/pixmaps/margine-logo.png
-[[ -s /usr/share/pixmaps/margine-logo.png ]] || { log "FATAL: required branding asset is empty: /usr/share/pixmaps/margine-logo.png"; exit 1; }
-chmod 0644 /usr/share/pixmaps/margine-logo.png
-if command -v gtk-update-icon-cache >/dev/null 2>&1; then
-  gtk-update-icon-cache -f -t -q /usr/share/icons/hicolor 2>/dev/null || true
-fi
-log "Installed margine-logo: hicolor/scalable/apps SVG + pixmaps PNG (About panel can now resolve it via GTK4 icon-theme lookup)"
+# (a) Logo. Two icon names, both in hicolor so the icon theme finds them:
+#   lucciola-logo  the firefly on its dark rounded tile: the OS and app icon
+#                  (os-release LOGO=, notifications, the About panel);
+#   lucciola-mark  the firefly alone, for places with a dark background of
+#                  their own (and lucciola-mark-symbolic, its symbolic form).
+# Each as scalable SVG; the tile also at the fixed hicolor sizes, because
+# notification daemons and the lock screen pick a raster size when one
+# exists, and in /usr/share/pixmaps for consumers outside the icon theme.
+# The GNOME About panel looks LOGO= up in the icon theme only (GTK4
+# FORCE_REGULAR lookup, no pixmaps fallback), so the scalable SVG is the
+# one that matters there.
+for f in lucciola-logo.svg lucciola-mark.svg lucciola-mark-symbolic.svg; do need "$A/$f"; done
+install -Dm0644 "$A/lucciola-logo.svg" /usr/share/icons/hicolor/scalable/apps/lucciola-logo.svg
+install -Dm0644 "$A/lucciola-mark.svg" /usr/share/icons/hicolor/scalable/apps/lucciola-mark.svg
+install -Dm0644 "$A/lucciola-mark-symbolic.svg" /usr/share/icons/hicolor/symbolic/apps/lucciola-mark-symbolic.svg
+for n in 16 24 32 48 64 128 256 512; do
+  need "$A/icons/lucciola-logo-$n.png"
+  install -Dm0644 "$A/icons/lucciola-logo-$n.png" "/usr/share/icons/hicolor/${n}x${n}/apps/lucciola-logo.png"
+done
+need "$A/icons/lucciola-mark-256.png"
+install -Dm0644 "$A/icons/lucciola-mark-256.png" /usr/share/icons/hicolor/256x256/apps/lucciola-mark.png
+install -Dm0644 "$A/icons/lucciola-logo-256.png" /usr/share/pixmaps/lucciola-logo.png
+# margine-logo: the old name, now carrying the Lucciola tile. The live
+# ISO's installer icon (live-env/src/build.sh), a notification sent by an
+# older helper or a launcher a user copied may still name it.
+install -Dm0644 "$A/lucciola-logo.svg" /usr/share/icons/hicolor/scalable/apps/margine-logo.svg
+install -Dm0644 "$A/icons/lucciola-logo-256.png" /usr/share/pixmaps/margine-logo.png
+gtk-update-icon-cache -f -t -q /usr/share/icons/hicolor 2>/dev/null || true
+log "Installed lucciola-logo (tile) and lucciola-mark: hicolor scalable + raster sizes, pixmaps; margine-logo kept as an alias"
 
-# (b) Wallpaper → /usr/share/backgrounds/margine/ + dconf override so it's
-#     the default desktop background (light + dark).
-mkdir -p /usr/share/backgrounds/margine
-cp /ctx/50-branding/assets/wallpaper-margine.png /usr/share/backgrounds/margine/margine.png
-chmod 0644 /usr/share/backgrounds/margine/margine.png
-# Backwards-compat shim: pre-2026-05-30 images shipped this file as
-# `autumn-leaves.png` and users' dconf may still point there. Keep a
-# symlink so existing sessions keep rendering the new image rather
-# than dropping to the fallback solid color after `bootc upgrade`.
-# Remove in a few months once it's safe to assume everyone has run
-# `gsettings reset org.gnome.desktop.background picture-uri` at least
-# once.
-ln -sf margine.png /usr/share/backgrounds/margine/autumn-leaves.png
-log "Installed: /usr/share/backgrounds/margine/margine.png (+ autumn-leaves.png compat symlink)"
+# (b) Wallpaper: dusk over dark hills with a few fireflies
+#     (lucciola/assets/wallpaper/make-wallpaper.py). lucciola.png is the 16:9
+#     render and the default everywhere (GNOME and its lock screen, GDM,
+#     Noctalia through 15-wallpaper.toml, the greeter through sync.toml);
+#     the 3:2 and 16:10 renders sit next to it for screens of those shapes.
+install -d -m0755 /usr/share/backgrounds/lucciola
+for size in 3840x2160 2880x1920 2560x1600; do
+  need "$A/wallpaper/lucciola-$size.png"
+  install -m0644 "$A/wallpaper/lucciola-$size.png" "/usr/share/backgrounds/lucciola/lucciola-$size.png"
+done
+ln -sf lucciola-3840x2160.png /usr/share/backgrounds/lucciola/lucciola.png
+# Margine's paths stay, as links to the new wallpaper: the login screen's
+# sync.toml on installed systems (copied once, never rewritten) and anyone
+# who picked the old file by its path get the new wallpaper instead of a
+# blank screen. autumn-leaves.png is the name from before 2026-05-30.
+install -d -m0755 /usr/share/backgrounds/margine
+ln -sf ../lucciola/lucciola.png /usr/share/backgrounds/margine/margine.png
+ln -sf ../lucciola/lucciola.png /usr/share/backgrounds/margine/autumn-leaves.png
+log "Installed: /usr/share/backgrounds/lucciola/ (+ margine.png, autumn-leaves.png compat links)"
 
-# Desktop background gschema override — set on the existing zz1 file so
-# it loads after Bluefin's zz0.
+# Desktop background gschema override: appended to the zz1 file
+# 30-gnome-defaults writes, so it loads after the base's own.
 cat >> /usr/share/glib-2.0/schemas/zz1-margine.gschema.override <<'OVERRIDE'
 
 [org.gnome.desktop.background]
-picture-uri='file:///usr/share/backgrounds/margine/margine.png'
-picture-uri-dark='file:///usr/share/backgrounds/margine/margine.png'
+picture-uri='file:///usr/share/backgrounds/lucciola/lucciola.png'
+picture-uri-dark='file:///usr/share/backgrounds/lucciola/lucciola.png'
 picture-options='zoom'
-primary-color='#000000'
-secondary-color='#000000'
+primary-color='#121212'
+secondary-color='#121212'
 
 [org.gnome.desktop.screensaver]
-picture-uri='file:///usr/share/backgrounds/margine/margine.png'
+picture-uri='file:///usr/share/backgrounds/lucciola/lucciola.png'
 picture-options='zoom'
-primary-color='#000000'
+primary-color='#121212'
 OVERRIDE
 
-# (c) Plymouth theme → /usr/share/plymouth/themes/margine/
-# Our theme is script-based, which needs /usr/lib64/plymouth/script.so.
-# Bluefin DX ships Plymouth core but not the script plugin (their own
-# theme uses other plugins). Layer plymouth-plugin-script so the
-# plymouth-set-default-theme call below resolves the backend.
-log "Installing plymouth-plugin-script (required by our script-based theme)"
+# (c) Plymouth theme: /usr/share/plymouth/themes/lucciola/ (the wordmark,
+# its breathing firefly, the disk unlock prompt; lucciola.script says how).
+# A script theme: it needs the script plugin (script.so), which the base
+# does not ship.
+log "Installing plymouth-plugin-script (required by the script-based theme)"
 dnf -y install plymouth-plugin-script
 
-mkdir -p /usr/share/plymouth/themes/margine
-for f in margine.plymouth margine.script watermark.png ; do
-  cp "/ctx/50-branding/assets/plymouth/${f}" "/usr/share/plymouth/themes/margine/${f}"
+P=/usr/share/plymouth/themes/lucciola
+install -d -m0755 "$P"
+need "$A/plymouth/lucciola.plymouth"; need "$A/plymouth/lucciola.script"
+install -m0644 "$A/plymouth/lucciola.plymouth" "$A/plymouth/lucciola.script" "$P/"
+for f in "$A"/plymouth/{wordmark,firefly,field,bullet}-*.png; do
+  need "$f"; install -m0644 "$f" "$P/"
 done
-chmod 0644 /usr/share/plymouth/themes/margine/*
-log "Installed: /usr/share/plymouth/themes/margine/"
+# Every image the script asks for must be there: it builds the names
+# (wordmark-<size>.png), so a size added to a ladder without its render
+# would only show at boot, as a missing logo.
+python3 - "$P" <<'PYCHECK'
+import os, re, sys
+d = sys.argv[1]
+s = open(os.path.join(d, "lucciola.script")).read()
+def ladder(name):
+    return [int(v) for v in re.findall(name + r"\[\d+\]\s*=\s*(\d+);", s)]
+missing = []
+for prefix, ladder_name in (("wordmark", "word_ladder"), ("firefly", "word_ladder"),
+                            ("field", "field_ladder"), ("bullet", "field_ladder")):
+    sizes = ladder(ladder_name)
+    if not sizes:
+        sys.exit(f"ERROR: lucciola.script: no {ladder_name} sizes found")
+    missing += [f"{prefix}-{n}.png" for n in sizes if not os.path.isfile(os.path.join(d, f"{prefix}-{n}.png"))]
+if missing:
+    sys.exit("ERROR: Plymouth images missing: " + ", ".join(missing))
+PYCHECK
+log "Installed: $P ($(find "$P" -name '*.png' | wc -l) images)"
 
-# Set Margine as the default Plymouth theme. The `-R` flag would
-# regenerate the initramfs, but in a bootc build context we'd rather
-# trigger that explicitly at the end of the kernel install path. Here we
-# just point the config; dracut --regenerate-all (run below) picks it
-# up because the symlink set by plymouth-set-default-theme is in
-# /etc/plymouth/plymouthd.conf.
-if command -v plymouth-set-default-theme >/dev/null 2>&1; then
-  plymouth-set-default-theme margine
-  log "Set Plymouth default theme: margine"
-fi
-# Regenerate initramfs so the new Plymouth theme is embedded for the
-# boot splash. Output goes to /usr/lib/modules/<KVER>/initramfs.img,
-# the bootc/ostree-expected path. --add ostree explicitly includes the
-# ostree dracut module (without which switch-root fails — see comment
-# in custom-kernel/install.sh).
-# regenerate_initramfs (00-common.sh): zstd, --add ostree, and
-# byte-reproducible (same packages, same bytes, whatever the build date).
-if command -v dracut >/dev/null 2>&1; then
-  for kver_dir in /usr/lib/modules/*/; do
-    kver=$(basename "$kver_dir")
-    regenerate_initramfs "$kver" || { log "ERROR: dracut failed for $kver"; exit 1; }
+# Lucciola as the default theme, and DeviceScale=1. With Plymouth's own
+# HiDPI scale (2 on the 2880x1920 reference laptop) every image and text
+# label of a script theme is drawn at scale 1 and stretched 2x, soft; the
+# theme sizes everything from the screen in device pixels instead. A boot
+# with plymouth.force-scale=2 on the kernel command line (which wins)
+# still shows it, only softer. plymouth-populate-initrd copies this file
+# into the initramfs, with the theme.
+plymouth-set-default-theme lucciola
+conf=/etc/plymouth/plymouthd.conf
+grep -q '^\[Daemon\]' "$conf" || printf '[Daemon]\n' >> "$conf"
+sed -i '/^DeviceScale=/d' "$conf"
+sed -i '0,/^\[Daemon\]/s//[Daemon]\nDeviceScale=1/' "$conf"
+grep -qx 'Theme=lucciola' "$conf" && grep -qx 'DeviceScale=1' "$conf" \
+  || { log "ERROR: $conf does not select the lucciola theme at DeviceScale=1: $(tr '\n' ' ' < "$conf")"; exit 1; }
+log "Set Plymouth default theme: lucciola, DeviceScale=1"
+# THE initramfs of the build (2026-10-18: custom-kernel no longer makes a
+# first one that this run always replaced). Output goes to
+# /usr/lib/modules/<KVER>/initramfs.img, the bootc/ostree-expected path.
+# regenerate_initramfs (00-common.sh): generic (custom-kernel's
+# 01-margine-no-hostonly.conf), --add ostree (without which switch-root
+# fails, see custom-kernel/install.sh), zstd, and byte-reproducible (same
+# packages, same bytes, whatever the build date).
+command -v dracut >/dev/null 2>&1 || { log "ERROR: dracut missing: no initramfs, no boot"; exit 1; }
+for kver_dir in /usr/lib/modules/*/; do
+  kver=$(basename "$kver_dir")
+  regenerate_initramfs "$kver" || { log "ERROR: dracut failed for $kver"; exit 1; }
+  [[ -s "${kver_dir}initramfs.img" ]] || { log "ERROR: no initramfs written for $kver"; exit 1; }
+  # The splash is only what the initramfs carries: the theme, its plugin,
+  # the text renderer and the configuration with DeviceScale.
+  ird="$(lsinitrd "${kver_dir}initramfs.img" 2>/dev/null || true)"
+  for want in usr/share/plymouth/themes/lucciola/lucciola.script usr/share/plymouth/themes/lucciola/wordmark-720.png \
+              usr/lib64/plymouth/script.so usr/lib64/plymouth/label-freetype.so; do
+    grep -q " ${want}\$" <<<"$ird" || { log "ERROR: the initramfs for $kver lacks $want"; exit 1; }
   done
+  lsinitrd -f etc/plymouth/plymouthd.conf "${kver_dir}initramfs.img" 2>/dev/null | grep -qx 'DeviceScale=1' \
+    || { log "ERROR: the initramfs for $kver has no DeviceScale=1 in plymouthd.conf"; exit 1; }
+  log "Wrote ${kver_dir}initramfs.img ($(du -h "${kver_dir}initramfs.img" | cut -f1), Plymouth theme lucciola)"
+done
+# vmlinuz must still be the bytes custom-kernel signed (its checksum,
+# left in this RUN's /tmp): a rewrite would ship a kernel Secure Boot
+# rejects with the cryptic "bad shim signature".
+if [[ -f /tmp/vmlinuz.sha ]]; then
+  sha256sum -c /tmp/vmlinuz.sha >/dev/null || { log "ERROR: vmlinuz changed after signing"; exit 1; }
+  rm -f /tmp/vmlinuz.sha
+  log "vmlinuz still the signed bytes after dracut"
 fi
 
 # (d) GDM login screen background — system dconf override.
@@ -120,10 +177,10 @@ file-db:/usr/share/gdm/greeter-dconf-defaults
 EOF
 cat > /etc/dconf/db/gdm.d/01-margine-background <<'EOF'
 [org/gnome/desktop/background]
-picture-uri='file:///usr/share/backgrounds/margine/margine.png'
-picture-uri-dark='file:///usr/share/backgrounds/margine/margine.png'
+picture-uri='file:///usr/share/backgrounds/lucciola/lucciola.png'
+picture-uri-dark='file:///usr/share/backgrounds/lucciola/lucciola.png'
 picture-options='zoom'
-primary-color='#000000'
+primary-color='#121212'
 EOF
 # (d.ter) Replace Bluefin's "F"-logo SVG with a fully transparent one.
 # Bluefin DX drops its own logo into
@@ -154,8 +211,8 @@ fi
 #
 # Those are not lookup fallbacks; they are compile-time filenames in
 # Fedora's gnome-control-center.spec. Deleting them makes the About
-# panel show no distributor logo, so overwrite them with Margine art
-# instead.
+# panel show no distributor logo, so overwrite them with Lucciola's
+# wordmark instead.
 #
 # Confirmed on 2026-06-06 diagnose dump (daniel margine VM):
 #   /usr/share/pixmaps/fedora-gdm-logo.png        (5.6 KB,  150×61)
@@ -179,33 +236,31 @@ rm -f /usr/share/pixmaps/fedora-gdm-logo.png \
       /usr/share/pixmaps/system-logo-white.png \
       /usr/share/icons/hicolor/scalable/apps/fedora-logo-sprite.svg
 
-# fedora-logo-icon is NOT deleted but REPLACED with the Margine mark
+# fedora-logo-icon is NOT deleted but REPLACED with the Lucciola tile
 # (Bluefin pattern: keep Fedora icon NAMES, swap content). The name is
 # HARDCODED in components we cannot rebuild: anaconda-live's
 # fedora-welcome dialog (Adw.StatusPage iconName) + its autostart
 # .desktop on the live ISO, and gnome-initial-setup's language page
 # (maps os-release ID=fedora -> fedora-logo-icon). Deleting it (as we
 # did before) renders the image-missing placeholder on both welcomes.
-cp /usr/share/icons/hicolor/scalable/apps/margine-logo.svg \
+cp /usr/share/icons/hicolor/scalable/apps/lucciola-logo.svg \
    /usr/share/icons/hicolor/scalable/apps/fedora-logo-icon.svg
-cp /usr/share/pixmaps/margine-logo.png /usr/share/pixmaps/fedora-logo-icon.png
+cp /usr/share/pixmaps/lucciola-logo.png /usr/share/pixmaps/fedora-logo-icon.png
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
   gtk-update-icon-cache -f -t -q /usr/share/icons/hicolor 2>/dev/null || true
 fi
-log "fedora-logo-icon now carries the Margine mark (fedora-welcome + gnome-initial-setup hardcode this name)"
-# About-panel distributor logo = the Margine WORDMARK, not the square "m".
-# fedora_logo_med.png is shown on LIGHT backgrounds (so a dark-text
-# wordmark); fedora_whitelogo_med.png on DARK backgrounds (white-text
-# wordmark). gnome-control-center renders these with GtkPicture
-# can-shrink=false: intrinsic pixel size == logical size, so the assets
-# are 256×64 (Fedora's originals are 250×102) — 1200×300 rendered 5×
-# oversized and blurry at 200% scale.
-cp /ctx/50-branding/assets/margine-wordmark-dark.png  /usr/share/pixmaps/fedora_logo_med.png
-[[ -s /usr/share/pixmaps/fedora_logo_med.png ]] || { log "FATAL: required branding asset is empty: /usr/share/pixmaps/fedora_logo_med.png"; exit 1; }
-cp /ctx/50-branding/assets/margine-wordmark-light.png /usr/share/pixmaps/fedora_whitelogo_med.png
-[[ -s /usr/share/pixmaps/fedora_whitelogo_med.png ]] || { log "FATAL: required branding asset is empty: /usr/share/pixmaps/fedora_whitelogo_med.png"; exit 1; }
-chmod 0644 /usr/share/pixmaps/fedora_logo_med.png /usr/share/pixmaps/fedora_whitelogo_med.png
-log "About-panel distributor logo set to the Margine wordmark (dark=light-theme, white=dark-theme)"
+log "fedora-logo-icon now carries the Lucciola tile (fedora-welcome + gnome-initial-setup hardcode this name)"
+# About-panel distributor logo = the Lucciola WORDMARK, not the tile.
+# fedora_logo_med.png is shown on LIGHT backgrounds (the dark word,
+# lucciola-wordmark-light.svg); fedora_whitelogo_med.png on DARK
+# backgrounds (the light word, lucciola-wordmark.svg). gnome-control-center
+# renders these with GtkPicture can-shrink=false: intrinsic pixel size ==
+# logical size, so the renders are 256x59 (Fedora's originals are
+# 250x102); a 1200x300 one rendered 5x oversized at 200% scale.
+need "$A/about/wordmark-on-light.png"; need "$A/about/wordmark-on-dark.png"
+install -m0644 "$A/about/wordmark-on-light.png" /usr/share/pixmaps/fedora_logo_med.png
+install -m0644 "$A/about/wordmark-on-dark.png" /usr/share/pixmaps/fedora_whitelogo_med.png
+log "About-panel distributor logo set to the Lucciola wordmark (dark word on light, light word on dark)"
 
 # (d.bis) GDM greeter logo — explicitly DISABLED.
 # The default org.gnome.login-screen.logo points at
@@ -231,20 +286,23 @@ log "Installed: GDM background + greeter logo overrides"
 
 # (e) /etc/issue — text-mode banner shown on console (e.g. emergency shell)
 cat > /etc/issue <<'EOF'
-Margine \r (\m): Fedora Silverblue + CachyOS signed kernel
+Lucciola \r (\m): Fedora Silverblue + CachyOS signed kernel
 \d \t
 
 EOF
 chmod 0644 /etc/issue
 log "Installed: /etc/issue"
 
-# (f) Fastfetch config + margine-fetch wrapper.
+# (f) Fastfetch config + lucciola-fetch wrapper.
 # Fetch the ASCII logo and use it as fastfetch's --logo source.
 mkdir -p /usr/share/fastfetch /usr/share/margine
-cp /ctx/50-branding/assets/ascii-logo.txt /usr/share/margine/ascii-logo.txt
+# Lucciola's firefly in shaded blocks over the name; margine.jsonc colours
+# it in the palette ($1 beige, $2 sand, $3 the halo, $4 the text).
+need "$A/fastfetch-logo.txt"
+cp "$A/fastfetch-logo.txt" /usr/share/margine/ascii-logo.txt
 chmod 0644 /usr/share/margine/ascii-logo.txt
 
-# margine.jsonc + the margine-fetch wrapper ship as tracked files via
+# margine.jsonc + the lucciola-fetch wrapper ship as tracked files via
 # system_files (migrated out of heredocs 2026-06-12 so linters and
 # reviewers actually see them).
 
@@ -282,16 +340,14 @@ log "Stripping Bluefin/ublue branding leftover from /usr/share + /usr/share/appl
 # (a) Visible app-menu entries that point at Bluefin docs/community.
 # `discourse.desktop` opens github.com/ublue-os/bluefin/discussions →
 # not a Margine resource at all → delete.
-# `documentation.desktop` opens docs.projectbluefin.io → repoint at
-# Margine's docs launcher + rename.
+# `documentation.desktop` opens docs.projectbluefin.io → delete. Margine's
+# offline docs launcher replaced it until 2026-10-18; Lucciola's guide is
+# online and has no address of its own yet, so there is no launcher.
 # `system-update.desktop` says "Update Bluefin, Flatpaks, …" → keep
 # the underlying uupd flow (Margine uses it too) but rebrand.
 rm -f /usr/share/applications/discourse.desktop
 
 SCHEDULER_ICON="/usr/share/icons/hicolor/scalable/apps/margine-scheduler.svg"
-DOCS_ICON="/usr/share/icons/hicolor/scalable/apps/margine-documentation.svg"
-OFFLINE_DOCS_DIR="/usr/share/margine/offline-docs"
-MARGINE_DOCS_BASE_URL="${MARGINE_DOCS_BASE_URL:-https://margine.dev}"
 
 # Lightning-bolt app icon for the CPU scheduler — ties to Margine's perf /
 # "snappier under load" theme, shipped locally instead of a generic MoreWaita
@@ -315,29 +371,14 @@ cat >"$SCHEDULER_ICON" <<'SCHEDULER_ICON_SVG'
   <path d="M74 18 L36 70 H58 L54 110 L92 58 H70 Z" fill="url(#m-sched-bolt)" stroke="#ffe0b0" stroke-opacity="0.5" stroke-width="2" stroke-linejoin="round"/>
 </svg>
 SCHEDULER_ICON_SVG
-cp /ctx/50-branding/assets/icons/margine-documentation.svg "$DOCS_ICON"
-[[ -s "$DOCS_ICON" ]] || { log "FATAL: required branding asset is empty: $DOCS_ICON"; exit 1; }
-# Ship the offline-docs builder in the image so the runtime refresh
-# service (margine-docs-refresh.timer -> /usr/libexec/margine/docs-refresh)
-# can rebuild the mirror into /var/lib/margine/offline-docs with the
-# exact same fetch/rewrite logic that bakes this /usr seed.
-install -Dm0755 /ctx/50-branding/build-offline-docs.py /usr/libexec/margine/build-offline-docs
-# Best-effort seed: don't couple a ~28-min image build to the docs
-# site's uptime. If the site is unreachable past its retries the seed
-# is left empty (or partial) and margine-docs-refresh.service rebuilds
-# the mirror from the network on first boot. Failing the build here
-# would brick it on a transient website blip for no durable gain.
-if ! python3 /usr/libexec/margine/build-offline-docs \
-  --base-url "$MARGINE_DOCS_BASE_URL" \
-  --output-dir "$OFFLINE_DOCS_DIR"; then
-  log "WARN: offline-docs seed failed (site unreachable?) — runtime docs-refresh will backfill the mirror"
-fi
-chmod 0644 "$SCHEDULER_ICON" "$DOCS_ICON"
-chmod -R a+rX "$OFFLINE_DOCS_DIR"
+chmod 0644 "$SCHEDULER_ICON"
+# The offline mirror of margine.dev (fetched here at build time, refreshed
+# by margine-docs-refresh.timer, opened by margine-docs-open and its
+# "Margine Documentation" launcher) left on 2026-10-18: Lucciola's guide
+# is online.
 
-# Offline-first docs enablement symlinks + the two rebranded app-menu
-# entries (margine-documentation / margine-system-update) ship as
-# tracked system_files now; only the Bluefin originals get removed here.
+# The rebranded system-update entry (margine-system-update) ships as a
+# tracked system_files entry; only the Bluefin originals get removed here.
 rm -f /usr/share/applications/documentation.desktop
 rm -f /usr/share/applications/system-update.desktop
 
@@ -350,17 +391,17 @@ rm -f /usr/share/icons/hicolor/scalable/places/ublue-discourse.svg \
 # (b.bis) gnome-initial-setup's Language page renders
 # <GtkImage icon_name='start-here-symbolic' pixel_size=96> as a 96px
 # header above the locale list. Bluefin DX overrides this Adwaita icon
-# with its mascot glyph. Replace it with a real path-based symbolic
-# Margine glyph; GTK4 symbolic icons do not accept embedded raster
-# <image> nodes.
-cp /ctx/50-branding/assets/start-here-symbolic.svg /usr/share/icons/Adwaita/symbolic/places/start-here-symbolic.svg
+# with its mascot glyph. Replace it with Lucciola's symbolic firefly (two
+# circles, lucciola-mark-symbolic.svg); GTK4 symbolic icons do not accept
+# embedded raster <image> nodes.
+cp "$A/lucciola-mark-symbolic.svg" /usr/share/icons/Adwaita/symbolic/places/start-here-symbolic.svg
 [[ -s /usr/share/icons/Adwaita/symbolic/places/start-here-symbolic.svg ]] || { log "FATAL: required branding asset is empty: /usr/share/icons/Adwaita/symbolic/places/start-here-symbolic.svg"; exit 1; }
 chmod 0644 /usr/share/icons/Adwaita/symbolic/places/start-here-symbolic.svg
 if grep -Eiq '<image[[:space:]>]|data:image/' /usr/share/icons/Adwaita/symbolic/places/start-here-symbolic.svg; then
   log "FATAL: start-here-symbolic.svg contains an embedded raster image; GTK4 symbolic icons require path/circle/rect primitives"
   exit 1
 fi
-log "Replaced start-here-symbolic.svg with Margine 'm' glyph ($(stat -c %s /usr/share/icons/Adwaita/symbolic/places/start-here-symbolic.svg) bytes)"
+log "Replaced start-here-symbolic.svg with Lucciola's symbolic firefly ($(stat -c %s /usr/share/icons/Adwaita/symbolic/places/start-here-symbolic.svg) bytes)"
 
 # (c) Bluefin wallpaper collection (Settings → Background spam).
 rm -rf /usr/share/backgrounds/bluefin

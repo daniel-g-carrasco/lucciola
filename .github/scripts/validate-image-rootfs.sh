@@ -40,12 +40,11 @@ check_nonempty() { [[ -s "$ROOTFS/$1" ]] || { echo "::error::file $1 missing or 
 check_exec() { [[ -x "$ROOTFS/$1" ]] || { echo "::error::not executable $1 ($2)"; fail=1; }; }
 
 # A.1 — About-panel logo: os-release LOGO + asset on disk
-if ! grep -qE '^LOGO=margine-logo$' "$ROOTFS/etc/os-release"; then
-  echo "::error::A.1 /etc/os-release does not declare LOGO=margine-logo"; fail=1
+if ! grep -qE '^LOGO=lucciola-logo$' "$ROOTFS/etc/os-release"; then
+  echo "::error::A.1 /etc/os-release does not declare LOGO=lucciola-logo"; fail=1
 fi
-if [[ ! -f "$ROOTFS/usr/share/pixmaps/margine-logo.png" && ! -f "$ROOTFS/usr/share/pixmaps/margine-logo.svg" ]]; then
-  echo "::error::A.1 /usr/share/pixmaps/margine-logo.{png,svg} missing"; fail=1
-fi
+check_nonempty "usr/share/icons/hicolor/scalable/apps/lucciola-logo.svg" "A.1"
+check_nonempty "usr/share/pixmaps/lucciola-logo.png" "A.1"
 check_nonempty "usr/share/pixmaps/fedora_logo_med.png" "A.1"
 check_nonempty "usr/share/pixmaps/fedora_whitelogo_med.png" "A.1"
 
@@ -56,12 +55,12 @@ if grep -Eiq '<image[[:space:]>]|data:image/' "$ROOTFS/usr/share/icons/Adwaita/s
 fi
 
 # A.3: Lucciola, niri + Noctalia, and GNOME as a STOCK fallback session.
-# The Margine steps bake GNOME extensions, their dconf defaults and a GNOME
-# first-login bootstrap; lucciola/build.sh then removes them (the Margine
-# checks that used to sit here asserted the opposite). Assert the outcome
-# Lucciola ships: none of Margine's extensions, none of its Shell dconf
-# defaults or first-login autostarts, the Lucciola session on the login
-# screen and preselected for new users.
+# Since 2026-10-18 the build adds no GNOME extensions, Shell dconf defaults
+# or GNOME first-login bootstrap at all (until then lucciola/build.sh
+# removed what the Margine steps added; the Margine checks that used to sit
+# here asserted the opposite). Assert the outcome: none of Margine's
+# extensions, none of its Shell dconf defaults or first-login autostarts,
+# the Lucciola session on the login screen and preselected for new users.
 for uuid in \
   appindicatorsupport@rgcjonas.gmail.com \
   bazaar-integration@kolunmi.github.io \
@@ -99,6 +98,29 @@ if grep -qs 'it\.mijorus\.smile' "$ROOTFS/usr/share/flatpak/preinstall.d/margine
   echo "::error::A.3 Smile is preinstalled again (Noctalia's launcher picks emoji)"; fail=1
 fi
 
+# A.3.login: the login screen is greetd running Noctalia Greeter, GDM its
+# fallback (lucciola/build.sh step 5). -L/readlink, not -e: the image's
+# absolute links dangle under $ROOTFS (see A.4.mok).
+dm="$(readlink "$ROOTFS/etc/systemd/system/display-manager.service" 2>/dev/null || true)"
+[[ "$dm" == */greetd.service ]] \
+  || { echo "::error::A.3.login display-manager.service points to '${dm:-nothing}', not greetd"; fail=1; }
+grep -qs '^command = ".*/usr/bin/noctalia-greeter-session"' "$ROOTFS/etc/greetd/config.toml" \
+  || { echo "::error::A.3.login etc/greetd/config.toml does not run Noctalia Greeter"; fail=1; }
+grep -qsE '^-password[[:space:]]+optional[[:space:]]+pam_oo7\.so' "$ROOTFS/usr/lib/pam.d/greetd" \
+  && grep -qsE '^session[[:space:]]+optional[[:space:]]+pam_env\.so.*session-type\.conf' "$ROOTFS/usr/lib/pam.d/greetd" \
+  && grep -qsE '^-auth[[:space:]]+optional[[:space:]]+pam_oo7\.so' "$ROOTFS/usr/lib/pam.d/greetd" \
+  || { echo "::error::A.3.login usr/lib/pam.d/greetd lacks Lucciola's pam_oo7/pam_env lines"; fail=1; }
+[[ ! -e "$ROOTFS/etc/pam.d/greetd" ]] \
+  || { echo "::error::A.3.login etc/pam.d/greetd shadows Fedora's usr/lib/pam.d/greetd"; fail=1; }
+grep -qsx 'OnFailure=gdm.service' "$ROOTFS/usr/lib/systemd/system/greetd.service.d/50-lucciola.conf" \
+  || { echo "::error::A.3.login greetd.service has no GDM fallback"; fail=1; }
+test -L "$ROOTFS/usr/lib/systemd/system/graphical.target.wants/lucciola-login-migrate.service" \
+  || { echo "::error::A.3.login lucciola-login-migrate.service is not enabled"; fail=1; }
+check_file "usr/lib/tmpfiles.d/lucciola-greeter.conf" "A.3.login"
+check_exec "usr/libexec/lucciola/autologin-session" "A.3.login"
+check_exec "usr/libexec/lucciola/login-migrate" "A.3.login"
+check_exec "usr/bin/dbus-run-session" "A.3.login"
+
 # A.4: first-boot status helper (its GNOME autostart is gone, see A.3)
 check_exec "usr/libexec/margine-first-boot-status" "A.4"
 
@@ -107,7 +129,7 @@ check_exec "usr/libexec/margine-first-boot-status" "A.4"
 # image ships: the generated font, a drop-in that loadfonts it + selects it
 # via gfxterm_font + switches to gfxterm, and the re-render helper (bootupd
 # does NOT re-render the static config on `bootc upgrade`, so existing installs
-# need `ujust margine-grub-hidpi`).
+# need `ujust lucciola-grub-hidpi`).
 GRUB_GFX="usr/lib/bootupd/grub2-static/configs.d/05_margine-gfxmode.cfg"
 check_file "$GRUB_GFX" "A.4.gfx"
 check_nonempty "usr/lib/bootupd/grub2-static/fonts/margine.pf2" "A.4.gfx"
@@ -139,14 +161,16 @@ if ! command -v systemd-analyze >/dev/null 2>&1; then
 elif ! cycle_selftest; then
   echo "::warning::systemd-analyze did not report a deliberately cyclic pair: ordering-cycle check not trustworthy here, skipped"
 else
-  VERIFY_OUT="$(systemd-analyze --root="$ROOTFS" verify --man=no sysinit.target multi-user.target 2>&1 || true)"
+  # graphical.target too: the display manager and the login-screen
+  # migration unit order themselves there (2026-10, greetd).
+  VERIFY_OUT="$(systemd-analyze --root="$ROOTFS" verify --man=no sysinit.target multi-user.target graphical.target 2>&1 || true)"
   CYCLES="$(grep -iE "ordering cycle" <<<"$VERIFY_OUT" || true)"
   if [ -n "$CYCLES" ]; then
     echo "::error::A.4.units ordering cycle in the image's boot transaction:"
     echo "$CYCLES" | head -5
     fail=1
   else
-    echo "  ok: no ordering cycle in sysinit.target / multi-user.target (self-test passed)"
+    echo "  ok: no ordering cycle in sysinit.target / multi-user.target / graphical.target (self-test passed)"
   fi
 fi
 check_file "usr/lib/systemd/system/margine-grub-hidpi.service" "A.4.gfx"
@@ -168,7 +192,7 @@ grep -q '^[[:space:]]*set gfxterm_font=' "$ROOTFS/$GRUB_GFX" 2>/dev/null \
 grep -q 'terminal_output gfxterm' "$ROOTFS/$GRUB_GFX" 2>/dev/null \
   || { echo "::error::A.4.gfx GRUB drop-in does not switch to gfxterm"; fail=1; }
 
-# A.4.grub-lock: `ujust margine-grub-lock` only works while bootupd's
+# A.4.grub-lock: `ujust lucciola-grub-lock` only works while bootupd's
 # static GRUB config keeps reading user.cfg (GRUB2_PASSWORD). If a base
 # change drops that snippet, the password would silently protect nothing,
 # and TPM2 disk unlock would again be one `e` away from a root shell.
@@ -183,12 +207,19 @@ fi
 [[ -f "$ROOTFS/usr/libexec/margine/boot-writable.sh" ]] \
   || { echo "::error::usr/libexec/margine/boot-writable.sh missing: grub-lock and grub-hidpi-apply cannot write to a read-only /boot (A.4.grub-lock)"; fail=1; }
 
-# A.4.keyring — login keyring on oo7 (Fedora 45). margine-keyring opens the
+# A.4.keyring: login keyring on oo7 (Fedora 45). lucciola-keyring opens the
 # keyring at login with a TPM-bound credential (fingerprint, autologin);
 # keyring-legacy-aside runs before oo7-daemon so a Fedora 44 plaintext
 # keyring cannot stop it, keyring-import-legacy moves its items over; the
 # D-Bus activation file starts oo7 outside GNOME's session target (Lucciola).
-check_exec "usr/bin/margine-keyring" "A.4.keyring"
+check_exec "usr/bin/lucciola-keyring" "A.4.keyring"
+# A.4.names: the commands are lucciola-* since 2026-10-18; the margine-*
+# names stay as links to them while installs and habits move over.
+for n in autologin dev-groups fetch keyring status tpm-unlock validate-margine-system validate-branding; do
+  check_exec "usr/bin/lucciola-$n" "A.4.names"
+  [[ "$(readlink "$ROOTFS/usr/bin/margine-$n" 2>/dev/null)" == "lucciola-$n" ]] \
+    || { echo "::error::A.4.names usr/bin/margine-$n is not a link to lucciola-$n"; fail=1; }
+done
 check_exec "usr/bin/seahorse" "A.4.keyring"
 check_exec "usr/libexec/margine/keyring-legacy-aside" "A.4.keyring"
 check_exec "usr/libexec/margine/keyring-import-legacy" "A.4.keyring"
@@ -199,12 +230,9 @@ for f in usr/lib/systemd/user/oo7-daemon.service.d/50-margine-keyring-legacy.con
 done
 
 # A.4.repro: leftovers that made identical builds differ (2026-10-03).
-# Cloudflare-obfuscated text in the offline docs is unreadable offline
-# and re-randomised on every fetch; adb keys in root's home would be one
-# private key shared by every install of the same build.
-if grep -rqsE 'data-cfemail|email&#160;protected' "$ROOTFS/usr/share/margine/offline-docs"; then
-  echo "::error::offline docs still contain Cloudflare-obfuscated text (A.4.repro)"; fail=1
-fi
+# adb keys in root's home would be one private key shared by every
+# install of the same build. (The offline docs' Cloudflare-obfuscated text
+# was the other one; the docs left on 2026-10-18.)
 if [[ -e "$ROOTFS/var/roothome/.android" ]]; then
   echo "::error::var/roothome/.android (adb keys) shipped in the image (A.4.repro)"; fail=1
 fi
@@ -272,41 +300,40 @@ test -L "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants/margine-signed-o
   || { echo "::error::margine-signed-origin.service is not enabled (A.4.trust)"; fail=1; }
 check_exec "usr/libexec/margine/signed-origin" "A.4.trust"
 
-# A.4.bis — desktop launchers have high-res icons and docs fallback
+# A.4.bis: desktop launchers have high-res icons. The offline docs, their
+# launcher and their refresh timer left on 2026-10-18 (Lucciola's guide is
+# online): none of them may come back by accident.
 check_nonempty "usr/share/icons/hicolor/scalable/apps/margine-scheduler.svg" "A.4.bis"
-check_nonempty "usr/share/icons/hicolor/scalable/apps/margine-documentation.svg" "A.4.bis"
-check_exec "usr/libexec/margine/docs-open" "A.4.bis"
-check_exec "usr/bin/margine-docs-open" "A.4.bis"
-check_nonempty "usr/share/margine/offline-docs/index.html" "A.4.bis"
-check_nonempty "usr/share/margine/offline-docs/docs/index.html" "A.4.bis"
-check_nonempty "usr/share/margine/offline-docs/docs/install-status/index.html" "A.4.bis"
-docs_count="$(find "$ROOTFS/usr/share/margine/offline-docs" -path '*/index.html' -type f | wc -l)"
-if (( docs_count < 14 )); then
-  echo "::error::A.4.bis offline docs mirror is incomplete (index.html count=$docs_count)"
-  fail=1
-fi
-if grep -R -n -E '<script|/assets/.*\.(js|css)|href="/docs' "$ROOTFS/usr/share/margine/offline-docs"; then
-  echo "::error::A.4.bis offline docs still reference live JS/CSS assets or root-relative docs links"
-  fail=1
-fi
 grep -qxF 'Icon=margine-scheduler' "$ROOTFS/usr/share/applications/margine-scheduler.desktop" || { echo "::error::A.4.bis scheduler launcher does not use margine-scheduler icon"; fail=1; }
-grep -qxF 'Exec=margine-docs-open' "$ROOTFS/usr/share/applications/margine-documentation.desktop" || { echo "::error::A.4.bis docs launcher does not use margine-docs-open"; fail=1; }
-grep -qxF 'Icon=margine-documentation' "$ROOTFS/usr/share/applications/margine-documentation.desktop" || { echo "::error::A.4.bis docs launcher does not use margine-documentation icon"; fail=1; }
+for f in usr/share/margine/offline-docs usr/share/applications/margine-documentation.desktop \
+         usr/bin/margine-docs-open usr/lib/systemd/system/margine-docs-refresh.timer; do
+  if [[ -e "$ROOTFS/$f" ]]; then echo "::error::$f is back in the image (A.4.bis: the offline docs left on 2026-10-18)"; fail=1; fi
+done
 
 # A.5 — REMOVED (org.gnome.shell.app-grid schema does not exist in
 # GNOME 47/48; the keys we tried to set are ignored. Icon-size drift
 # between app-grid/folder is a CSS theme issue, not a gschema one).
 
-# A.3.bis: the dconf profile still reads the distro database. Lucciola
-# drops Margine's Shell defaults from it (A.3), the database itself stays
-# for what remains (authselect's defaults).
+# A.3.bis: the dconf profile still reads the distro database. The build
+# puts no Shell defaults there (A.3); the database stays for authselect's
+# defaults.
 grep -qxF 'system-db:distro' "$ROOTFS/etc/dconf/profile/user" || { echo "::error::A.3.bis /etc/dconf/profile/user lacks system-db:distro"; fail=1; }
 
 # A.3.ter — downstream patches + branding must land on the FINAL image
 # (added 2026-06-12). These assert OUTCOMES, independent of how the build
 # scripts behave.
 test -s "$ROOTFS/usr/share/icons/hicolor/scalable/apps/margine-logo.svg" \
-  || { echo "::error::A.3.ter margine-logo.svg missing from hicolor"; fail=1; }
+  || { echo "::error::A.3.ter margine-logo.svg missing from hicolor (the old name, kept as an alias of lucciola-logo)"; fail=1; }
+# The boot splash: Lucciola's theme, selected, at DeviceScale=1 (the theme
+# sizes itself in device pixels), and the wallpaper with the old Margine
+# path still resolving (installed systems' greeter sync.toml names it).
+check_nonempty "usr/share/plymouth/themes/lucciola/lucciola.script" "A.3.ter"
+grep -qx 'Theme=lucciola' "$ROOTFS/etc/plymouth/plymouthd.conf" \
+  || { echo "::error::A.3.ter plymouthd.conf does not select the lucciola theme"; fail=1; }
+grep -qx 'DeviceScale=1' "$ROOTFS/etc/plymouth/plymouthd.conf" \
+  || { echo "::error::A.3.ter plymouthd.conf lacks DeviceScale=1"; fail=1; }
+check_nonempty "usr/share/backgrounds/lucciola/lucciola.png" "A.3.ter"
+check_nonempty "usr/share/backgrounds/margine/margine.png" "A.3.ter"
 test -s "$ROOTFS/usr/share/icons/hicolor/scalable/apps/fedora-logo-icon.svg" \
   || { echo "::error::A.3.ter fedora-logo-icon.svg missing (fedora-welcome + gnome-initial-setup hardcode it)"; fail=1; }
 test -s "$ROOTFS/usr/share/pixmaps/fedora_logo_med.png" \
@@ -316,18 +343,6 @@ if cmp -s "$ROOTFS/usr/share/pixmaps/fedora_logo_med.png" "$ROOTFS/usr/share/pix
 fi
 test -x "$ROOTFS/usr/libexec/margine/staged-update-notify" \
   || { echo "::error::A.3.ter staged-update-notify missing"; fail=1; }
-
-# A.3.quater — legacy icon-name compat shims (2026-06-13). adwaita-icon-
-# theme 50 dropped these symbolic names, but the baked o-tiling extension
-# still references them and renders the broken-image placeholder without a
-# shim (build-margine-extensions.sh copies the closest Adwaita symbolic under
-# each legacy name). Assert the OUTCOME so a vanished source — which the build
-# only warns about — cannot silently re-introduce the placeholders.
-ICON_ACT="$ROOTFS/usr/share/icons/hicolor/scalable/actions"
-for ic in view-quilt-symbolic view-compact-symbolic border-all-symbolic; do
-  test -s "$ICON_ACT/${ic}.svg" \
-    || { echo "::error::A.3.quater icon shim ${ic}.svg missing/empty — baked extensions will show placeholder icons"; fail=1; }
-done
 
 if (( fail != 0 )); then
   echo "::error::First-boot asset validation FAILED — blocking rechunk/push/sign."

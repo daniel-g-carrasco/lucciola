@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Layer C: offline-inject the GUI smoke probe into a freshly built
-# qcow2 (smoke user + GDM autologin into the Lucciola session + the
-# gui-probe oneshot + a permissive-SELinux karg for this throwaway boot).
+# qcow2 (smoke user with a password + greetd autologin into the Lucciola
+# session + the greetd login driver + the probe oneshots + a
+# permissive-SELinux karg for this throwaway boot).
 #
 #   usage: sudo .github/scripts/inject-gui-probe.sh <image.qcow2>
 #
@@ -33,7 +34,8 @@ shopt -s nullglob
 
 QCOW="${1:?usage: inject-gui-probe.sh <image.qcow2>}"
 SMOKE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../smoke" && pwd)"
-[[ -f "$SMOKE_DIR/gui-probe.sh" && -f "$SMOKE_DIR/margine-gui-smoke.service" ]] \
+[[ -f "$SMOKE_DIR/gui-probe.sh" && -f "$SMOKE_DIR/margine-gui-smoke.service" \
+   && -f "$SMOKE_DIR/greetd-login.py" && -f "$SMOKE_DIR/margine-greetd-login.service" ]] \
   || { echo "::warning::Layer C: payloads missing under $SMOKE_DIR"; exit 1; }
 
 NBD=/dev/nbd0
@@ -127,30 +129,46 @@ VAR=$(dirname "$(dirname "$DEP")")/var
 [[ -d "$ETC" && -d "$VAR" ]] || { echo "::warning::Layer C: deployment etc/var not found"; exit 1; }
 echo "deployment: $DEP"
 
-# 1. Test user (uid/gid 1010), offline useradd. Password locked: GDM
-#    autologin doesn't need one. gnome-initial-setup-done keeps GNOME's
-#    first-login wizard away if the session ever falls back to GNOME.
+# 1. Test user (uid/gid 1010), offline useradd, with a password: the
+#    login driver logs in with it through greetd, so pam_unix checks it and
+#    pam_oo7 opens the Login keyring with it. Random for every run (this VM
+#    is thrown away); the driver reads it from a root-only file.
+#    gnome-initial-setup-done keeps GNOME's first-login wizard away if the
+#    session ever falls back to GNOME.
+SMOKE_PW="$(openssl rand -hex 16)"
+SMOKE_HASH="$(openssl passwd -6 "$SMOKE_PW")"
 tee -a "$ETC/passwd" >/dev/null <<<'smoke:x:1010:1010:GUI smoke:/var/home/smoke:/bin/bash'
 tee -a "$ETC/group"  >/dev/null <<<'smoke:x:1010:'
-tee -a "$ETC/shadow" >/dev/null <<<'smoke:!:20000:0:99999:7:::'
+tee -a "$ETC/shadow" >/dev/null <<<"smoke:${SMOKE_HASH}:20000:0:99999:7:::"
 tee -a "$ETC/gshadow" >/dev/null <<<'smoke:!::'
 mkdir -p "$VAR/home/smoke/.config"
 touch "$VAR/home/smoke/.config/gnome-initial-setup-done"
 chown -R 1010:1010 "$VAR/home/smoke"
+mkdir -p "$ETC/margine-smoke"
+( umask 077; printf '%s\n' "$SMOKE_PW" > "$ETC/margine-smoke/smoke-password" )
 
-# 2. GDM autologin into the Lucciola session. custom.conf names the user
-#    only: GDM has no default-session key (with no session recorded for
-#    the user it falls back to "gnome") and takes the session from the
-#    user's AccountsService record. The smoke user has none, so
+# 2. greetd autologin into the Lucciola session: the [initial_session]
+#    `ujust lucciola-autologin on smoke` writes (same command line as
+#    AUTOLOGIN_CMD in build_files/system_files/usr/bin/lucciola-autologin:
+#    keep the two in step). The launcher starts the session recorded in
+#    the user's AccountsService record; the smoke user has none, so
 #    accounts-daemon fills it from the image's user template
 #    (Session=lucciola), exactly as for the user a fresh install creates.
-#    No record is written here on purpose: the smoke boot exercises that
-#    path, and gui-probe.sh FAILs naming GNOME if autologin lands there.
-tee "$ETC/gdm/custom.conf" >/dev/null <<'GDMEOF'
-[daemon]
-AutomaticLoginEnable=True
-AutomaticLogin=smoke
-GDMEOF
+#    The login driver checks that session, logs it out, checks that the
+#    greeter comes back and logs in again with the password.
+CONF="$ETC/greetd/config.toml"
+[[ -f "$CONF" ]] || { echo "::warning::Layer C: $CONF missing: the image has no greetd login screen"; exit 1; }
+if grep -qE '^[[:space:]]*\[[[:space:]]*initial_session[[:space:]]*\]' "$CONF"; then
+  echo "::warning::Layer C: the image's $CONF already has an [initial_session]"; exit 1
+fi
+tee -a "$CONF" >/dev/null <<'GREETDEOF'
+
+[initial_session]
+# Autologin, set by `ujust lucciola-autologin on`: greetd starts this
+# user's session at boot, once per boot, without asking for a password.
+command = "/usr/libexec/lucciola/autologin-session"
+user = "smoke"
+GREETDEOF
 
 # 3. Probe script + oneshot unit. The wants-symlink MUST live in
 #    graphical.target.wants: the unit is After=graphical.target, and
@@ -161,6 +179,11 @@ mkdir -p "$ETC/margine-smoke" "$ETC/systemd/system/graphical.target.wants"
 install -m 0755 "$SMOKE_DIR/gui-probe.sh" "$ETC/margine-smoke/gui-probe.sh"
 install -m 0644 "$SMOKE_DIR/margine-gui-smoke.service" "$ETC/systemd/system/margine-gui-smoke.service"
 ln -sf ../margine-gui-smoke.service "$ETC/systemd/system/graphical.target.wants/margine-gui-smoke.service"
+# The login driver (greetd-login.py): autologin, logout, greeter, password
+# login over greetd's IPC socket. Both probes are ordered after it.
+install -m 0755 "$SMOKE_DIR/greetd-login.py" "$ETC/margine-smoke/greetd-login.py"
+install -m 0644 "$SMOKE_DIR/margine-greetd-login.service" "$ETC/systemd/system/margine-greetd-login.service"
+ln -sf ../margine-greetd-login.service "$ETC/systemd/system/graphical.target.wants/margine-greetd-login.service"
 
 # 3a. Security probe (GATING, 2026-10-07). Lives in multi-user.target.wants:
 #     it is After=multi-user.target only, so there is no ordering cycle.

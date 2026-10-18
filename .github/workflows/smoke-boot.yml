@@ -221,14 +221,19 @@ jobs:
           sudo chown "$(id -u):$(id -g)" -R output/
 
       # Layer C (2026-06-12): offline-inject a GUI smoke probe into the
-      # qcow2: GDM autologin user + a oneshot that, once the session
-      # has settled, verifies the autologin session is Lucciola's, niri
-      # and Noctalia are alive and answer on their sockets, Noctalia
-      # owns the notifications, the portal answers and nothing dumped
-      # core, then prints MARGINE-GUI-SMOKE: PASS/FAIL to the serial
-      # console and powers off. Motivation: a crashing gnome-shell
-      # extension passed Layer B (multi-user is reached regardless) and
-      # shipped; the probe checked GNOME until the repo became Lucciola's.
+      # qcow2: a smoke user with a password and greetd autologin, a login
+      # driver (greetd-login.py) that checks the autologin session, logs it
+      # out, checks that the greeter comes back and logs in with the
+      # password over greetd's IPC socket (the whole greetd PAM stack,
+      # pam_oo7 included), then a oneshot that verifies that session is
+      # Lucciola's, the Login keyring is open, niri and Noctalia are alive
+      # and answer on their sockets, Noctalia owns the notifications, the
+      # portal answers and nothing dumped core, then prints
+      # MARGINE-GUI-SMOKE: PASS/FAIL to the serial console and powers off.
+      # Motivation: a crashing gnome-shell extension passed Layer B
+      # (multi-user is reached regardless) and shipped; the probe checked
+      # GNOME until the repo became Lucciola's, and GDM's autologin until
+      # greetd replaced GDM (2026-10).
       # WARN-ONLY for now — flip to gating after two green runs.
       # Injection failures must never block the Layer B gate: every
       # step is guarded and ends with a ::warning:: at worst.
@@ -320,6 +325,25 @@ jobs:
             if grep -qE 'MARGINE-USER-SMOKE: [A-Z_]+ WARN' serial.log; then
               echo "::warning::User-smoke soft gate: one or more identity checks WARNed (kernel/session/os-name/default-session/niri-config/noctalia-look/gnome-stock/gaming-ujust/gschema). Soft gate: promotion NOT blocked. See the step summary + serial-log artifact."
             fi
+          } >> "$GITHUB_STEP_SUMMARY" || true
+
+      # The login screen's steps (greetd-login.py), annotation only: the
+      # GUI verdict above already fails when the login does.
+      - name: Login screen steps (annotation)
+        if: always()
+        continue-on-error: true
+        run: |
+          {
+            echo "### Login screen (greetd + Noctalia Greeter)"
+            if [[ ! -f serial.log ]] || ! grep -q 'MARGINE-GREETD:' serial.log; then
+              echo "- no MARGINE-GREETD markers (driver not injected or did not run)"; exit 0
+            fi
+            echo ""
+            echo "| Step | Result | Detail |"
+            echo "|------|--------|--------|"
+            grep -E 'MARGINE-GREETD: [A-Z]+ (PASS|FAIL|WARN|SKIP)' serial.log | tr -d '\r' \
+              | sed -E 's/.*MARGINE-GREETD: ([A-Z]+) (PASS|FAIL|WARN|SKIP) ?(.*)/\1\t\2\t\3/' | awk '!seen[$0]++' \
+              | awk -F'\t' '{ icon=($2=="PASS")?":white_check_mark:":(($2=="SKIP")?":grey_question:":":warning:"); gsub(/\|/,"\\|",$3); print "| `"$1"` | "icon" "$2" | "$3" |" }'
           } >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Upload serial log
@@ -464,7 +488,7 @@ jobs:
             GAMING="${{ steps.boot.outputs.gaming }}"
             case "$GAMING" in
               pass) MSG="${MSG} Gaming-native: resolves." ;;
-              fail) MSG="${MSG} Gaming-native: WON'T resolve (warn-only) — ujust margine-gaming-native would break." ; PRIO="high"; TAGS="warning" ;;
+              fail) MSG="${MSG} Gaming-native: WON'T resolve, ujust lucciola-gaming-native would break." ; PRIO="high"; TAGS="warning" ;;
               skip) : ;;
               *)    MSG="${MSG} Gaming-native: no verdict." ;;
             esac

@@ -64,14 +64,34 @@ verified by the device, rollback, and every Margine fix. This layer adds:
 - `ddcutil`, so Noctalia's brightness slider also drives external monitors
   over DDC/CI (the package's udev rule opens the i2c devices to the
   logged-in user, its modules-load entry loads i2c-dev);
+- the login screen: Noctalia Greeter on greetd, in place of GDM. Noctalia
+  Greeter is built from its pinned tag (`NOCTALIA_GREETER_VERSION` and its
+  sha256 in the Containerfile, spec in `greeter/`) with two Lucciola
+  touches: the firefly as the logo at the bottom of the screen, and a patch
+  that says a failed login in words ("Wrong password, try again" instead
+  of `pam_authenticate: AUTH_ERR`); greetd comes from Fedora. `/etc/greetd/config.toml` (reference copy in
+  `/usr/share/lucciola/greetd/`) runs the greeter as the `greetd` account;
+  its fixed settings are `/usr/share/lucciola/greeter/greeter.toml` (linked
+  into `/var/lib/noctalia-greeter/`), its starting look (dark, the Margine
+  palette, JetBrains Mono, Lucciola's wallpaper, Lucciola preselected) is
+  `sync.toml`, copied once and then replaced by Noctalia's "Sync with
+  Noctalia". greetd uses Fedora's PAM file with pam_oo7 added to the
+  password stack and the Wayland session type set for autologin
+  (`ujust lucciola-autologin`). GDM stays installed and takes over when
+  greetd cannot start (`greetd.service.d/50-lucciola.conf`);
+  `lucciola-login-migrate.service` moves an install from GDM once,
+  autologin included. GNOME under greetd has no lock screen (GNOME Shell
+  locks only when GDM runs);
 - the "Lucciola" session on the login screen, the one a new user gets
-  (AccountsService user templates; whoever picks GNOME once keeps it), and
-  the public name in os-release;
-- GNOME as a stock fallback session: the image drops every GNOME Shell
-  extension (Margine's and the base's), the Shell, window-manager and
-  settings-daemon defaults that go with them and the GNOME first-login
-  bootstrap. The defaults that also serve GTK applications under niri
-  (fonts, accent colour, file chooser, Ptyxis, Nautilus) stay.
+  (preselected by the greeter until someone picks another; the
+  AccountsService user templates for autologin and GDM), and the public
+  name in os-release;
+- GNOME as a stock fallback session: the build adds no GNOME Shell
+  extension (only Fedora's GNOME Classic set is there), none of Margine's
+  Shell, window-manager or settings-daemon defaults and no GNOME
+  first-login bootstrap (`build.sh` fails if one of them shows up), and
+  no wayland-scroll-factor. The defaults that also serve GTK applications
+  under niri (accent colour, wallpaper, virt-manager connections) stay.
 
 Images: `ghcr.io/daniel-g-carrasco/lucciola`, built by `.github/workflows/build.yml`
 as `:candidate` and promoted to `:stable` by `.github/workflows/smoke-boot.yml`,
@@ -102,14 +122,35 @@ Coming from another system with Secure Boot on, turn it off before rebasing
 (a Margine install already has the key): the kernel is signed with the
 Margine key, and until that key is enrolled Secure Boot refuses to start it.
 After the first boot `mok-enroll.service` stages the key;
-`ujust margine-secureboot enroll` makes the blue MOK Manager screen at the
+`ujust lucciola-secureboot enroll` makes the blue MOK Manager screen at the
 next restart wait for you (Enroll MOK, Continue, Yes, password `margine`).
-Turn Secure Boot back on when `ujust margine-secureboot` says so.
+Turn Secure Boot back on when `ujust lucciola-secureboot` says so.
 
-## Logo
+## Brand
 
-`assets/lucciola-logo.svg` (the firefly) and `assets/lucciola-wordmark.svg`
-("Lucciola" set in Aladin by Sudtipos, converted to outlines; the font is
-under the SIL Open Font License 1.1, copy in `assets/Aladin-OFL.txt`). Colors:
-lavender `#6b64a0` / `#b3addf`, firefly yellow `#f2c94c`. Not wired into the
-image yet: boot splash, login screen and the About page still show Margine's.
+`assets/` holds Lucciola's identity; `docs/BRANDING.md` maps every place it
+appears.
+
+- The wordmark: "lucciola" in JetBrains Mono Light converted to outlines,
+  with the firefly as its last dot (`lucciola-wordmark.svg` for dark
+  backgrounds, `lucciola-wordmark-light.svg` for light ones). The outlines
+  derive from a font under the SIL Open Font License 1.1, so its licence
+  travels with them (`JetBrainsMono-OFL.txt`).
+- The firefly alone, the compact mark (`lucciola-mark.svg`,
+  `lucciola-mark-light.svg`, and `lucciola-mark-symbolic.svg` for symbolic
+  icon slots), and the mark on a dark rounded tile for app and OS icons
+  (`lucciola-logo.svg`, the icon `lucciola-logo` and os-release `LOGO=`).
+- Palette: surface `#121212`, beige `#e6d5bf` (primary, the firefly), sand
+  `#c2a180`, lavender `#cba6f7`, text `#ece6df`.
+- `wallpaper/`: dusk over dark hills with a few fireflies, written by
+  `make-wallpaper.py` (a 3840x2400 master anchored at the bottom) and
+  rendered at 3840x2160, 2880x1920 and 2560x1600.
+- `plymouth/`: the boot splash, the wordmark on `#121212` with its firefly
+  breathing (6 s, opacity 1 to 0.4 and back) and a disk password prompt in
+  the same palette.
+- `fastfetch-logo.txt`: the firefly in shaded blocks over the name.
+
+Every PNG is rendered from these sources by `assets/render.sh` and
+committed (the build has no SVG renderer, and Plymouth reads PNG only):
+after changing a source, run it (its header has a container one-liner) and
+commit the result.

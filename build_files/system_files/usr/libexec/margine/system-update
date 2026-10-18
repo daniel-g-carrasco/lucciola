@@ -11,7 +11,7 @@
 # The decision itself is load-bearing and easy to get wrong: `bootc
 # upgrade` REFUSES a client-layered deployment ("Deployment contains
 # local rpm-ostree modifications"), which is the normal state after
-# `ujust margine-gaming-native`. So the question is never "is bootc
+# `ujust lucciola-gaming-native`. So the question is never "is bootc
 # available" (it always is on a bootc image) but "are there layered
 # packages": if yes, rpm-ostree upgrade, which pulls the new base AND
 # re-applies the layers.

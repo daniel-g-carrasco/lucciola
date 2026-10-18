@@ -238,7 +238,7 @@ build-iso tag="stable":
 build-iso-fast tag="stable":
     live-env/build-iso-local.sh {{tag}} 1
 
-# Delegates to the shipped `ujust margine-test-vm` (SPICE so host<->guest
+# Delegates to the shipped `ujust lucciola-test-vm` (SPICE so host<->guest
 # CLIPBOARD works, + Secure Boot + enrolled MS keys + emulated TPM 2.0) — the
 # proven full-featured path, not a bare qemu window.
 # Boot the newest locally-built ISO in a full virt-manager test VM.
@@ -256,7 +256,7 @@ test-install-vm:
     echo "Install with the DEFAULT partitioning; the INSTALLED system's first boot"
     echo "prompts MokManager for Secure Boot (passphrase: margine)."
     # Recycle here too, so a re-run never dead-ends on "a VM named X already
-    # exists". The shipped `ujust margine-test-vm` only learns to recycle after a
+    # exists". The shipped `ujust lucciola-test-vm` only learns to recycle after a
     # base update (PR #239); this dev recipe (what `iso-test-vm` / the GUI button
     # call) must self-heal NOW. Derive the same name the base recipe does and tear
     # down any stale same-named session VM (domain + disk + nvram) first.
@@ -277,7 +277,7 @@ test-install-vm:
         virsh -c "$CONN" vol-delete "$v" >/dev/null 2>&1 || rm -f -- "$v"
       done
     fi
-    exec ujust margine-test-vm "$ISO_ABS"
+    exec ujust lucciola-test-vm "$ISO_ABS"
 
 # Launch the GTK4 GUI that drives the local ISO builds (dev tool, not shipped).
 [group('Build Live ISO (local dev)')]

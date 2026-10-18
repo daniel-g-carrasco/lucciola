@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 # darktable benchmark: CPU only against the GPU (ROCm OpenCL through the
 # image's shim) with several shares of memory for the GPU, on your own RAWs.
-# `ujust margine-darktable-bench [quick|full] [RAW...]` runs it.
+# `ujust lucciola-darktable-bench [quick|full] [RAW...]` runs it.
 #
 # Built to resist disturbance:
 #   - before every run it waits for a quiet machine (GPU and CPU idle,
@@ -168,7 +168,7 @@ for n, raw in sorted(best.values(), reverse=True)[:3]:
 PY
 }
 mapfile -t SRC < <( (( $# )) && printf '%s\n' "$@" || pick_raws )
-(( ${#SRC[@]} )) || die "No RAW to test: pass some (ujust margine-darktable-bench quick photo.raf ...) or keep edited RAWs in Pictures/raw."
+(( ${#SRC[@]} )) || die "No RAW to test: pass some (ujust lucciola-darktable-bench quick photo.raf ...) or keep edited RAWs in Pictures/raw."
 IMAGES=()
 for f in "${SRC[@]}"; do
   [[ -f "$f" ]] || die "Not a file: $f"

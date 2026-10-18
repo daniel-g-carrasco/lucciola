@@ -78,6 +78,9 @@ CONFIG_GLOBS = (
     "etc/ssh/sshd_config", "etc/ssh/sshd_config.d/*",
     "etc/security/*.conf",
     "etc/firewalld/firewalld.conf", "etc/crypttab",
+    # what the login screen runs, as whom, and whether it logs anyone in
+    # without a password ([initial_session]): Lucciola's greetd, 2026-10
+    "etc/greetd/*",
     "usr/lib/systemd/system-preset/*", "usr/lib/systemd/user-preset/*",
 )
 

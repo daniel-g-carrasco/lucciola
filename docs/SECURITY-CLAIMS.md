@@ -29,7 +29,7 @@ gated, the rest is not), **unverified** (nothing automated checks it),
 | C8 | A fresh install exposes no network service beyond the reviewed set | an unexpected listener reachable from any network | smoke `listener` check against `.github/smoke/listeners-allow.txt` (#452); today's set: LLMNR 5355 (D3), mDNS 5353, GSConnect 1716 (D5); tailscaled 41641 left the set with D4 | pending #452 |
 | C9 | The firewall blocks unsolicited inbound traffic | services the user starts being reachable from the LAN | none: Fedora's `FedoraWorkstation` zone (inherited) allows all TCP/UDP ports above 1024 | limitation, decision D2 |
 | C10 | The disk is encrypted | data read from a stolen disk | none: LUKS is offered by the installer, not enforced, and no CI install checks it | unverified |
-| C11 | TPM auto-unlock does not weaken disk encryption | someone with the laptop in hand | `margine-tpm-unlock` keeps the passphrase slot; GRUB menu lock closes kernel command-line editing (#444, VM-tested; on installs with a read-only `/boot` it needs #456); the initramfs on `/boot` is neither signed nor measured into PCR 7, so it can be replaced by someone who can boot other media | limitation, decision D1 |
+| C11 | TPM auto-unlock does not weaken disk encryption | someone with the laptop in hand | `lucciola-tpm-unlock` keeps the passphrase slot; GRUB menu lock closes kernel command-line editing (#444, VM-tested; on installs with a read-only `/boot` it needs #456); the initramfs on `/boot` is neither signed nor measured into PCR 7, so it can be replaced by someone who can boot other media | limitation, decision D1 |
 | C12 | The build supply chain is pinned and least-privilege | a moved tag or an over-privileged token | SHA-pinned actions, per-job permissions (Scorecard), Renovate; workflow job-condition lint (#450) | partial |
 | C13 | Two builds of the same tree publish the same layers | content changing without a source change | measured on #442 (127/127 layers equal); not re-checked automatically | partial, item E4 |
 | C14 | SELinux denies nothing a Margine component needs | a service silently broken in enforcing mode | smoke reports denials logged in its permissive VM (#452); not gating yet | partial, item E2 |
@@ -44,8 +44,8 @@ monthly review lists it until then.
 | D1 | TPM unlock against an attacker with the laptop in hand | TPM + PIN (`--tpm2-with-pin`), passphrase only, or a signed UKI with a PCR 11 policy (ADR-0007) | 2026-10-31 |
 | D2 | Default firewall zone | keep `FedoraWorkstation` (high ports open, Fedora default) or ship a stricter Margine zone | 2026-10-31 |
 | D3 | LLMNR (systemd-resolved, port 5355 on all interfaces) | keep the Fedora default or turn it off | 2026-11-30 |
-| D4 | `tailscaled` is enabled by default (inherited from Bluefin) and opens a UDP port on all interfaces | decided 2026-10-10: not shipped; `ujust margine-tailscale` layers and enables it on request | done |
-| D5 | GSConnect (KDE Connect protocol) listens on port 1716 TCP/UDP on every interface by default, paired phone or not, and the default firewall zone lets the LAN reach it | keep it on, ship it off until the user enables it, or restrict 1716 to the home/trusted zone | 2026-10-31 |
+| D4 | `tailscaled` is enabled by default (inherited from Bluefin) and opens a UDP port on all interfaces | decided 2026-10-10: not shipped; `ujust lucciola-tailscale` layers and enables it on request | done |
+| D5 | GSConnect (KDE Connect protocol) listens on port 1716 TCP/UDP on every interface by default, paired phone or not, and the default firewall zone lets the LAN reach it | moot since 2026-10-18: GSConnect left the image with the other GNOME Shell extensions (the Lucciola layer had removed it at build time since 2026-10-11) | done |
 
 ## Engineering items
 

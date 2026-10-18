@@ -32,14 +32,14 @@ case "$state" in
   pending)
     "$MN" -u critical \
       "Secure Boot key: one step at the next restart" \
-      "At the next restart a blue screen (MOK Manager) appears before $product starts. Press a key within 10 seconds, then choose Enroll MOK, Continue, Yes, and type the password: margine. This lets $product boot with Secure Boot on. Details: ujust margine-secureboot" \
+      "At the next restart a blue screen (MOK Manager) appears before $product starts. Press a key within 10 seconds, then choose Enroll MOK, Continue, Yes, and type the password: margine. This lets $product boot with Secure Boot on. Details: ujust lucciola-secureboot" \
       && printf '%s\n' "$BOOT_ID" > "$STAMP" ;;
   absent)
     switch="$(tr -d '[:space:]' < /etc/margine/secureboot-enroll 2>/dev/null || true)"
     [[ "$switch" = off ]] && exit 0
     "$MN" -u normal \
       "Secure Boot key not enrolled" \
-      "$product could not register its Secure Boot key, so Secure Boot must stay off for now. Run: ujust margine-secureboot enroll" \
+      "$product could not register its Secure Boot key, so Secure Boot must stay off for now. Run: ujust lucciola-secureboot enroll" \
       && printf '%s\n' "$BOOT_ID" > "$STAMP" ;;
 esac
 exit 0

@@ -18,7 +18,8 @@ policy (a signature-required scope for the repository it now follows).
 
 The disk comes from bootc-image-builder with disk_config/disk-upgrade.toml:
 user "probe" in wheel, password from UPGRADE_PASSWORD, console=ttyS0 on the
-kernel command line (so a serial getty exists). Prints MARGINE-UPGRADE: PASS
+kernel command line (so a serial getty exists; the login screen, GDM or
+greetd, stays on VT1 and does not get in the way). Prints MARGINE-UPGRADE: PASS
 or MARGINE-UPGRADE: FAIL <reasons> and exits 0 or 1.
 """
 import argparse
@@ -254,6 +255,49 @@ def main():
         fail("failed units after the upgrade: " + out.strip().replace("\n", " | "))
     else:
         say("no failed units")
+    # The login screen: margine:lucciola ran GDM; this image runs greetd with
+    # Noctalia Greeter. The /etc merge (or lucciola-login-migrate.service)
+    # must have made greetd the display manager, and what an updated system
+    # never gets from the image's /var must exist: the greetd account
+    # (sysusers.d at boot) and the greeter's directories (tmpfiles.d).
+    rc, out = capture("readlink /etc/systemd/system/display-manager.service; "
+                      "for u in greetd gdm lucciola-login-migrate; do printf '%s=%s\\n' $u $(systemctl is-active $u.service); done; "
+                      "getent passwd greetd | cut -d: -f1,3,6; "
+                      + sudo + "stat -c '%n %U %a' /var/lib/greetd /var/lib/noctalia-greeter /var/lib/noctalia-greeter/sync.toml; "
+                      "ls /var/lib/lucciola/login-migrated; "
+                      + sudo + "journalctl -b -u lucciola-login-migrate.service -o cat --no-pager | tail -4", 60)
+    say("login screen:\n" + (out or ""))
+    # Where the greetd account comes from on the updated system: a passwd line
+    # without a shadow line breaks PAM for it (user@<uid> fails), so print the
+    # files, NSS and what sysusers and the passwd seed did at this boot.
+    rc, acct = capture(sudo + "grep -H '^greetd:' /etc/passwd /etc/shadow /etc/group /etc/gshadow /usr/lib/passwd /usr/lib/group 2>&1 | cut -c1-90; "
+                       + sudo + "wc -l /etc/passwd /etc/shadow /usr/lib/passwd 2>&1; "
+                       "grep -E '^(passwd|shadow|group):' /etc/nsswitch.conf; "
+                       + sudo + "journalctl -b -o cat --no-pager -u margine-seed-etc-passwd.service -u systemd-sysusers.service | tail -12", 60)
+    say("greetd account:\n" + (acct or ""))
+    if not out or not re.search(r"greetd\.service\s*$", out.splitlines()[0] if out.splitlines() else ""):
+        fail("display-manager.service does not point to greetd after the upgrade")
+    if not out or "greetd=active" not in out:
+        fail("greetd.service is not active after the upgrade")
+    if out and "gdm=active" in out:
+        fail("GDM is running after the upgrade (greetd's fallback took over, or GDM stayed the display manager)")
+    for path in ("/var/lib/greetd greetd", "/var/lib/noctalia-greeter greetd", "/var/lib/noctalia-greeter/sync.toml greetd"):
+        if not out or path not in out:
+            fail(f"{path.split()[0]} missing or not owned by greetd (tmpfiles.d on an updated system)")
+    if not out or "/var/lib/lucciola/login-migrated" not in out:
+        fail("lucciola-login-migrate.service did not finish (no marker)")
+    # The greeter itself: greetd starts it on VT1 at boot. A process check:
+    # Noctalia Greeter running as the greetd account (greeter and compositor).
+    procs = ""
+    for _ in range(12):
+        rc, procs = capture("pgrep -a -u greetd | cut -c1-160", 30)
+        if procs and "noctalia-greeter" in procs:
+            break
+        time.sleep(5)
+    say("greeter processes: " + (procs or "").strip().replace("\n", " | "))
+    if not procs or "noctalia-greeter" not in procs:
+        rc, log = capture(sudo + "journalctl -b -u greetd.service -o cat --no-pager | tail -8", 60)
+        fail("Noctalia Greeter is not running as greetd after the upgrade; greetd log: " + (log or "").strip().replace("\n", " | ")[-400:])
     if a.layer:
         rc, out = capture(f"rpm -q {a.layer}", 60)
         if rc != 0:
@@ -286,10 +330,10 @@ def main():
     say("gaming-native dry run: " + (out or "").strip().replace("\n", " | ")[-400:])
     if rc != 0:
         fail("the gaming-native layer does not resolve on the new deployment")
-    rc, out = capture(sudo + "MARGINE_VALIDATE_CONTEXT=live margine-validate-margine-system 2>&1 | grep -E 'FAIL|PASSED|FAILED|WARN' | tail -25", 900)
+    rc, out = capture(sudo + "MARGINE_VALIDATE_CONTEXT=live lucciola-validate-margine-system 2>&1 | grep -E 'FAIL|PASSED|FAILED|WARN' | tail -25", 900)
     say("validator:\n" + (out or ""))
     if not out or "PASSED" not in out:
-        fail("margine-validate-margine-system did not pass")
+        fail("lucciola-validate-margine-system did not pass")
     rc, out = capture("journalctl -b -p err --no-pager 2>/dev/null | tail -15", 60)
     say("journal errors (this boot, last 15):\n" + (out or ""))
     rc, out = capture("df -h / | tail -1; rpm-ostree status | grep -c '^ *ostree-image' ", 60)

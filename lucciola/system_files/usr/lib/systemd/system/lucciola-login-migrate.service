@@ -1,0 +1,17 @@
+[Unit]
+Description=Lucciola: move the login screen from GDM to greetd (once)
+Documentation=file:///usr/libexec/lucciola/login-migrate
+# Once per machine: the script leaves the marker when it is done.
+ConditionPathExists=!/var/lib/lucciola/login-migrated
+# Before either display manager reads its configuration: a carried-over
+# autologin then applies at this very boot. Ordering only: a failure here
+# never holds a display manager back (graphical.target only Wants= this).
+After=local-fs.target systemd-sysusers.service
+Before=display-manager.service greetd.service gdm.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/lucciola/login-migrate
+
+[Install]
+WantedBy=graphical.target

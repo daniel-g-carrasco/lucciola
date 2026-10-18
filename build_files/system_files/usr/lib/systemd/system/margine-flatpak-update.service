@@ -1,5 +1,5 @@
 [Unit]
-Description=Margine: update system Flatpak apps
+Description=Lucciola: update system Flatpak apps
 Documentation=https://margine.dev/docs/updates-and-rollback
 Wants=network-online.target
 After=network-online.target

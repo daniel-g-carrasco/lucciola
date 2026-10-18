@@ -1,0 +1,7 @@
+; Lucciola: label Noctalia Greeter's state directory like greetd's own
+; (/var/lib/greetd, greetd-selinux). Without it the directory would be
+; var_lib_t, which the greeter (it runs in greetd's domain, xdm_t) may read
+; but not write: the session it remembers and the files "Sync with Noctalia"
+; installs would be denied once SELinux enforces. Loaded by lucciola/build.sh
+; with semodule, the way greetd-selinux loads its module.
+(filecon "/var/lib/noctalia-greeter(/.*)?" any (system_u object_r xdm_var_lib_t ((s0) (s0))))

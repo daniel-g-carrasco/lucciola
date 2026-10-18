@@ -1,0 +1,47 @@
+#!/usr/bin/bash
+# Lucciola: the autologin session. greetd's [initial_session] (written by
+# `ujust lucciola-autologin on`) runs this as the user, after PAM has opened
+# the session, through `sh -c`.
+#
+# A greeter tells greetd which session to start and with which environment;
+# the initial session has no greeter, so this does that job:
+#   - the session is the one recorded for the user in AccountsService, as
+#     GDM's autologin used (Session=lucciola from the image's user templates,
+#     unless changed); Lucciola when the record names no installed session;
+#   - XDG_CURRENT_DESKTOP and XDG_SESSION_DESKTOP come from the session
+#     file's DesktopNames, the way Noctalia Greeter derives them (all of
+#     them ':'-joined, and the first), so a session looks the same however
+#     it was started; niri-session imports them into the user manager,
+#     where the portals look for the desktop's backends.
+# XDG_SESSION_TYPE=wayland is already in the PAM environment: the greetd PAM
+# service sets it before pam_systemd registers the session (lucciola/build.sh,
+# step 5), which is what makes logind's session a wayland one.
+set -u
+sessions=/usr/share/wayland-sessions
+name=""
+if out="$(busctl --system --timeout=10 get-property org.freedesktop.Accounts \
+    "/org/freedesktop/Accounts/User$(id -u)" org.freedesktop.Accounts.User Session 2>/dev/null)"; then
+  # busctl prints the string as: s "lucciola"
+  name="$(sed -E 's/^s "(.*)"$/\1/' <<<"$out")"
+fi
+case "$name" in
+  */*|.*|"") name=lucciola ;;
+esac
+[[ -f "$sessions/$name.desktop" ]] || name=lucciola
+file="$sessions/$name.desktop"
+exec_line="$(sed -n 's/^Exec=//p' "$file" | head -n 1)"
+names="$(sed -n 's/^DesktopNames=//p' "$file" | head -n 1)"
+names="${names%;}"
+[[ -n "$names" ]] || names="$name"
+export XDG_SESSION_TYPE=wayland
+export XDG_CURRENT_DESKTOP="${names//;/:}"
+export XDG_SESSION_DESKTOP="${names%%;*}"
+# The Exec= of a session file is a plain command line: no shell syntax, no
+# field codes (docs/BRANDING.md, golden rule 5), so word splitting is all the
+# parsing it needs.
+read -r -a argv <<<"$exec_line"
+if (( ${#argv[@]} == 0 )); then
+  echo "autologin-session: $file has no Exec line, starting Lucciola" >&2
+  argv=(niri-session)
+fi
+exec "${argv[@]}"

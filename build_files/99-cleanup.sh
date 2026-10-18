@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Margine image build — final build-residue sweep, chained right before
 # `bootc container lint` (see Containerfile). Runs AFTER every other
-# build step, including build-margine-extensions.sh (the last dnf user).
+# build step, including lucciola/build.sh (the last dnf user).
 #
 # bootc treats image /var strictly as a first-boot seed: anything the
 # build leaves there is dead weight on installed systems and trips the
 # lint `var-tmpfiles` warning. What we remove and why:
 #
 #  - /var/lib/dnf — repo state, countme cookies and the system-repo
-#    lock from the build's dnf transactions (kernel + extensions).
+#    lock from the build's dnf transactions (kernel, Lucciola layer).
 #    Installed systems manage the OS with bootc, not dnf, and any
 #    containerized dnf recreates all of it. Appeared when dnf5 moved
 #    this state out of /var/cache (which IS a cache mount here) into

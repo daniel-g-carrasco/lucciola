@@ -1,0 +1,86 @@
+#!/usr/bin/bash
+# Lucciola: move an installed system's login screen from GDM to greetd, once
+# (lucciola-login-migrate.service, before either display manager starts).
+#
+# The display manager is the symlink /etc/systemd/system/display-manager.service.
+# The image ships it pointing at greetd, and the update's three-way /etc
+# merge takes the image's version wherever the machine never changed the
+# link: on a system coming from margine:lucciola (GDM) that is the normal
+# case, and greetd starts at the first boot of the new image. This covers
+# the rest:
+#   1. A link still pointing at GDM (the merge kept a local version of it) is
+#      switched to greetd for the NEXT boot. Not this one: GDM's start is
+#      already queued, and swapping display managers in the middle of a boot
+#      is how people end up without a login screen. A link pointing anywhere
+#      else, or none, was a choice made on this machine and stays.
+#   2. GDM autologin (/etc/gdm/custom.conf) carries over to greetd's
+#      [initial_session] through `lucciola-autologin on`, which also checks
+#      the account is still a real one.
+# GDM is not removed: greetd.service falls back to it when it cannot start.
+# The marker makes this run once; a failed step leaves no marker and is
+# retried at the next boot, without ever stopping a display manager.
+set -uo pipefail
+
+# Paths can be pointed elsewhere for tests (tests/login-migrate.test.sh).
+MARKER="${LOGIN_MIGRATE_MARKER:-/var/lib/lucciola/login-migrated}"
+DM_LINK="${LOGIN_MIGRATE_DM_LINK:-/etc/systemd/system/display-manager.service}"
+GREETD_UNIT=/usr/lib/systemd/system/greetd.service
+GDM_CONF="${LOGIN_MIGRATE_GDM_CONF:-/etc/gdm/custom.conf}"
+GREETD_CONF="${LOGIN_MIGRATE_GREETD_CONF:-/etc/greetd/config.toml}"
+AUTOLOGIN="${LOGIN_MIGRATE_AUTOLOGIN:-/usr/bin/lucciola-autologin}"
+log() { echo "lucciola-login-migrate: $*"; }
+rc=0
+
+target="$(readlink "$DM_LINK" 2>/dev/null || true)"
+case "${target##*/}" in
+  greetd.service)
+    log "display manager: greetd" ;;
+  gdm.service)
+    if ln -sfn "$GREETD_UNIT" "$DM_LINK"; then
+      log "display manager: was GDM (a local version of $DM_LINK survived the update); greetd from the next boot, GDM for this one"
+    else
+      log "could not switch $DM_LINK to greetd; GDM stays the login screen"; rc=1
+    fi ;;
+  "")
+    log "no display manager enabled on this machine: left as it is" ;;
+  *)
+    log "display manager: ${target##*/}, chosen on this machine: left as it is" ;;
+esac
+
+# GDM autologin -> greetd [initial_session], only when greetd is (now) the
+# display manager and has no autologin of its own yet.
+now="$(readlink "$DM_LINK" 2>/dev/null || true)"
+if [[ "${now##*/}" == greetd.service && -f "$GDM_CONF" && -f "$GREETD_CONF" ]]; then
+  state="$(python3 - "$GDM_CONF" <<'PY'
+import sys
+enabled = user = ""
+section = ""
+for line in open(sys.argv[1], encoding="utf-8-sig"):
+    s = line.strip()
+    if s.startswith("[") and s.endswith("]"):
+        section = s
+    elif section == "[daemon]" and "=" in s and not s.startswith(("#", ";")):
+        k, v = (x.strip() for x in s.split("=", 1))
+        if k == "AutomaticLoginEnable":
+            enabled = v.lower()
+        elif k == "AutomaticLogin":
+            user = v
+print(enabled or "-", user or "-")
+PY
+  )" || state="- -"
+  read -r enabled user <<<"$state"
+  if [[ "$enabled" == true && "$user" != - ]]; then
+    if grep -qE '^[[:space:]]*\[[[:space:]]*initial_session[[:space:]]*\]' "$GREETD_CONF"; then
+      log "GDM autologin for $user: greetd already has an autologin of its own, left as it is"
+    elif "$AUTOLOGIN" on "$user"; then
+      log "GDM autologin for $user carried over to greetd"
+    else
+      log "GDM autologin for $user NOT carried over (see above): log in with the password, then: ujust lucciola-autologin on"
+    fi
+  fi
+fi
+
+if (( rc == 0 )); then
+  mkdir -p "${MARKER%/*}" && : > "$MARKER"
+fi
+exit "$rc"

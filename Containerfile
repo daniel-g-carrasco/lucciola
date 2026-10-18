@@ -8,7 +8,7 @@
 #   FROM ghcr.io/ublue-os/silverblue-main:44  (Universal Blue main: Fedora Silverblue 44)
 #   + custom kernel from CachyOS COPR (signed with our MOK)
 #   + the Margine OS layer (build_files/: update flow, Secure Boot and TPM
-#     tooling, branding, curated GNOME settings, Flatpaks)
+#     tooling, branding, the GTK defaults, Flatpaks)
 #   + the Lucciola layer (lucciola/: niri, Noctalia, the Lucciola session;
 #     GNOME stays as a stock fallback session)
 #
@@ -34,6 +34,11 @@
 #
 # (build.yml: workflow_dispatch with base_image publishes :trial only.)
 ARG BASE_IMAGE=ghcr.io/ublue-os/silverblue-main:45
+# Noctalia Greeter's pinned tag and the sha256 of its archive: declared here,
+# before any FROM, so the stage that builds it and the step that installs it
+# read the same value (see the greeter-rpm stage).
+ARG NOCTALIA_GREETER_VERSION=1.6.0
+ARG NOCTALIA_GREETER_SHA256=f23ebf07cbe4508971c08b0b81d2b5bfc4ec1ec45605d8f8fb01b799743a70b6
 
 # ----- Build context: scripts that should NOT end up in the final image -----
 FROM scratch AS ctx
@@ -45,6 +50,12 @@ COPY build_files /
 # time via the installer/ working dir. The gaming variant was retired
 # 2026-06-06 so there is no installer/flatpaks-gaming any more.
 COPY installer/flatpaks-base    /installer-flatpaks-base
+# Lucciola's brand (logos, wallpaper, the Plymouth theme), for 50-branding.
+# In ctx rather than a stage of its own because the boot splash must be in
+# place before 50-branding writes the initramfs, in the same RUN as the
+# kernel; an asset change costs that layer's cache, like any other
+# build_files change does.
+COPY lucciola/assets            /lucciola-assets
 
 # lucciola/build.sh gets a context stage of its own, not a place in ctx:
 # the kernel RUN below mounts the whole ctx, and an edit to the Lucciola
@@ -53,6 +64,39 @@ COPY installer/flatpaks-base    /installer-flatpaks-base
 # SELinux host cannot read it: "Permission denied", tried 2026-10-17.)
 FROM scratch AS lucciola-ctx
 COPY lucciola/build.sh /build.sh
+
+# ----- Noctalia Greeter: an RPM built from its pinned upstream tag -----
+# Lucciola's login screen (greetd + Noctalia Greeter, lucciola/build.sh step
+# 5). Fedora packages greetd but not the greeter. Built here, from the tag,
+# rather than installed from Terra (Fyra Labs' repository, which has a
+# signed build of the same tag):
+#   - Terra keeps only the newest build of a package, so a pinned
+#     version-release vanishes at the next upstream release (v1.5.0 and
+#     v1.6.0 came 17 days apart), and every image build, security updates
+#     included, would stop until the pin moves;
+#   - here nothing runs that Fedora did not build, except the greeter's own
+#     source, checked against a sha256 of the tag's archive: no third-party
+#     binaries, signing key or repository in the build.
+# The stage runs on the same base, so the RPM links against the libraries
+# the image ships; lucciola/build.sh installs it with dnf, which pulls its
+# runtime libraries from Fedora. To move to a new tag: set the version and
+# the sha256 of https://github.com/noctalia-dev/noctalia-greeter/archive/refs/tags/v<version>.tar.gz
+# (the ARGs at the top), check the spec's BuildRequires against the tag's
+# meson.build, test-boot. v1.6.0 is commit
+# 44337ecba043749c29de6f3d563315b91987a908 (a signed tag). On top of the
+# tag the spec applies one patch (PAM results in words, the .patch file in
+# lucciola/greeter/ says why) and puts Lucciola's mark in place of the
+# Noctalia logo; check that the patch still applies when the tag moves.
+FROM ${BASE_IMAGE} AS greeter-rpm
+ARG NOCTALIA_GREETER_VERSION
+ARG NOCTALIA_GREETER_SHA256
+COPY lucciola/greeter/ /src/
+COPY lucciola/assets/lucciola-mark.svg /src/
+RUN --mount=type=cache,dst=/var/cache \
+    --mount=type=tmpfs,dst=/tmp \
+    env NOCTALIA_GREETER_VERSION="${NOCTALIA_GREETER_VERSION}" \
+        NOCTALIA_GREETER_SHA256="${NOCTALIA_GREETER_SHA256}" \
+        bash /src/build-rpm.sh
 
 # ----- Base: Universal Blue silverblue-main:44 unless overridden -----
 FROM ${BASE_IMAGE}
@@ -92,36 +136,26 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     /ctx/custom-kernel/install.sh \
  && /ctx/build.sh
 
-# ----- Margine GNOME extensions: bake o-tiling + hide-cursor system-wide -----
-# Replaces the old per-user "install at first login via autostart"
-# pattern (margine-install-user-extensions) that was racy, shadowed
-# Bluefin's own search-light, and silently failed if the user logged
-# in before flatpak-preinstall.service had network. Bluefin + Bazzite
-# do this exact thing — extensions live in /usr/share/gnome-shell/
-# extensions/<uuid>/ at build time, dconf enables them, GDM picks them
-# up on first login with zero per-user state.
-RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
-    --mount=type=cache,dst=/var/cache \
-    --mount=type=cache,dst=/var/log \
-    --mount=type=tmpfs,dst=/tmp \
-    /ctx/build-margine-extensions.sh
-
 # ----- Lucciola: niri + Noctalia, GNOME kept stock as the fallback session -----
 # What used to be the second build FROM the published Margine image
 # (lucciola/Containerfile until 2026-10), now a step of this one: the
-# Lucciola files, then lucciola/build.sh, which installs niri and Noctalia,
-# removes the GNOME extensions and Shell defaults the steps above added, and
-# sets the public name. It still assumes it runs on the finished Margine
-# tree, so it stays after every Margine step.
+# Lucciola files, then lucciola/build.sh, which installs niri, Noctalia and
+# the greetd login screen and sets the public name. It still assumes it runs
+# on the finished Margine tree, so it stays after every Margine step.
 # Bump only together with a test boot: see the comment in lucciola/build.sh.
 # Version and release only: build.sh adds the base's Fedora tag (.fc44, .fc45).
 ARG NOCTALIA_VR=5.3.0-1
+# The greeter RPM comes from the greeter-rpm stage; build.sh installs exactly
+# the version that stage built (the ARG at the top).
+ARG NOCTALIA_GREETER_VERSION
 COPY lucciola/system_files/ /
 RUN --mount=type=bind,from=lucciola-ctx,source=/build.sh,target=/ctx/lucciola/build.sh \
+    --mount=type=bind,from=greeter-rpm,source=/out,target=/ctx/greeter-rpm \
     --mount=type=cache,dst=/var/cache \
     --mount=type=cache,dst=/var/log \
     --mount=type=tmpfs,dst=/tmp \
-    env NOCTALIA_VR="${NOCTALIA_VR}" bash /ctx/lucciola/build.sh
+    env NOCTALIA_VR="${NOCTALIA_VR}" NOCTALIA_GREETER_VERSION="${NOCTALIA_GREETER_VERSION}" \
+        bash /ctx/lucciola/build.sh
 
 # ----- Build-residue sweep + lint: verify final image is a valid bootc container -----
 # 99-cleanup.sh removes the /var state the build's dnf/rpm transactions

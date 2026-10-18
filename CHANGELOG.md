@@ -7,10 +7,182 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (Lucciola's own identity)
+- **Lucciola looks like Lucciola from the boot to the desktop.** Until now
+  the boot splash, the About page, notifications and the commands still
+  showed Margine OS, and the login screen and the desktop showed Margine's
+  and Noctalia's wallpapers.
+  - **Boot splash:** the lucciola wordmark centred on the dark surface, its
+    firefly breathing slowly as on the website (6 seconds, bright to dim
+    and back). The disk password prompt matches: a field in the login
+    screen's colours, a small firefly for each character typed, and a
+    "Caps Lock is on" hint. Sharp on HiDPI screens: the splash sizes itself
+    in the screen's own pixels.
+  - **Wallpaper:** dusk over dark hills with a few fireflies, on the
+    desktop, the login screen and the GNOME session (renders for 16:9, 3:2
+    and 16:10 screens in `/usr/share/backgrounds/lucciola/`). A wallpaper
+    picked by hand stays. The login screen of an existing install changes
+    too: its old wallpaper path now leads to the new one.
+  - **Logo:** the firefly on a dark tile is the system's logo (the About
+    page, notifications on the desktop and the lock screen), with the
+    wordmark as the About page's distributor logo; the login screen shows
+    the firefly at the bottom. fastfetch draws the firefly over the name
+    in the palette, and the console banner and the boot messages name
+    Lucciola, in its beige.
+  - **Login screen:** a wrong password reads "Wrong password, try again"
+    instead of `pam_authenticate: AUTH_ERR` (and too many attempts, an
+    expired account or password are said in words too).
+  - **Names:** the commands are `lucciola-*`: `ujust lucciola-update`,
+    `ujust lucciola-status`, `lucciola-fetch`, and the rest in
+    `ujust --list`. **The old `margine-*` names keep working**, as aliases
+    that `ujust --list` shows next to the new ones. The System app is
+    "Lucciola System", with an icon in Lucciola's colours (a dock pin of
+    it keeps working), next to "Lucciola CPU Scheduler"; the phone webcam
+    appears to apps as "Lucciola Phone Cam" after the next restart;
+    `ujust lucciola-report` writes `~/lucciola-report.txt`; new installs
+    are called `lucciola` on the network.
+  - Under the hood, unchanged on purpose: paths, unit names and
+    `VARIANT_ID` keep `margine`, and Secure Boot still asks for the
+    "Margine key" with the password `margine`.
+
+### Removed (lighter image: on demand instead of in every install)
+- **What only some people use is installed when they ask for it.** Measured
+  on two local builds of the same base (this branch and its parent): 450
+  packages fewer (221 of them i686), btop added; installed tree 1.33 GiB
+  smaller (14.16 to 12.82 GiB); 47 enabled units and three setuid helpers
+  fewer. An install keeps what it has where noted.
+  - **The 32-bit Steam libraries** (221 i686 packages, 723 MiB). They were
+    in every image so that `ujust margine-gaming-native` only had to add
+    the applications; the recipe now layers the whole chain (432 packages,
+    about 750 MiB to download the first time, against 132 and 540 before).
+    What the old bake also did, bringing the image packages the chain
+    needs to the versions the repositories have (31 of them on this build:
+    NetworkManager, glib2, glycin, libcurl, openh264 in place of the
+    noopenh264 stub...), the build still does, without installing the
+    chain, and it stops unless the layer then resolves with installs only.
+    Two CI checks guard it: right after the build,
+    `gaming-native-resolve.sh` resolves the layer in a throwaway container
+    of the image with every package locked at its version, the way
+    rpm-ostree layers, and fails the build when it does not resolve;
+    smoke-boot's rpm-ostree dry run still blocks promotion, and a missing
+    package list now fails there too. mangohud and goverlay (vkBasalt came
+    as their weak dependency) left as well: both gaming recipes layer them,
+    so running the recipe again brings them back, and the validator no
+    longer reports "gaming remnants: vkBasalt" on every system. RPMFusion
+    is enabled at build time only for v4l2loopback now. zenity, which only
+    came with the bake, is installed on its own: Noctalia and
+    distrobox-export call it.
+  - **The VM stack** (290 MiB): libvirt, QEMU/KVM, virt-manager,
+    virt-viewer, virt-install, OVMF, swtpm and podman-machine.
+    `ujust margine-vm` layers them and enables the libvirt sockets for the
+    next boot, when wheel users join the libvirt group; `ujust
+    margine-test-vm` points to it when they are missing.
+  - **Six preinstalled apps:** VS Code, Bitwarden, GNOME Weather, GNOME
+    Maps, Blanket and Fragments, all in Bazaar (`ujust margine-vscode`
+    still layers the VS Code RPM). An install that has them keeps them.
+  - **The Koofr tray shim** (47-koofr-tray-fix): it downloaded gcc and
+    glibc-devel on every build and left cpp (42.6 MiB) behind, for a
+    client Spola replaced. libappindicator-gtk3 went with it. `ujust
+    install-koofr` stays, but Koofr's tray icon may not work under
+    Noctalia.
+  - **The offline docs**, their refresh timer and the Margine Documentation
+    launcher: Lucciola's guide is online.
+  - **The tuned profiles** balanced-margine, powersave-margine and
+    throughput-performance-margine, which nothing selected.
+  - **mesa-demos, glow, podman-tui and python3-pip** (87 MiB), which nothing
+    in the image calls. btop comes in: Mod+Ctrl+T opens it and it was
+    missing.
+
+### Changed (home folders)
+- **New accounts keep the standard folders** (Documents, Downloads,
+  Pictures...). `ujust margine-bootstrap` no longer applies Margine's
+  layout (`~/data`, `~/dev`, `~/scratch` with the XDG folders inside
+  them); `margine-configure-home-layout --apply` still does, on purpose,
+  and `ujust margine-home-stock` goes back. No file is moved. Screenshots
+  follow the XDG Pictures folder from the first login.
+
+### Changed (build)
+- **The initramfs is generated once per build**, after the Plymouth theme,
+  instead of twice (one dracut run is about 26 s on a 12-core laptop); the
+  result is the same file.
+- **The HIP compiler is no longer downloaded and deleted on every build.**
+  The package that stands in for hipcc is installed before rocm-hip, so
+  dnf never pulls the compiler: 7 packages and 44 MiB instead of 84
+  packages, 437 MiB and 3 GiB unpacked. rocm-llvm-libs and rocm-clang-libs
+  (192 MiB), which the old order left in the image, are gone too; an
+  OpenCL kernel still builds on a Radeon 760M (gfx1103) and HIP sees the
+  GPU. Together with the items above, a build downloads 618 MiB of
+  packages instead of 1517 MiB.
+
+### Removed (GNOME customisation)
+- **The build no longer adds Margine's GNOME customisation only to delete
+  it.** GNOME has been a stock fallback session since 2026-10-11, but the
+  image still built and installed Margine's GNOME layer and then
+  `lucciola/build.sh` took it apart. These left the build:
+  - the GNOME Shell extensions step and its script
+    (`build-margine-extensions.sh`: o-tiling with its patches, hide-cursor,
+    the Smile, Gradia and Bazaar companions, Caffeine from EGO, the icon
+    shims for o-tiling), the AppIndicator, Dash to Dock, Caffeine and
+    GSConnect packages, and the weekly EGO pin watcher
+    (`check-upstream-pins.yml`);
+  - the Shell, mutter and window-manager sections of the zz1 gschema
+    override and the five dconf keyfiles (extension settings, the tiling
+    keybindings, the Smile shortcut);
+  - wayland-scroll-factor (45-wsf, `ujust wsf-preload`), which only loads
+    into gnome-shell; niri sets the scroll speed itself;
+  - Smile and Extension Manager from the preinstalled and baked Flatpaks
+    (an install that has them keeps them);
+  - the GNOME first-login helpers (`margine-configure-gnome-*`,
+    `margine-install-user-extensions`) and the two first-login autostart
+    entries. `ujust margine-bootstrap` keeps its other steps (home layout,
+    default applications, Zen, darktable) and runs only by hand.
+
+  `lucciola/build.sh` now checks instead that GNOME arrives stock and fails
+  the build otherwise. What stays for GTK applications: the accent colour,
+  the wallpaper and the virt-manager connections. GSConnect's port 1716 is
+  gone from the reviewed listeners (decision D5 closed).
+  libappindicator-gtk3, which came in as an extension dependency, is now
+  installed on its own: Koofr's tray needs it.
+  Measured on two local builds of the same base (before, and after without
+  the libappindicator fix): the same files and packages except the ones
+  above (four packages, 68 paths); installed tree 1.5 MiB smaller (under
+  1 MiB with libappindicator kept); 98 MiB less in the image's layers,
+  nearly all of it the extensions step's own layer, which the published,
+  re-chunked image did not carry as such; build time unchanged within
+  noise (1125 s against about 1117 s), since the kernel and package steps
+  dominate. The gain is a shorter build with seven fewer downloads (six
+  extensions, the WSF package) and no extension patches to rework at every
+  GNOME release.
+
+### Changed (login screen)
+- **The login screen is Noctalia Greeter on greetd**, in place of GDM: the
+  same look as the desktop (dark, the Lucciola palette, JetBrains Mono, the
+  Margine wallpaper), Lucciola preselected, GNOME and GNOME Classic in the
+  session list. The greeter remembers the session picked last. Noctalia's
+  Settings > Security > Noctalia Greeter > Sync Now copies the desktop's
+  colours, font, wallpaper and screen layout to it (with the administrator
+  password).
+  - A password login still opens the Login keyring (pam_oo7 is in greetd's
+    PAM stack, as in GDM's). Fingerprint login, if turned on with
+    authselect, works one step at a time: press Enter on the empty password
+    field, then touch the reader.
+  - `ujust margine-autologin on|off|status` now sets greetd's autologin. A
+    GDM autologin moves over by itself at the first boot of this image.
+  - GDM stays installed: if the greeter cannot start, GDM takes over after a
+    few attempts, so there is always a way to log in. To go back to GDM for
+    good: `sudo systemctl enable --force gdm.service`, then restart (and
+    `greetd.service` to return).
+  - GNOME started from greetd has no lock screen: GNOME Shell locks the
+    screen only when GDM is running. Lock with Lucciola, or switch back to
+    GDM if you use GNOME every day.
+  - Noctalia Greeter is built from its v1.6.0 tag by this repository's
+    build (Fedora does not package it); greetd comes from Fedora.
+
 ### Fixed (2026-10-18, from Margine)
 - **The fixes Margine got on 2026-10-17 (margine-image #517), brought over.** The system app compares the machine with the tag it follows instead of always `:stable`; the Secure Boot notice and `ujust margine-secureboot` say "Lucciola" (from `product-name`); `margine-collect-diagnostics` writes under `~/.local/state/margine/diagnostics/` instead of the read-only `/usr`; `lucciola-keep-awake` is on the PATH; Extension Manager is no longer preinstalled; `bar-widths` speaks of two workspaces.
 
 ### Fixed (2026-10-18)
+- **New system accounts on updated machines with layered packages.** rpm-ostree moves such a machine's system accounts to `/usr/lib/passwd`, while its own `/etc/shadow` survives the update without the new account's line; systemd-sysusers then finds the account and writes nothing. After the move from `margine:lucciola` that left greetd without a shadow line, PAM could not look it up and the greeter's user manager failed. At every boot `margine-seed-etc-passwd` now copies the missing shadow and gshadow lines from the image's own defaults (`/usr/etc`), or adds a locked line for an `/etc` account the image does not know, and never touches existing lines.
 - **No Secure Boot warning on firmware that has no Secure Boot.** On a machine whose firmware does not implement Secure Boot at all (a virtual machine with plain OVMF, for one), `mok-enroll.service` failed at every boot, because mokutil refuses to import a key there, and the login notice asked the user to fix something that cannot be fixed. The helper now recognises that firmware (no `SecureBoot` EFI variable), reports `unsupported` and stays quiet. A missing opt-out file no longer logs a "No such file" error either.
 
 ### Changed (Noctalia 5.3.0)
