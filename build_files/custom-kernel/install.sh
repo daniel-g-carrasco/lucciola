@@ -464,10 +464,10 @@ ls /usr/bin/scx_* 2>/dev/null | sed 's|^/usr/bin/||' | sort
 # scx_loader is opt-in (Bazzite pattern + audit §6.7). Disabling it
 # here is idempotent — if the package preset is already 'disabled' the
 # call is a no-op. Users opt in via `ujust margine-scheduler` or the
-# margine-scheduler.desktop GUI; tuned profiles ({balanced,powersave,
-# throughput-performance}-margine) flip mode via scxctl when the
-# service is active. Default-on burned battery without an obvious
-# win on a creator workstation.
+# margine-scheduler.desktop GUI. (The tuned profiles {balanced,powersave,
+# throughput-performance}-margine that flipped the scx mode left on
+# 2026-10-18: no profile selection ever picked them.) Default-on burned
+# battery without an obvious win on a creator workstation.
 log "Disabling scx_loader.service by default (opt-in via margine-scheduler)"
 systemctl disable scx_loader.service 2>/dev/null || true
 
