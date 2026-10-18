@@ -49,9 +49,14 @@ check "closed once: Noctalia still starts" shell_ran
 fresh
 mkdir -p "$STATE"; : > "$STATE/noctalia-seeded"
 run
-check "account that had Lucciola sessions before: no window" not_opened
-check "account that had Lucciola sessions before: never marked due" not_due
+check "account that had Lucciola sessions before: the window opens once" opened
 check "account that had Lucciola sessions before: Noctalia still starts" shell_ran
+
+fresh
+mkdir -p "$STATE"; : > "$STATE/noctalia-seeded"; : > "$STATE/welcome-seen"
+run
+check "account that already closed the window: no window" not_opened
+check "account that already closed the window: not marked due again" not_due
 
 fresh
 run "$T/missing-welcome"

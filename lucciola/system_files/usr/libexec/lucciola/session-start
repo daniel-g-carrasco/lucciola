@@ -8,11 +8,8 @@
 # the first time: delete it and it stays deleted.
 cfg="${XDG_CONFIG_HOME:-$HOME/.config}/noctalia"
 marker="${XDG_STATE_HOME:-$HOME/.local/state}/lucciola/noctalia-seeded"
-# No seeding marker yet: this is the user's first Lucciola session (used for
-# the welcome window at the end).
-first_session=no
+# No seeding marker yet: this is the user's first Lucciola session.
 if [ ! -e "$marker" ]; then
-  first_session=yes
   mkdir -p "$cfg" "$(dirname "$marker")"
   if [ ! -e "$cfg/00-lucciola.toml" ]; then
     cat > "$cfg/00-lucciola.toml" <<'TOML'
@@ -109,14 +106,15 @@ fi
 # users: the first Lucciola session marks it due, and it opens at every login
 # until it has been closed once (the window writes welcome-seen then), so a
 # session that ends with it still open shows it again next time. Accounts
-# that had Lucciola sessions before the window existed are never marked due;
-# "Lucciola Welcome" in the launcher opens it for anyone, any time. Started
+# that had Lucciola sessions before the window existed get it once too, at
+# their first login after the update; "Lucciola Welcome" in the launcher
+# opens it for anyone, any time. Started
 # in the background, detached from this script (which becomes Noctalia): it
 # never delays the shell.
 welcome_due="${XDG_STATE_HOME:-$HOME/.local/state}/lucciola/welcome-due"
 welcome_seen="${XDG_STATE_HOME:-$HOME/.local/state}/lucciola/welcome-seen"
 welcome="${LUCCIOLA_WELCOME:-/usr/libexec/margine/welcome}"
-if [ "$first_session" = yes ]; then
+if [ ! -e "$welcome_seen" ] && [ ! -e "$welcome_due" ]; then
   mkdir -p "${welcome_due%/*}"
   : > "$welcome_due"
 fi

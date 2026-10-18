@@ -46,7 +46,9 @@ stable release is cut.
   how updates work (what Lucciola System does and does not do, where
   Homebrew fits), apps arriving in the background, and a button for the
   guide. It comes back at each login until it is closed once, and
-  "Lucciola Welcome" in the launcher reopens it. Not in the GNOME session.
+  "Lucciola Welcome" in the launcher reopens it. Accounts that already used
+  Lucciola see it once too, at their first login after the update. Not in
+  the GNOME session.
 - **The developer layer: `ujust lucciola-devmode`.** One command, in the
   spirit of Universal Blue's `ujust devmode`, brings what Bluefin DX gave
   developers and the image no longer carries: VS Code from Microsoft's
