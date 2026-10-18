@@ -7,6 +7,75 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Removed (lighter image: on demand instead of in every install)
+- **What only some people use is installed when they ask for it.** Measured
+  on two local builds of the same base (this branch and its parent): 450
+  packages fewer (221 of them i686), btop added; installed tree 1.33 GiB
+  smaller (14.16 to 12.82 GiB); 47 enabled units and three setuid helpers
+  fewer. An install keeps what it has where noted.
+  - **The 32-bit Steam libraries** (221 i686 packages, 723 MiB). They were
+    in every image so that `ujust margine-gaming-native` only had to add
+    the applications; the recipe now layers the whole chain (432 packages,
+    about 750 MiB to download the first time, against 132 and 540 before).
+    What the old bake also did, bringing the image packages the chain
+    needs to the versions the repositories have (31 of them on this build:
+    NetworkManager, glib2, glycin, libcurl, openh264 in place of the
+    noopenh264 stub...), the build still does, without installing the
+    chain, and it stops unless the layer then resolves with installs only.
+    Two CI checks guard it: right after the build,
+    `gaming-native-resolve.sh` resolves the layer in a throwaway container
+    of the image with every package locked at its version, the way
+    rpm-ostree layers, and fails the build when it does not resolve;
+    smoke-boot's rpm-ostree dry run still blocks promotion, and a missing
+    package list now fails there too. mangohud and goverlay (vkBasalt came
+    as their weak dependency) left as well: both gaming recipes layer them,
+    so running the recipe again brings them back, and the validator no
+    longer reports "gaming remnants: vkBasalt" on every system. RPMFusion
+    is enabled at build time only for v4l2loopback now. zenity, which only
+    came with the bake, is installed on its own: Noctalia and
+    distrobox-export call it.
+  - **The VM stack** (290 MiB): libvirt, QEMU/KVM, virt-manager,
+    virt-viewer, virt-install, OVMF, swtpm and podman-machine.
+    `ujust margine-vm` layers them and enables the libvirt sockets for the
+    next boot, when wheel users join the libvirt group; `ujust
+    margine-test-vm` points to it when they are missing.
+  - **Six preinstalled apps:** VS Code, Bitwarden, GNOME Weather, GNOME
+    Maps, Blanket and Fragments, all in Bazaar (`ujust margine-vscode`
+    still layers the VS Code RPM). An install that has them keeps them.
+  - **The Koofr tray shim** (47-koofr-tray-fix): it downloaded gcc and
+    glibc-devel on every build and left cpp (42.6 MiB) behind, for a
+    client Spola replaced. libappindicator-gtk3 went with it. `ujust
+    install-koofr` stays, but Koofr's tray icon may not work under
+    Noctalia.
+  - **The offline docs**, their refresh timer and the Margine Documentation
+    launcher: Lucciola's guide is online.
+  - **The tuned profiles** balanced-margine, powersave-margine and
+    throughput-performance-margine, which nothing selected.
+  - **mesa-demos, glow, podman-tui and python3-pip** (87 MiB), which nothing
+    in the image calls. btop comes in: Mod+Ctrl+T opens it and it was
+    missing.
+
+### Changed (home folders)
+- **New accounts keep the standard folders** (Documents, Downloads,
+  Pictures...). `ujust margine-bootstrap` no longer applies Margine's
+  layout (`~/data`, `~/dev`, `~/scratch` with the XDG folders inside
+  them); `margine-configure-home-layout --apply` still does, on purpose,
+  and `ujust margine-home-stock` goes back. No file is moved. Screenshots
+  follow the XDG Pictures folder from the first login.
+
+### Changed (build)
+- **The initramfs is generated once per build**, after the Plymouth theme,
+  instead of twice (one dracut run is about 26 s on a 12-core laptop); the
+  result is the same file.
+- **The HIP compiler is no longer downloaded and deleted on every build.**
+  The package that stands in for hipcc is installed before rocm-hip, so
+  dnf never pulls the compiler: 7 packages and 44 MiB instead of 84
+  packages, 437 MiB and 3 GiB unpacked. rocm-llvm-libs and rocm-clang-libs
+  (192 MiB), which the old order left in the image, are gone too; an
+  OpenCL kernel still builds on a Radeon 760M (gfx1103) and HIP sees the
+  GPU. Together with the items above, a build downloads 618 MiB of
+  packages instead of 1517 MiB.
+
 ### Removed (GNOME customisation)
 - **The build no longer adds Margine's GNOME customisation only to delete
   it.** GNOME has been a stock fallback session since 2026-10-11, but the
