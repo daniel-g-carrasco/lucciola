@@ -348,7 +348,7 @@ lucciola-gaming-native-remove:
 #
 #   ujust lucciola-scheduler          # show current state
 #   ujust lucciola-scheduler lavd     # start/switch to a shipped scheduler
-#   ujust lucciola-scheduler off      # stop scx_loader, return to BORE
+#   ujust lucciola-scheduler off      # stop scx_loader, back to the kernel default (BORE, EEVDF on Fedora's kernel)
 # Switch the CPU scheduler (sched_ext/BPF): status, off, or a scxctl name.
 [group('Performance')]
 lucciola-scheduler $MODE="status":
@@ -418,7 +418,9 @@ lucciola-scheduler $MODE="status":
         ;;
 
       default|stop|off)
-        echo "Stopping scx_loader.service; kernel default (BORE on Lucciola) takes over."
+        kdef=EEVDF
+        grep -q '^CONFIG_SCHED_BORE=y' "/usr/lib/modules/$(uname -r)/config" 2>/dev/null && kdef=BORE
+        echo "Stopping scx_loader.service; the kernel default ($kdef) takes over."
         stop_loader
         echo "ok - scx_loader.service is stopped and disabled."
         ;;

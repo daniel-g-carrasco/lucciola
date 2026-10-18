@@ -31,8 +31,9 @@ const CONFIG = "/etc/scx_loader/config.toml";
 // (49-margine-scheduler.rules) can ask once per session instead of every time.
 const HELPER = "/usr/libexec/margine/scheduler-apply";
 // What runs when no scx scheduler is loaded: BORE on the default CachyOS
-// kernel, plain EEVDF on the :lts variant (kernel-cachyos-lts has no BORE,
-// issue #382). Read from the running kernel's config, never assumed.
+// kernel, plain EEVDF on Fedora's (the :fedora-kernel reserve; Margine's
+// old :lts variant too, issue #382). Read from the running kernel's
+// config, never assumed.
 const KERNEL_DEFAULT = (() => {
   try {
     const [, rel] = GLib.file_get_contents("/proc/sys/kernel/osrelease");
@@ -41,6 +42,15 @@ const KERNEL_DEFAULT = (() => {
     return new TextDecoder().decode(cfg).includes("\nCONFIG_SCHED_BORE=y") ? "BORE" : "EEVDF";
   } catch (e) {
     return "EEVDF";
+  }
+})();
+// Which kernel runs: CachyOS on most installs, Fedora's on the reserve.
+const KERNEL_NAME = (() => {
+  try {
+    const [, rel] = GLib.file_get_contents("/proc/sys/kernel/osrelease");
+    return new TextDecoder().decode(rel).includes("cachy") ? "a signed CachyOS kernel" : "Fedora's kernel";
+  } catch (e) {
+    return "a signed CachyOS kernel";
   }
 })();
 
@@ -261,7 +271,7 @@ const SchedulerWindow = GObject.registerClass(
       this._group = new Adw.PreferencesGroup({
         title: "Choose a scheduler",
         description:
-          `Lucciola runs a signed CachyOS kernel (${KERNEL_DEFAULT} by default) with pluggable sched_ext ` +
+          `Lucciola runs ${KERNEL_NAME} (${KERNEL_DEFAULT} by default) with pluggable sched_ext ` +
           "(BPF) schedulers. Tap one to switch to it — it applies live (no " +
           "reboot) and is saved as the boot default.",
       });

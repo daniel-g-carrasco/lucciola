@@ -43,7 +43,10 @@ if age_days < WARN_AGE_DAYS:
 
 urgency = "critical" if age_days >= CRIT_AGE_DAYS else "normal"
 title = "Lucciola: upstream stale"
-body = f"Latest :stable is {age_days:.0f} days old. Build pipeline may be broken."
+# The tag this machine follows (:stable, or :fedora-kernel on the kernel
+# reserve, which is rebuilt with every :stable).
+tag = image_ref.rpartition(":")[2] if "@" not in image_ref else "stable"
+body = f"Latest :{tag} is {age_days:.0f} days old. Build pipeline may be broken."
 # margine-notify, not notify-send: it fills the fdo app_icon field so
 # the logo also shows on the lock screen (docs/BRANDING.md).
 subprocess.run(
