@@ -267,6 +267,14 @@ def main():
                       "ls /var/lib/lucciola/login-migrated; "
                       + sudo + "journalctl -b -u lucciola-login-migrate.service -o cat --no-pager | tail -4", 60)
     say("login screen:\n" + (out or ""))
+    # Where the greetd account comes from on the updated system: a passwd line
+    # without a shadow line breaks PAM for it (user@<uid> fails), so print the
+    # files, NSS and what sysusers and the passwd seed did at this boot.
+    rc, acct = capture(sudo + "grep -H '^greetd:' /etc/passwd /etc/shadow /etc/group /etc/gshadow /usr/lib/passwd /usr/lib/group 2>&1 | cut -c1-90; "
+                       + sudo + "wc -l /etc/passwd /etc/shadow /usr/lib/passwd 2>&1; "
+                       "grep -E '^(passwd|shadow|group):' /etc/nsswitch.conf; "
+                       + sudo + "journalctl -b -o cat --no-pager -u margine-seed-etc-passwd.service -u systemd-sysusers.service | tail -12", 60)
+    say("greetd account:\n" + (acct or ""))
     if not out or not re.search(r"greetd\.service\s*$", out.splitlines()[0] if out.splitlines() else ""):
         fail("display-manager.service does not point to greetd after the upgrade")
     if not out or "greetd=active" not in out:
