@@ -44,6 +44,16 @@ import Gtk from "gi://Gtk?version=4.0";
 import Adw from "gi://Adw?version=1";
 import system from "system";
 
+// GLib 2.86 moved DesktopAppInfo to GioUnix (Gio's copy warns on Fedora 45);
+// fall back to Gio's where GioUnix is missing.
+// Touching Gio.DesktopAppInfo at all prints the warning, so only on failure.
+let DesktopAppInfo;
+try {
+  DesktopAppInfo = (await import("gi://GioUnix?version=2.0")).default.DesktopAppInfo;
+} catch (_e) {
+  DesktopAppInfo = Gio.DesktopAppInfo;
+}
+
 // The app id keeps the Margine family of dev.margine.System: it is the
 // window's Wayland app_id and must equal the .desktop file's name.
 const APP_ID = "dev.margine.Welcome";
@@ -264,7 +274,7 @@ const launchContext = () => Gtk.Window.list_toplevels()[0]?.get_display().get_ap
 
 function launch(desktopId, fallback) {
   const ctx = launchContext();
-  const info = Gio.DesktopAppInfo.new(desktopId);
+  const info = DesktopAppInfo.new(desktopId);
   try {
     if (info && info.launch([], ctx)) return;
   } catch (e) {
@@ -280,7 +290,7 @@ function launch(desktopId, fallback) {
 // An app by its desktop file. On the first start the Flatpaks are still
 // downloading (Bazaar among them): say so rather than do nothing.
 function openApp(desktopId, win) {
-  const info = Gio.DesktopAppInfo.new(desktopId);
+  const info = DesktopAppInfo.new(desktopId);
   if (info) {
     try {
       if (info.launch([], launchContext())) return;
