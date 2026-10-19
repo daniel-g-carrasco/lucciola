@@ -7,6 +7,13 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-19, build)
+- **Builds stopped on `/etc/machine-id`.** Since this morning something in
+  the build writes a machine id into the image (the base ships the file
+  empty), and the security scan rightly refused to publish an image whose
+  installs would all share one id. The final cleanup now empties it, as
+  the base has it, and says so in the build log.
+
 ### Fixed (2026-10-19)
 - **Flatpak apps looked signed out (Spola, Fractal, Deja Dup...).** niri's
   portals configuration sends the Secret portal to gnome-keyring, which
