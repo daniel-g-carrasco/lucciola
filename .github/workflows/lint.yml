@@ -203,3 +203,23 @@ jobs:
           echo "60-custom.just OK"
           pipx run --spec rust-just just --summary >/dev/null
           echo "Justfile OK"
+
+  flatpak-preinstall:
+    # The real `flatpak preinstall` (Flatpak 1.16 or later) against a local
+    # repository of test apps: an app that leaves the default set must stay
+    # installed (2026-10-18), a removed default must stay removed. Fedora,
+    # as in the image, and a job of its own so the static gate stays fast.
+    runs-on: ubuntu-26.04
+    timeout-minutes: 8
+    container:
+      image: registry.fedoraproject.org/fedora:45@sha256:e0f7c9b6ed4f631ac8d0261f7543c3646d148be46a94d60b9465b73c7d4e1500
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Flatpak preinstall keeps apps that leave the default set
+        env:
+          FLATPAK_TEST_REQUIRED: "1"
+        run: |
+          set -euo pipefail
+          dnf -y -q install flatpak ostree python3
+          bash tests/flatpak-preinstall-keep.test.sh

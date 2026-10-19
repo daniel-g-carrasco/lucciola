@@ -665,9 +665,10 @@ lucciola-naked: lucciola-slim
     sudo flatpak uninstall --system --unused -y || true
     echo "Done: naked profile active. Restore anytime: ujust lucciola-slim-restore"
 
-# Undo lucciola-slim / lucciola-naked: unmasking flatpak-preinstall is
-# enough — its list contains the full stock set (bake fallback included),
-# so the next run re-installs everything that was removed.
+# Undo lucciola-slim / lucciola-naked. Unmasking flatpak-preinstall is not
+# enough: Flatpak remembers a preinstalled app the user removed and never
+# installs it again. flatpak-preinstall-keep --restore forgets those
+# removals for the apps in the stock list, so the next run installs them.
 [doc('Bring back the apps lucciola-slim or lucciola-naked removed.')]
 [group('Lucciola')]
 lucciola-slim-restore:
@@ -675,6 +676,7 @@ lucciola-slim-restore:
     set -euo pipefail
     echo "Restoring the stock Lucciola app set (runs in background, 5-15 min on a normal line)…"
     sudo systemctl unmask flatpak-preinstall.service
+    sudo /usr/libexec/margine/flatpak-preinstall-keep --restore
     sudo systemctl start flatpak-preinstall.service --no-block
     echo "Started. Apps reappear as they land; check progress with:"
     echo "  systemctl status flatpak-preinstall.service"

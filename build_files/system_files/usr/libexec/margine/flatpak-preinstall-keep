@@ -1,0 +1,170 @@
+#!/usr/bin/python3
+"""flatpak-preinstall-keep: an app that leaves the default set stays installed.
+
+Runs as root before `flatpak preinstall` (flatpak-preinstall.service). The
+preinstall command synchronises: Flatpak records every app it preinstalled
+in the system repository's config (core, xa.preinstalled), and when an app
+on that record is no longer listed in /usr/share/flatpak/preinstall.d or
+/etc/flatpak/preinstall.d, the next run UNINSTALLS it. On 2026-10-18 six
+apps left Lucciola's list, and the next boot removed Bitwarden, VS Code,
+Blanket and Fragments from the machines that had them, while the changelog
+said those machines would keep them.
+
+Lucciola's rule is that the default set only ever adds: an app that leaves
+it becomes the user's own app, as if they had installed it. So, before
+each preinstall, this helper edits that record, with ostree's own config
+writer:
+
+  release  an app on the record, still installed, no longer listed:
+           taken off the record, so the sync leaves it alone.
+  adopt    an app listed and installed, but not on the record (an install
+           whose record started after some apps were there, as on machines
+           that came from Margine): put on the record, so that removing it
+           later is remembered, as on a fresh install.
+
+An app on the record that is NOT installed is one the user removed: it
+stays on the record either way, which is how Flatpak remembers not to
+install it again. A repository without the record is left to Flatpak,
+which builds it on the first run.
+
+  --restore   for `ujust lucciola-slim-restore`: take the listed apps that
+              are not installed off the record, so the next preinstall
+              installs them again (the user asked for the stock set back).
+  --dry-run   print what would change, change nothing.
+
+Paths follow Flatpak's own variables (FLATPAK_SYSTEM_DIR, FLATPAK_DATA_DIR,
+FLATPAK_CONFIG_DIR), which tests/flatpak-preinstall-keep.test.sh uses.
+"""
+
+import configparser
+import os
+import subprocess
+import sys
+
+GROUP_PREFIX = "Flatpak Preinstall "
+KEY = "xa.preinstalled"
+
+
+def keyfile(path):
+    # Flatpak and ostree read these with GKeyFile: case-sensitive keys,
+    # '=' only, no interpolation, a later duplicate wins.
+    cp = configparser.ConfigParser(
+        interpolation=None, strict=False, delimiters=("=",), comment_prefixes=("#",)
+    )
+    cp.optionxform = str
+    cp.read(path, encoding="utf-8")
+    return cp
+
+
+def boolean(value):
+    v = value.strip().lower()
+    if v in ("true", "1"):
+        return True
+    if v in ("false", "0"):
+        return False
+    return None
+
+
+def declared_refs(arch):
+    """The refs the preinstall.d files ask for, read as Flatpak reads them:
+    /usr/share first, then /etc, files sorted by name, settings merged per
+    app name, Install=false drops the app. A group that cannot be read
+    counts as not listed, which here means "keep it installed"."""
+    data = os.environ.get("FLATPAK_DATA_DIR", "/usr/share/flatpak")
+    conf = os.environ.get("FLATPAK_CONFIG_DIR", "/etc/flatpak")
+    configs = {}
+    for base in (data, conf):
+        d = os.path.join(base, "preinstall.d")
+        if not os.path.isdir(d):
+            continue
+        for name in sorted(os.listdir(d)):
+            path = os.path.join(d, name)
+            if not name.endswith(".preinstall") or not os.path.isfile(path) or os.path.islink(path):
+                continue
+            try:
+                kf = keyfile(path)
+            except (configparser.Error, UnicodeDecodeError) as e:
+                print(f"flatpak-preinstall-keep: cannot read {path}: {e}", file=sys.stderr)
+                continue
+            for group in kf.sections():
+                if not group.startswith(GROUP_PREFIX) or group == GROUP_PREFIX:
+                    continue
+                app = group[len(GROUP_PREFIX):]
+                c = configs.setdefault(app, {"branch": "master", "runtime": False, "install": True})
+                g = kf[group]
+                if "Branch" in g:
+                    c["branch"] = g["Branch"].strip() or None
+                for key, field in (("IsRuntime", "runtime"), ("Install", "install")):
+                    if key in g and boolean(g[key]) is not None:
+                        c[field] = boolean(g[key])
+    refs = set()
+    for app, c in configs.items():
+        if c["install"] and c["branch"]:
+            kind = "runtime" if c["runtime"] else "app"
+            refs.add(f"{kind}/{app}/{arch}/{c['branch']}")
+    return refs
+
+
+def installed(sysdir, ref):
+    return os.path.exists(os.path.join(sysdir, ref, "active"))
+
+
+def main(argv):
+    restore = "--restore" in argv
+    dry = "--dry-run" in argv
+    unknown = [a for a in argv if a not in ("--restore", "--dry-run")]
+    if unknown:
+        print("usage: flatpak-preinstall-keep [--restore] [--dry-run]", file=sys.stderr)
+        return 2
+
+    sysdir = os.environ.get("FLATPAK_SYSTEM_DIR", "/var/lib/flatpak")
+    repo = os.path.join(sysdir, "repo")
+    config = os.path.join(repo, "config")
+    if not os.path.isfile(config):
+        print("flatpak-preinstall-keep: no system repository yet, nothing to keep")
+        return 0
+    repo_config = keyfile(config)
+    core = repo_config["core"] if repo_config.has_section("core") else {}
+    if KEY not in core:
+        print("flatpak-preinstall-keep: no preinstall record yet, Flatpak starts it")
+        return 0
+    record = [r for r in core[KEY].strip().split(";") if r]
+
+    arch = subprocess.run(
+        ["flatpak", "--default-arch"], check=True, capture_output=True, text=True
+    ).stdout.strip()
+    wanted = declared_refs(arch)
+
+    new = []
+    for ref in record:
+        here = installed(sysdir, ref)
+        if not restore and ref not in wanted and here:
+            print(f"release {ref}: no longer a default, stays installed as the user's app")
+            continue
+        if restore and ref in wanted and not here:
+            print(f"restore {ref}: removed earlier, the next preinstall installs it again")
+            continue
+        if ref not in new:
+            new.append(ref)
+    if not restore:
+        for ref in sorted(wanted):
+            if ref not in new and installed(sysdir, ref):
+                print(f"adopt {ref}: a default already installed, removing it will be remembered")
+                new.append(ref)
+
+    if new == record:
+        print("flatpak-preinstall-keep: record unchanged")
+        return 0
+    if dry:
+        print("flatpak-preinstall-keep: dry run, record not written")
+        return 0
+    subprocess.run(
+        ["ostree", "config", f"--repo={repo}", "--group=core", "set", KEY, ";".join(new)],
+        check=True,
+    )
+    print(f"flatpak-preinstall-keep: record written ({len(record)} -> {len(new)} refs)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

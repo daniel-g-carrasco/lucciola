@@ -7,6 +7,31 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-20, apps)
+- **Apps that left the default set were uninstalled.** `flatpak preinstall`
+  does not only install: it keeps a record of the apps it preinstalled (in
+  the system repository's config) and uninstalls any of them the image
+  stops listing. When Bitwarden, VS Code, GNOME Weather, GNOME Maps,
+  Blanket and Fragments left the list on 2026-10-18, the next boot removed
+  them wherever they were on that record, against what this changelog
+  promised. Before every preinstall, `flatpak-preinstall-keep` now takes
+  an installed app that is no longer listed off the record, so it stays as
+  the user's own app; if the helper fails, the preinstall does not run. An
+  app the user removed stays on the record, so Flatpak still does not
+  install it again. The real `flatpak preinstall` is tested against a
+  local repository, before and after (tests/flatpak-preinstall-keep.test.sh).
+  Machines already affected do not get the apps back on their own, since
+  some may have been removed on purpose since: their data in `~/.var/app`
+  is still there, and Bazaar installs them again.
+- **A default app you remove now stays removed on every install.** On
+  installs whose record started after their apps were there (those that
+  came from Margine), a removed default came back at the next boot. The
+  same helper puts every installed default on the record, as Flatpak does
+  on a fresh install. `ujust lucciola-slim-restore` now really brings the
+  removed defaults back: unmasking the service was not enough, because
+  Flatpak remembers the removals; the recipe now forgets them for the apps
+  in the stock list.
+
 ### Fixed (2026-10-19, build)
 - **Builds stopped on `/etc/machine-id`.** Since this morning something in
   the build writes a machine id into the image (the base ships the file
@@ -208,7 +233,10 @@ stable release is cut.
     margine-test-vm` points to it when they are missing.
   - **Six preinstalled apps:** VS Code, Bitwarden, GNOME Weather, GNOME
     Maps, Blanket and Fragments, all in Bazaar (`ujust margine-vscode`
-    still layers the VS Code RPM). An install that has them keeps them.
+    still layers the VS Code RPM). An install that had them lost them at
+    the next boot until the 2026-10-20 fix ("Apps that left the default set
+    were uninstalled"); from that fix on, an install that has them keeps
+    them.
   - **The Koofr tray shim** (47-koofr-tray-fix): it downloaded gcc and
     glibc-devel on every build and left cpp (42.6 MiB) behind, for a
     client Spola replaced. libappindicator-gtk3 went with it. `ujust
@@ -260,7 +288,9 @@ stable release is cut.
   - wayland-scroll-factor (45-wsf, `ujust wsf-preload`), which only loads
     into gnome-shell; niri sets the scroll speed itself;
   - Smile and Extension Manager from the preinstalled and baked Flatpaks
-    (an install that has them keeps them);
+    (an install that has them keeps them, reliably only since the
+    2026-10-20 fix: before it, Flatpak uninstalled them wherever its
+    preinstall record listed them);
   - the GNOME first-login helpers (`margine-configure-gnome-*`,
     `margine-install-user-extensions`) and the two first-login autostart
     entries. `ujust margine-bootstrap` keeps its other steps (home layout,

@@ -703,7 +703,7 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
   <section id="g-apps" aria-labelledby="g-h-apps">
     <h2 id="g-h-apps">apps</h2>
     <p>Bazaar, the app store, installs apps from Flathub. They update on their own twice a day, except when the battery is low or the connection is metered.</p>
-    <p>A preinstalled app you remove comes back at the next restart, because Lucciola keeps its default set in place. To stop that, run <code>ujust lucciola-slim</code>: it lists what it removes, some of the larger apps included, and asks before doing anything. <code>ujust lucciola-slim-restore</code> undoes it.</p>
+    <p>A preinstalled app you remove stays removed: Lucciola remembers it and does not install it again. An app that leaves Lucciola’s default set stays on your PC. <code>ujust lucciola-slim</code> removes some of the larger apps in one go: it lists what it removes and asks before doing anything. <code>ujust lucciola-slim-restore</code> brings back the default apps you removed.</p>
     <p>For developer tools, use a Toolbox: a Fedora container with its own <code>dnf</code>, where you install anything without touching the system.</p>
     <div class="cmd"><pre>toolbox create</pre><button type="button">Copy</button></div>
     <div class="cmd"><pre>toolbox enter</pre><button type="button">Copy</button></div>
