@@ -28,6 +28,18 @@
 set -euo pipefail
 
 rm -rf /var/lib/dnf /var/lib/rpm-state
+
+# /etc/machine-id must stay empty in the image, as the base ships it:
+# systemd fills it at an installed system's first boot, and a value baked
+# here would give every install the same id (the security scan refuses it).
+# Something in the build started writing it on 2026-10-19 (the base still
+# ships it empty), so empty it whatever wrote it, and keep the file: an
+# empty file is what tells systemd this is a first boot.
+if [[ -s /etc/machine-id ]] && [[ "$(cat /etc/machine-id)" != uninitialized ]]; then
+  echo "99-cleanup: /etc/machine-id was set by the build: emptied"
+  : > /etc/machine-id
+  touch -h -d @0 /etc/machine-id
+fi
 rm -f /var/lib/authselect/checksum
 rmdir /var/lib/authselect 2>/dev/null || true
 
