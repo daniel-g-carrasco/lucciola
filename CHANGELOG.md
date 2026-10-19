@@ -43,6 +43,10 @@ stable release is cut.
   password field's cursor is no longer yellow but the text's colour (a
   Noctalia Greeter patch). The blurred login wallpaper of the previous look
   is no longer in the image.
+- **No more "Password:" under the password field.** The field already says
+  "Type password", so PAM's plain password prompt is no longer repeated on
+  the line below. Other questions, like a verification code, and the
+  fingerprint's messages still show there. A Noctalia Greeter patch.
 
 ### Added (the kernel reserve: Lucciola with Fedora's kernel)
 - **A second image, `:fedora-kernel`, the same Lucciola with Fedora's own
