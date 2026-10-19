@@ -52,6 +52,20 @@ fresh; mkdir -p "$R/etc/aws"; printf 'aws_access_key_id = AKIAIOSFODNN7EXAMPLE\n
                                                                         expect "AWS documented example key: not a secret" 0
 fresh; mkdir -p "$R/etc/aws"; printf 'aws_access_key_id = AKIA2E0A8F3B244C9986\n' > "$R/etc/aws/creds"; run "--write-baseline $B"; run
                                                                         expect "real-looking AWS key in etc: secret" 2
+fresh; mkdir -p "$R/etc/sudoers.d"
+# Synthetic token: never show its bytes, even when this test fails.
+token="ghp_$(printf 'A%.0s' {1..36})"
+printf '# fixture %s\n' "$token" > "$R/etc/sudoers.d/fixture"
+run "--write-baseline $B"
+expect "token in security config: fatal" 2
+if grep -qF "$token" "$T/report" || grep -rqF "$token" "$B"; then
+  echo "FAIL secret bytes leaked into report or baseline artifact"; fails=$((fails+1))
+else
+  echo "ok   secret bytes absent from report and baseline artifact"
+fi
+grep -q 'etc/sudoers.d/fixture: access token' "$T/report" \
+  && echo "ok   redacted report keeps the path and category" \
+  || { echo "FAIL missing redacted diagnostic"; fails=$((fails+1)); }
 fresh; mkdir -p "$R/sysroot/ostree/repo/objects/05"; key "$R/sysroot/ostree/repo/objects/05/abc.file"; chmod 4755 "$R/sysroot/ostree/repo/objects/05/abc.file"
        run "--write-baseline $B"; run;                                  expect "sysroot/ostree object store (pruned before publishing): ignored" 0
 grep -q sysroot "$B/privileged.txt" && { echo "FAIL sysroot object listed as privileged"; fails=$((fails+1)); } || echo "ok   sysroot not in the privileged list"
