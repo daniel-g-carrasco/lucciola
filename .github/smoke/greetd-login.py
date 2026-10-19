@@ -14,6 +14,7 @@ Three phases, each with its own marker on the serial console:
       greeter session), as it does after every logout.
   MARGINE-GREETD: LOGIN PASS|FAIL ...  a password login over greetd's IPC
       socket, the protocol the greeter itself speaks (greetd-ipc(7)):
+      cancel_session (the greeter's own conversation, see password_login),
       create_session, the password as the answer to PAM's secret prompt,
       start_session with the session file's command and environment. greetd
       stops the greeter and starts the session through the full greetd PAM
@@ -202,6 +203,15 @@ def password_login(password):
         return False, "no greetd socket in /run"
     try:
         g = Greetd(path)
+        # The greeter opens its own conversation as soon as it is up
+        # (greeter.toml [auth] start_on_select): pam_fprintd, or straight
+        # pam_unix's password prompt in a VM without a reader. greetd 0.10
+        # keeps one session under configuration for all its clients and
+        # refuses a create_session while it exists ("a session is already
+        # being configured", context.rs); any client's cancel_session drops
+        # it. So cancel first, as a second greeter would have to. The
+        # greeter is not told and stays up until start_session replaces it.
+        g.request({"type": "cancel_session"})
         reply = g.request({"type": "create_session", "username": USER})
         prompts = []
         for _ in range(10):
