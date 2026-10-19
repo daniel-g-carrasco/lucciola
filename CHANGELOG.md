@@ -7,6 +7,24 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Security (2026-10-20, third-party repositories)
+- **A pinned signing key now means that key alone.** The build and the
+  `ujust lucciola-docker`, `lucciola-tailscale`, `lucciola-vscode` and
+  `lucciola-devmode` recipes checked only the first fingerprint in a
+  downloaded key file and then handed rpm the whole file, and rpm imports
+  every key in it: a file with the right key first and another one after it
+  passed, and packages signed by the second key would have installed. The
+  repository file was kept as downloaded apart from its `gpgkey=` lines, so
+  `gpgcheck=0` in any section survived too. Both now go through one helper,
+  `/usr/libexec/margine/rpm-trust`: a key file with any other primary key is
+  refused and only the pinned certificate (with its own subkeys) is saved or
+  imported; a repository file that turns signature checking off in any
+  section is refused, and every section gets `gpgcheck=1` and the local,
+  verified key in place of whatever `gpgkey` it named. The same applies to
+  the RPM Fusion and negativo17 repository files the build reads.
+  Checked against the live Docker CE, Tailscale, VS Code, COPR, RPM Fusion
+  and negativo17 keys and repositories. `tests/rpm-trust.test.sh`.
+
 ### Fixed (2026-10-19, build)
 - **Builds stopped on `/etc/machine-id`.** Since this morning something in
   the build writes a machine id into the image (the base ships the file

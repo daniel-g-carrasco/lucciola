@@ -144,6 +144,13 @@ jobs:
         # The repository step runs for real in build.yml's resolve check.
         run: bash tests/devmode.test.sh
 
+      - name: Third-party RPM trust (pinned key only, signature checks on)
+        # rpm-trust, shared by the build and layer-repo: a key file with any
+        # primary key besides the pinned one, and a repository file that turns
+        # signature checking off in any section, are refused; legitimate ones
+        # come out with the pinned key alone. See tests/rpm-trust.test.sh.
+        run: bash tests/rpm-trust.test.sh
+
       - name: Welcome window texts
         # The window draws content.json as it finds it: a missing field, an
         # unknown button action or a long dash is caught here, in words.

@@ -74,7 +74,7 @@ RPMFUSION_FREE_FPR="E9A491A3DE247814E7E067EAE06F8ECDD651FF2E"
 
 # negativo17 "fedora-multimedia": where gstreamer1-plugins-bad and -ugly come
 # from. Verified 2026-08-25 against https://negativo17.org/repos/RPM-GPG-KEY-slaanesh
-# (first key in the file; the second is its companion).
+# (one primary key and its subkey; checked again 2026-10-20).
 # shellcheck disable=SC2034
 NEGATIVO17_FPR="0C5D0F470484AE2FC40A9B6597F3008993E8909B"
 
@@ -643,14 +643,20 @@ systemctl disable scx_loader.service 2>/dev/null || true
 # repo exists, with its key verified first, enable it for this one
 # transaction only, and leave it disabled like every other third-party repo
 # in the image.
+# The repository file stays in the image (disabled) for the gaming layer,
+# so the key it points at stays too, as a local file: the published file
+# names the key by URL, and dnf and rpm-ostree import whatever that URL
+# serves without asking (review R2, 2026-10-20).
 if [[ ! -f /etc/yum.repos.d/negativo17-fedora-multimedia.repo ]]; then
   log "negativo17 fedora-multimedia repo absent from the base, adding it (key pinned)"
-  retry_curl_strict https://negativo17.org/repos/RPM-GPG-KEY-slaanesh /run/negativo17.asc
-  verify_key_fpr /run/negativo17.asc "$NEGATIVO17_FPR" "negativo17" || exit 1
-  rpm --import /run/negativo17.asc
-  retry_curl_strict https://negativo17.org/repos/fedora-multimedia.repo /etc/yum.repos.d/negativo17-fedora-multimedia.repo
+  NEGATIVO17_KEY=/etc/pki/rpm-gpg/RPM-GPG-KEY-negativo17-multimedia
+  retry_curl_strict https://negativo17.org/repos/RPM-GPG-KEY-slaanesh "$NEGATIVO17_KEY"
+  verify_key_fpr "$NEGATIVO17_KEY" "$NEGATIVO17_FPR" "negativo17" || exit 1
+  rpm --import "$NEGATIVO17_KEY"
+  retry_curl_strict https://negativo17.org/repos/fedora-multimedia.repo /run/negativo17.repo
+  trust_repo_file /run/negativo17.repo /etc/yum.repos.d/negativo17-fedora-multimedia.repo "$NEGATIVO17_KEY" || exit 1
   sed -i 's/^enabled=1/enabled=0/' /etc/yum.repos.d/negativo17-fedora-multimedia.repo
-  rm -f /run/negativo17.asc
+  rm -f /run/negativo17.repo
 fi
 
 # gstreamer1-plugins-{bad,ugly} complete the codec swap the declarations
