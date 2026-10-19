@@ -11,7 +11,7 @@
 
 Name:           noctalia-greeter
 Version:        %{greeter_version}
-Release:        3%{?dist}
+Release:        4%{?dist}
 Summary:        Login greeter for greetd with the look of Noctalia Shell
 License:        MIT AND (Apache-2.0 OR MIT)
 URL:            https://github.com/noctalia-dev/noctalia-greeter
@@ -28,6 +28,9 @@ Patch0:         0001-say-pam-results-in-words.patch
 # an Enter first: [auth].start_on_select, turned on by Lucciola's
 # greeter.toml (the patch file says how it behaves).
 Patch1:         0002-start-auth-on-select.patch
+# The text field's caret (in the palette's text colour) and reveal icon follow
+# the palette, instead of keeping Noctalia's built-in colours from start-up.
+Patch2:         0003-caret-in-palette-colour.patch
 
 # The pkg-config names come from meson.build of the tag.
 BuildRequires:  gcc
@@ -104,6 +107,11 @@ install -m 0644 %{SOURCE1} %{buildroot}%{_datadir}/noctalia-greeter/assets/nocta
 %{_datadir}/polkit-1/actions/org.noctalia.greeter.apply-appearance.policy
 
 %changelog
+* Mon Oct 19 2026 Daniel Grasso Carrasco <code@danielgrasso.com> - %{greeter_version}-4
+- The text field's caret in the palette's text colour and its reveal icon
+  in the palette's, re-applied with the palette, instead of the colours of
+  Noctalia's built-in palette from start-up
+
 * Mon Oct 19 2026 Daniel Grasso Carrasco <code@danielgrasso.com> - %{greeter_version}-3
 - [auth].start_on_select: the login conversation starts when a user is
   selected, so the fingerprint reader listens without an Enter first
