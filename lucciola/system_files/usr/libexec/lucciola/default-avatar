@@ -1,0 +1,71 @@
+#!/usr/bin/bash
+# Lucciola: the firefly as the account picture of every account that has
+# none (lucciola-default-avatar.service, at each boot, before
+# accounts-daemon starts).
+#
+# The login screen shows the picture AccountsService gives for an account
+# (its IconFile): the file named by the Icon= line of
+# /var/lib/AccountsService/users/<name>, kept in
+# /var/lib/AccountsService/icons/ where the greeter's account can read it.
+# For each person's account (UID 1000 to 59999, a login shell) whose file
+# has no Icon= line, or does not exist yet, this copies the firefly to
+# icons/<name> and writes that line. An account with an Icon= line is never
+# touched: a picture chosen in the settings writes one, and so does
+# removing it (an empty Icon=). A new account gets the firefly at the next
+# boot. Before accounts-daemon, so it never rewrites a file the daemon has
+# open in memory.
+set -uo pipefail
+
+# Paths can be pointed elsewhere for tests (tests/default-avatar.test.sh).
+STATE="${DEFAULT_AVATAR_STATE:-/var/lib/AccountsService}"
+PICTURE="${DEFAULT_AVATAR_PICTURE:-/usr/share/lucciola/avatar/lucciola.png}"
+PASSWD="${DEFAULT_AVATAR_PASSWD:-}"   # a passwd file; empty: getent passwd
+log() { echo "lucciola-default-avatar: $*"; }
+
+[[ -s "$PICTURE" ]] || { log "no picture at $PICTURE"; exit 1; }
+
+accounts() {  # name:uid:shell of every account, local and from NSS
+  if [[ -n "$PASSWD" ]]; then cat -- "$PASSWD"; else getent passwd; fi \
+    | awk -F: '{ print $1 ":" $3 ":" $7 }'
+}
+
+label() {  # the SELinux label the policy gives the path, where there is one
+  command -v restorecon >/dev/null 2>&1 && restorecon -F "$@" 2>/dev/null
+  return 0
+}
+
+install -d -m 0775 "$STATE" "$STATE/icons" || exit 1
+install -d -m 0700 "$STATE/users" || exit 1
+label "$STATE" "$STATE/icons" "$STATE/users"
+
+rc=0
+while IFS=: read -r name uid shell; do
+  if ! [[ "$uid" =~ ^[0-9]+$ ]] || (( uid < 1000 || uid >= 60000 )); then continue; fi
+  case "$shell" in */nologin|*/false|"") continue ;; esac
+  [[ "$name" =~ ^[a-z_][a-z0-9_.-]*[$]?$ ]] || { log "skipping an account with an unusual name: $name"; continue; }
+  keyfile="$STATE/users/$name"
+  if [[ -f "$keyfile" ]] && grep -q '^Icon=' "$keyfile"; then
+    continue
+  fi
+  icon="$STATE/icons/$name"
+  if ! install -m 0644 "$PICTURE" "$icon"; then
+    log "$name: could not copy the picture"; rc=1; continue
+  fi
+  # The keyfile: [User] with the Icon= line, everything else kept.
+  tmp="$(mktemp "$STATE/users/.$name.XXXXXX")" || { rc=1; continue; }
+  if [[ -f "$keyfile" ]]; then
+    awk -v line="Icon=$icon" '
+      { print }
+      /^\[User\][[:space:]]*$/ && !done { print line; done = 1 }
+      END { if (!done) { print ""; print "[User]"; print line } }' "$keyfile" > "$tmp"
+  else
+    printf '[User]\nIcon=%s\n' "$icon" > "$tmp"
+  fi
+  if chmod 0600 "$tmp" && mv -f "$tmp" "$keyfile"; then
+    label "$icon" "$keyfile"
+    log "$name: the firefly as the account picture"
+  else
+    rm -f "$tmp"; log "$name: could not write $keyfile"; rc=1
+  fi
+done < <(accounts)
+exit "$rc"
