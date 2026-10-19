@@ -195,17 +195,53 @@ def scan_units(root):
     return sorted(out)
 
 
+def image_path(root, rel):
+    """Resolve links using the image's /, never the scanner host's /."""
+    root = os.path.abspath(root)
+    resolved = []
+    pending = rel.split("/")
+    links = 0
+    while pending:
+        part = pending.pop(0)
+        if part in ("", "."):
+            continue
+        if part == "..":
+            if resolved:
+                resolved.pop()
+            continue
+        path = os.path.join(root, *resolved, part)
+        if os.path.islink(path):
+            links += 1
+            if links > 40:
+                raise ValueError("symlink loop in image configuration")
+            target = os.readlink(path)
+            if target.startswith("/"):
+                resolved = []
+            pending = target.split("/") + pending
+        else:
+            resolved.append(part)
+    return os.path.join(root, *resolved)
+
+
 def scan_configs(root):
     found = {}
     for pattern in CONFIG_GLOBS:
         d = os.path.dirname(pattern)
-        base = os.path.join(root, d)
+        try:
+            base = image_path(root, d)
+        except (OSError, ValueError):
+            continue
         if not os.path.isdir(base):
             continue
         for name in sorted(os.listdir(base)):
             rel = f"{d}/{name}"
-            if fnmatch.fnmatch(rel, pattern) and os.path.isfile(os.path.join(root, rel)):
-                found[rel] = os.path.join(root, rel)
+            if fnmatch.fnmatch(rel, pattern):
+                try:
+                    path = image_path(root, rel)
+                except (OSError, ValueError):
+                    continue
+                if os.path.isfile(path):
+                    found[rel] = path
     return found
 
 

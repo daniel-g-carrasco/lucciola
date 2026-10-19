@@ -41,6 +41,21 @@ fresh; mkdir -p "$R/etc/containers"; echo '{"default":[{"type":"reject"}]}' > "$
        echo '{"default":[{"type":"insecureAcceptAnything"}]}' > "$R/etc/containers/policy.json"; run
                                                                         expect "container policy relaxed: drift with a diff" 1
 grep -q 'insecureAcceptAnything' "$T/report" && echo "ok   the diff shows the new policy" || { echo "FAIL config diff"; fails=$((fails+1)); }
+fresh; mkdir -p "$R/etc/pam.d" "$R/fixture/pam"
+printf 'auth required pam_deny.so\n' > "$R/fixture/pam/system-auth"
+ln -s /fixture/pam/system-auth "$R/etc/pam.d/system-auth"
+ln -s ../../fixture/pam/system-auth "$R/etc/pam.d/password-auth"
+run "--write-baseline $B"; run
+expect "absolute and relative PAM links resolve inside the image" 0
+printf 'auth sufficient pam_permit.so\n' > "$R/fixture/pam/system-auth"
+run; expect "changed PAM stack behind absolute symlink: drift" 1
+if grep -q 'config etc/pam.d/system-auth' "$T/report" && grep -q 'config etc/pam.d/password-auth' "$T/report"; then
+  echo "ok   both PAM aliases report the image target's change"
+else
+  echo "FAIL missing PAM symlink diff"; fails=$((fails+1))
+fi
+ln -s loop "$R/etc/pam.d/loop"
+run; expect "looping symlink cannot hang the scanner" 1
 fresh; run "--write-baseline $B"; mkdir -p "$R/run/build"; touch "$R/run/build/lock"; run
                                                                         expect "build residue in /run: drift" 1
 fresh; run "--write-baseline $B"; mkdir -p "$R/etc/w"; chmod 0777 "$R/etc/w"; run
