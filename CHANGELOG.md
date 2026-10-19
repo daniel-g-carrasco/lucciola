@@ -7,6 +7,17 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-20, checks)
+- **Some checks passed when the command they ran had failed.** The upgrade
+  test sent `rpm-ostree rebase`, the layering of a package and the
+  gaming-native dry run to the test machine as `command | tail`, in a shell
+  without `pipefail`, so the status it read was `tail`'s, always a success;
+  a missing gaming package list counted as a pass. The same held for the
+  dependency check in `validate-baseline-packages`, which also reported
+  every package found when its container stopped before checking any. Each
+  now keeps the command's own exit status, prints only the end of its
+  output, and fails on a missing list. `tests/pipeline-status.test.sh`.
+
 ### Security (2026-10-20, third-party repositories)
 - **A pinned signing key now means that key alone.** The build and the
   `ujust lucciola-docker`, `lucciola-tailscale`, `lucciola-vscode` and

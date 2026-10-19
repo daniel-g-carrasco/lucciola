@@ -151,6 +151,15 @@ jobs:
         # come out with the pinned key alone. See tests/rpm-trust.test.sh.
         run: bash tests/rpm-trust.test.sh
 
+      - name: Checks report the command, not the tail of its output
+        # A shell without pipefail reports `rpm-ostree ... | tail` as tail's
+        # success: upgrade-smoke's guest commands and the baseline package
+        # check are run with stubs that fail after ordinary output, and
+        # with missing inputs. See tests/pipeline-status.test.sh.
+        run: |
+          python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml
+          bash tests/pipeline-status.test.sh
+
       - name: Welcome window texts
         # The window draws content.json as it finds it: a missing field, an
         # unknown button action or a long dash is caught here, in words.
