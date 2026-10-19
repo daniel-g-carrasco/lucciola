@@ -66,6 +66,7 @@ cosign verify \
   ghcr.io/daniel-g-carrasco/lucciola:stable
 ```
 
-A valid signature prints the verified payload and exits 0. The public key
-is [`secrets/cosign.pub`](secrets/cosign.pub); the private half exists only
-in CI.
+A valid signature prints the verified payload and exits 0. Until the first
+`:stable` (with Fedora 45, planned for 27 October 2026), verify
+`:candidate`. The public key is [`secrets/cosign.pub`](secrets/cosign.pub);
+the private half exists only in CI.

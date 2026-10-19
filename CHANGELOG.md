@@ -7,6 +7,20 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-20, docs)
+- **The install instructions named images that do not exist yet.** The
+  README, the website (home page and guide), `lucciola/README.md` and
+  `SECURITY.md` send people to `:stable`, and the guide and the README to
+  `:fedora-kernel`, but neither is published before Fedora 45's release
+  (the promotion is held on purpose until then): following the guide meant
+  turning Secure Boot off and then getting "manifest unknown". Each of
+  those commands now has a short note beside it: the first `:stable`, and
+  the Fedora-kernel version with it, comes out with Fedora 45, planned for
+  27 October 2026, and until then `:candidate` is the test build to use.
+  The notes stay true after that date and can go once it has passed. When
+  `ujust lucciola-kernel` cannot stage an image, it now names "an image not
+  published yet" among the causes.
+
 ### Fixed (2026-10-20, boot)
 - **Every boot spent a minute and a half repairing Flatpak.**
   `flatpak-preinstall.service` relabelled all of `/var/lib/flatpak`
