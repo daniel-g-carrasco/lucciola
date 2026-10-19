@@ -81,10 +81,12 @@ This layer adds:
   "Lucciola Welcome" in the launcher opens it any time;
 - the login screen: Noctalia Greeter on greetd, in place of GDM. Noctalia
   Greeter is built from its pinned tag (`NOCTALIA_GREETER_VERSION` and its
-  sha256 in the Containerfile, spec in `greeter/`) with two Lucciola
-  touches: the firefly as the logo at the bottom of the screen, and a patch
+  sha256 in the Containerfile, spec in `greeter/`) with three Lucciola
+  touches: the firefly as the logo at the bottom of the screen, a patch
   that says a failed login in words ("Wrong password, try again" instead
-  of `pam_authenticate: AUTH_ERR`); greetd comes from Fedora. `/etc/greetd/config.toml` (reference copy in
+  of `pam_authenticate: AUTH_ERR`), and one that starts the login as soon
+  as a user is selected (`[auth] start_on_select`), so the fingerprint
+  reader listens without an Enter first; greetd comes from Fedora. `/etc/greetd/config.toml` (reference copy in
   `/usr/share/lucciola/greetd/`) runs the greeter as the `greetd` account;
   its settings and look are `/usr/share/lucciola/greeter/greeter.toml`
   (linked into `/var/lib/noctalia-greeter/`, so updates bring them: dark,

@@ -332,6 +332,16 @@ starts when the greeter cannot come up, and keeps the dconf branding above).
   password, login not allowed, auth service not answering); anything else and
   the log stay raw. Upstream candidate. When the pinned tag moves, check the
   patch still applies (`%autosetup -p1` fails the build otherwise).
+- **Fingerprint first**: `lucciola/greeter/0002-start-auth-on-select.patch`
+  adds `[auth] start_on_select` (on in `greeter.toml`): the greeter opens
+  greetd's conversation when a user is selected, so pam_fprintd's prompt
+  ("Place your right index finger...") is on the status line from the
+  start and a touch logs in. Status texts it adds: "Password kept: sent
+  when the reader stops waiting" (a password submitted while the reader
+  waits), "Type the password, or Enter for the fingerprint" (PAM's
+  password prompt after a fingerprint prompt), "Wrong password, try again,
+  or use the fingerprint" (after a failed attempt). The status line is one
+  line wide as the card: keep them short. Upstream candidate.
 - **Session name**: the greeter lists sessions by the `.desktop` file's
   `Name=`, so the seeded `last` must stay equal to `Name=Lucciola` in
   `lucciola.desktop` (lucciola/build.sh 5d checks it).

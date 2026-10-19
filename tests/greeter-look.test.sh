@@ -51,6 +51,12 @@ check "greeter.toml: the blurred wallpaper, cropped" \
   toml "$G/greeter.toml" "${A}['wallpaper'] == {'path': '/usr/share/backgrounds/lucciola/lucciola-login.png', 'fill_mode': 'crop', 'fill_color': '#121212'}"
 check "greeter.toml: the fingerprint still starts on an empty Enter" \
   toml "$G/greeter.toml" "d.get('auth', {}).get('allow_empty_password') is True"
+check "greeter.toml: the fingerprint listens without an Enter (start_on_select, patch 0002)" \
+  toml "$G/greeter.toml" "d.get('auth', {}).get('start_on_select') is True"
+# shellcheck disable=SC2016  # $1..$3 belong to the inner bash
+check "the spec applies patch 0002 and build-rpm.sh ships it" \
+  bash -c 'grep -Eq "^Patch1:[[:space:]]+0002-start-auth-on-select.patch$" "$1" && grep -q "0002-start-auth-on-select.patch" "$2" && test -s "$3"' _ \
+  "$ROOT/lucciola/greeter/noctalia-greeter.spec" "$ROOT/lucciola/greeter/build-rpm.sh" "$ROOT/lucciola/greeter/0002-start-auth-on-select.patch"
 
 check "sync.toml seed: only the session (the look is greeter.toml's)" \
   toml "$G/sync.toml" "d == {'session': {'last': 'Lucciola'}}"
