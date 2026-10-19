@@ -332,6 +332,11 @@ if a.get("scheme") != "Synced":
 wall = a.get("wallpaper", {}).get("path", "")
 if not os.path.isfile(wall) or os.path.getsize(wall) == 0:
     sys.exit(f"ERROR: the login wallpaper '{wall}' named in {sys.argv[4]} is missing")
+# [auth] start_on_select comes from Lucciola's patch 0002; a greeter without
+# it only warns about an unknown key and the reader waits for Enter again.
+auth = tomllib.load(open(sys.argv[4], "rb")).get("auth", {})
+if auth.get("start_on_select") and b"start_on_select" not in open("/usr/bin/noctalia-greeter", "rb").read():
+    sys.exit(f"ERROR: {sys.argv[4]} sets [auth] start_on_select but the installed greeter does not know it (patch 0002)")
 PY
 sessions="$(noctalia-greeter sessions)"
 grep -qx 'Lucciola' <<<"$sessions" && grep -qx 'GNOME' <<<"$sessions" \

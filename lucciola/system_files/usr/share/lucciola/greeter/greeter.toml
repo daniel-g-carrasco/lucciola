@@ -75,6 +75,16 @@ fill_color = "#121212"
 [auth]
 # PAM asks one thing at a time. With fingerprint login turned on
 # (authselect's with-fingerprint), pam_fprintd waits for a finger before the
-# password: an empty Enter starts that wait, then a touch logs in. With
-# fingerprint off, an empty Enter just fails like a wrong password.
+# password. start_on_select (Lucciola's patch 0002 to the greeter) starts
+# that wait without an Enter: when the login screen comes up, after a user
+# switch, after a failed attempt. A touch logs in. When the reader gives up
+# (pam_fprintd's timeout, 30 s by default, shorter than the greeter's 60 s
+# request_timeout), PAM asks for the password; an empty Enter there makes
+# the reader listen again. A password typed and submitted while the reader
+# still waits is kept and sent when PAM asks for it. Without a reader or an
+# enrolled finger, PAM asks for the password at once.
+start_on_select = true
+# An empty Enter starts PAM when no conversation is running (one that failed
+# with no input from the user waits for a submit instead of restarting).
+# With fingerprint off, an empty Enter just fails like a wrong password.
 allow_empty_password = true
