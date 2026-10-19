@@ -263,7 +263,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, f.read_bytes(), TYPES[f.suffix])
             if path == "/api/welcome":
                 return self._send(200, {"content": welcome_content.load(WELCOME), "actions": welcome_content.ACTIONS,
-                                        "conditions": welcome_content.CONDITIONS})
+                                        "conditions": welcome_content.CONDITIONS,
+                                        "apps": welcome_content.KNOWN_APPS,
+                                        "guide_sections": welcome_content.guide_sections(SITE)})
             if path == "/api/state":
                 return self._send(200, {"branch": branch(), "changed": changed_files()})
             if path == "/api/diff":

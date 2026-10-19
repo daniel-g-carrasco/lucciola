@@ -37,6 +37,10 @@ sends them to GitHub as a proposal you can look at before it goes live.
      the window. Sections and what is inside them have up, down, hide and
      delete; "Add" puts in a paragraph, a list, key rows or a button.
      A command goes between two `` ` `` marks, like `` `toolbox enter` ``.
+     Select words and press *Bold* or *Link* under a field: bold words go
+     between `**` marks, a link looks like `[the guide](guide)` and can open
+     the guide (from the top or at one of its sections), an app or a web
+     page. Enter breaks the line; an empty line starts a new paragraph.
    - **Save** (or Ctrl+S) checks everything first and writes nothing if
      something is wrong; it says what, in plain words.
    - **Show changes** lists what you saved and have not proposed yet.
@@ -58,8 +62,11 @@ put a colon or a comma instead.
 - The small desktop picture on the home page, the page title and the
   description for search engines are not editable here.
 - Link addresses keep their target; only their words change.
-- The welcome window's buttons can only open the guide or Lucciola System;
-  new kinds of buttons need a change in the program.
+- The welcome window's buttons and links can only open the guide, an
+  installed app or an https:// page; anything else needs a change in the
+  program.
+- Line breaks are for the welcome window only: on the website a new line
+  inside a paragraph is not kept.
 
 ## How it works
 
@@ -93,7 +100,8 @@ writes it back in one stable layout:
     ]},
     {"id": "updates", "title": "updates", "hidden": true, "blocks": [
       {"type": "items", "items": ["...", "..."]},
-      {"type": "button", "action": "open-system", "label": "Open Lucciola System", "style": "plain"}
+      {"type": "button", "action": "open-system", "label": "Open Lucciola System", "style": "plain"},
+      {"type": "button", "action": "open-app", "app": "io.github.kolunmi.Bazaar.desktop", "label": "Open Bazaar"}
     ]},
     {"id": "secure-boot", "title": "secure boot", "show_if": "mok-pending", "blocks": ["..."]}
   ],
@@ -103,6 +111,16 @@ writes it back in one stable layout:
 
 Sections show in file order; `hidden` leaves one out; `show_if:
 "mok-pending"` shows one only while the Secure Boot key waits for the blue
-screen. Button actions are `open-guide` and `open-system`; `style` is `cta`
-(beige) or `plain`. Run `python3 tools/content-editor/welcome_content.py`
-to check the file by hand.
+screen. Button actions are `open-guide`, `open-system` and `open-app`
+(with `app`, the app's desktop file; when it is not installed yet, as on
+the first start while the Flatpaks download, the window says so); `style`
+is `cta` (beige) or `plain`.
+
+The intro, paragraphs, list items, what keys do and the bottom text may
+hold `` `command` ``, `**bold**` and `[words](where)`, where `where` is
+`guide`, `guide#<id>` (an id of `site/index.html`, such as `g-kernel` or
+`h-what`), `app:<desktop file>` or an `https://` address; `\n` breaks the
+line and an empty line starts a paragraph (newlines at the ends do not
+count). Headings, button labels and the window title are one plain line.
+Run `python3 tools/content-editor/welcome_content.py` to check the file by
+hand.
