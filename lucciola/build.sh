@@ -304,7 +304,7 @@ install -m 0644 /usr/share/lucciola/greetd/config.toml /etc/greetd/config.toml
 rm -f /etc/greetd/config.toml.rpmnew /etc/greetd/config.toml.rpmsave
 python3 - /etc/greetd/config.toml /usr/share/wayland-sessions/lucciola.desktop /usr/share/lucciola/greeter/sync.toml \
   /usr/share/lucciola/greeter/greeter.toml <<'PY'
-import os, sys, tomllib
+import os, re, sys, tomllib
 conf = tomllib.load(open(sys.argv[1], "rb"))
 d = conf.get("default_session", {})
 if not d.get("command", "").endswith("/usr/bin/noctalia-greeter-session") or d.get("user") != "greetd":
@@ -330,8 +330,15 @@ for key in ("font_family", "corner_radius_scale", "theme_mode"):
 if a.get("scheme") != "Synced":
     sys.exit(f"ERROR: {sys.argv[4]} must pin scheme = \"Synced\" for its palette to show")
 wall = a.get("wallpaper", {}).get("path", "")
-if not os.path.isfile(wall) or os.path.getsize(wall) == 0:
+if wall.startswith("color:"):
+    if not re.fullmatch(r"color:#[0-9a-fA-F]{6}", wall):
+        sys.exit(f"ERROR: the login background '{wall}' in {sys.argv[4]} is not color:#RRGGBB")
+elif not os.path.isfile(wall) or os.path.getsize(wall) == 0:
     sys.exit(f"ERROR: the login wallpaper '{wall}' named in {sys.argv[4]} is missing")
+# With the logo off, the firefly the login screen shows is the account
+# picture lucciola-default-avatar.service hands out.
+if a.get("hide_logo") and not os.path.getsize("/usr/share/lucciola/avatar/lucciola.png"):
+    sys.exit("ERROR: the logo is hidden but the default account picture is empty")
 # [auth] start_on_select comes from Lucciola's patch 0002; a greeter without
 # it only warns about an unknown key and the reader waits for Enter again.
 auth = tomllib.load(open(sys.argv[4], "rb")).get("auth", {})
@@ -354,6 +361,9 @@ dm="$(readlink /etc/systemd/system/display-manager.service || true)"
 [[ "$dm" == */greetd.service ]] || { echo "ERROR: display-manager.service points to '${dm:-nothing}', not greetd" >&2; exit 1; }
 [[ -L /usr/lib/systemd/system/graphical.target.wants/lucciola-login-migrate.service ]] \
   || { echo "ERROR: lucciola-login-migrate.service is not enabled" >&2; exit 1; }
+[[ -L /usr/lib/systemd/system/graphical.target.wants/lucciola-default-avatar.service \
+   && -x /usr/libexec/lucciola/default-avatar && -s /usr/share/lucciola/avatar/lucciola.png ]] \
+  || { echo "ERROR: lucciola-default-avatar.service, its helper or the picture is missing" >&2; exit 1; }
 [[ -x /usr/libexec/lucciola/login-migrate && -x /usr/libexec/lucciola/autologin-session ]] \
   || { echo "ERROR: the login helpers in /usr/libexec/lucciola are missing or not executable" >&2; exit 1; }
 grep -qx 'OnFailure=gdm.service' /usr/lib/systemd/system/greetd.service.d/50-lucciola.conf \

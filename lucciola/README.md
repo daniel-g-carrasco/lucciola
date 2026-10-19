@@ -81,17 +81,20 @@ This layer adds:
   "Lucciola Welcome" in the launcher opens it any time;
 - the login screen: Noctalia Greeter on greetd, in place of GDM. Noctalia
   Greeter is built from its pinned tag (`NOCTALIA_GREETER_VERSION` and its
-  sha256 in the Containerfile, spec in `greeter/`) with three Lucciola
-  touches: the firefly as the logo at the bottom of the screen, a patch
-  that says a failed login in words ("Wrong password, try again" instead
-  of `pam_authenticate: AUTH_ERR`), and one that starts the login as soon
-  as a user is selected (`[auth] start_on_select`), so the fingerprint
-  reader listens without an Enter first; greetd comes from Fedora. `/etc/greetd/config.toml` (reference copy in
+  sha256 in the Containerfile, spec in `greeter/`) with Lucciola's
+  touches: the firefly in place of Noctalia's logo (hidden by Lucciola's
+  settings), a patch that says a failed login in words ("Wrong password,
+  try again" instead of `pam_authenticate: AUTH_ERR`), one that starts the
+  login as soon as a user is selected (`[auth] start_on_select`), so the
+  fingerprint reader listens without an Enter first, and one that draws
+  the text field's cursor in the palette's text colour; greetd comes from Fedora. `/etc/greetd/config.toml` (reference copy in
   `/usr/share/lucciola/greetd/`) runs the greeter as the `greetd` account;
   its settings and look are `/usr/share/lucciola/greeter/greeter.toml`
-  (linked into `/var/lib/noctalia-greeter/`, so updates bring them: dark,
-  the `Margine.json` palette with the card in the sky's blues, JetBrains
-  Mono, Lucciola's wallpaper blurred), and `sync.toml` only preselects
+  (linked into `/var/lib/noctalia-greeter/`, so updates bring them: the
+  website's `#121212` with every box in the same colour, only text in
+  JetBrains Mono showing, and the firefly as the account picture, which
+  `lucciola-default-avatar.service` gives every account without one), and
+  `sync.toml` only preselects
   Lucciola (copied once; Noctalia's "Sync with Noctalia" adds the screen
   layout). greetd uses Fedora's PAM file with pam_oo7 added to the
   password stack and the Wayland session type set for autologin

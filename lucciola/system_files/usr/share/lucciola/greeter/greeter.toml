@@ -16,7 +16,8 @@
 #   ([appearance.wallpapers.<connector>]) wins over it on that monitor
 #   (mergeWallpaperAppearance). Sync writes one for every monitor once a
 #   wallpaper has been picked in Noctalia: after Sync Now, that wallpaper
-#   shows, and the colours stay these.
+#   shows, the colours stay these, and the card then shows as a #121212
+#   panel on it.
 # - scheme here wins over the palette picked on the login screen.
 # So with all of them here, Sync no longer changes the login screen's
 # colours and font (it still brings the monitor layout and scales).
@@ -35,40 +36,40 @@ scheme_selector_position = "hidden"
 theme_mode = "dark"
 font_family = "JetBrains Mono"
 corner_radius_scale = 1.0
-# The logo at the bottom of the screen is Lucciola's firefly: the RPM puts
-# lucciola-mark.svg in place of Noctalia's logo (noctalia-greeter.spec,
-# Source1), since the greeter has no setting for its own logo. It is drawn
-# about 64 px high, tinted with the palette's on_surface.
-hide_logo = false
+# The firefly is the account picture (lucciola-default-avatar.service gives
+# it to every account without one), so the logo at the bottom is off.
+hide_logo = true
 
-# The Margine palette of the desktop (palettes/Margine.json, keys renamed
-# the greeter's way) with the card and the fields in the blues of the
-# wallpaper's sky: surface (the fields), surface_variant (the card),
-# on_surface_variant, outline (the card's edge) and hover. Beige primary,
-# text and logo stay the desktop's.
+# The website's look: everything on its #121212, only text showing. The
+# card (surface_variant), the fields (surface) and their edges (outline)
+# take the background's colour, and so does primary: the focused field's
+# border, the login button and the ring around the account picture, which
+# leaves the button's arrow (on_primary). Text in the site's ivory, the
+# placeholder and messages dimmer (on_surface_variant). The field's caret
+# takes the text colour (Lucciola's patch 0003). hover only shows under the
+# pointer; secondary (restart) and error (shut down, failed login) colour
+# the power buttons under the pointer and the error line.
 [appearance.palette]
-primary = "#e6d5bf"
-on_primary = "#121212"
+primary = "#121212"
+on_primary = "#e6d5bf"
 secondary = "#c2a180"
 on_secondary = "#121212"
 tertiary = "#cba6f7"
 on_tertiary = "#121212"
 error = "#ff938c"
 on_error = "#121212"
-surface = "#0e1020"
-on_surface = "#ece6df"
-surface_variant = "#171a2e"
-on_surface_variant = "#aaa6bb"
-outline = "#2e3150"
-shadow = "#000000"
-hover = "#262a45"
-on_hover = "#ffffff"
+surface = "#121212"
+on_surface = "#e6d5bf"
+surface_variant = "#121212"
+on_surface_variant = "#8c8579"
+outline = "#121212"
+shadow = "#121212"
+hover = "#1e1e1e"
+on_hover = "#e6d5bf"
 
-# Lucciola's wallpaper blurred and a little darker (make-wallpaper.py, the
-# login version): the card and the logo stand out, and the logo no longer
-# looks like one more firefly. One 16:10 file, cropped to each screen.
+# A plain background in the same colour, no picture.
 [appearance.wallpaper]
-path = "/usr/share/backgrounds/lucciola/lucciola-login.png"
+path = "color:#121212"
 fill_mode = "crop"
 fill_color = "#121212"
 

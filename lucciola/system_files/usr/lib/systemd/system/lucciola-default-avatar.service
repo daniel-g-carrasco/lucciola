@@ -1,0 +1,15 @@
+[Unit]
+Description=Lucciola: the firefly as the picture of accounts without one
+Documentation=file:///usr/libexec/lucciola/default-avatar
+# Before AccountsService reads the accounts' files, and so before the login
+# screen asks it for the pictures. Ordering only: a failure here never holds
+# the login screen back (graphical.target only Wants= this).
+After=local-fs.target systemd-sysusers.service nss-user-lookup.target systemd-tmpfiles-setup.service
+Before=accounts-daemon.service display-manager.service greetd.service gdm.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/lucciola/default-avatar
+
+[Install]
+WantedBy=graphical.target

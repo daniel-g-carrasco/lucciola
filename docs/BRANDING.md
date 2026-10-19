@@ -64,7 +64,7 @@ These five cut across almost every touchpoint below:
 | Boot splash (Plymouth) | `lucciola/assets/plymouth/`, `build_files/50-branding/install.sh` + `…/kargs.d/10-margine-plymouth.toml` | `plymouth-set-default-theme`, `DeviceScale`, `rhgb` |
 | GRUB menu text (Margine's ISO) + HiDPI font | `live-env/src/iso.yaml` + `…/grub2-static/configs.d/05_margine-gfxmode.cfg` | `Install Margine`, `grub2-mkfont`, `margine.pf2` |
 | GDM background / logo (Lucciola's fallback login screen) | `build_files/50-branding/install.sh` | `gdm.d/01-margine-background`, `login-screen` |
-| **Lucciola** login screen (Noctalia Greeter on greetd): look, logo, preselected session, failed-login text | `lucciola/system_files/usr/share/lucciola/greeter/{sync,greeter}.toml`, `lucciola/greeter/` (spec, patch), `lucciola/build.sh` (step 5) | `hide_logo`, `Source1`, `authErrorText`, `[appearance.palette]`, `last = "Lucciola"` |
+| **Lucciola** login screen (Noctalia Greeter on greetd): look, account picture, logo, preselected session, failed-login text | `lucciola/system_files/usr/share/lucciola/greeter/{sync,greeter}.toml`, `lucciola/greeter/` (spec, patches), `lucciola/build.sh` (step 5), `lucciola-default-avatar.service` | `hide_logo`, `Source1`, `authErrorText`, `[appearance.palette]`, `last = "Lucciola"`, `Icon=` |
 | Desktop wallpaper (GNOME, GDM, Noctalia, the greeter) / accent colour (GTK; GNOME itself stock) | `build_files/50-branding/install.sh`, `lucciola/system_files/usr/share/lucciola/noctalia/15-wallpaper.toml`, `build_files/30-gnome-defaults/install.sh` | `picture-uri`, `wallpaper.default`, `accent-color` |
 | Live ISO "Welcome to Margine" (Margine's ISO) | `live-env/src/build.sh` | `Welcome to Fedora` (the sed targets) |
 | Anaconda installer **window icon** (Margine's ISO) | `live-env/src/build.sh` | `AnacondaInstaller`, `_wmid in`, `StartupWMClass` |
@@ -307,19 +307,38 @@ starts when the greeter cannot come up, and keeps the dconf branding above).
 
 - **Look** (`lucciola/system_files/usr/share/lucciola/greeter/greeter.toml`,
   linked as `/var/lib/noctalia-greeter/greeter.toml`, so updates reach
-  installed systems): `scheme = "Synced"` pinned, the palette selector
-  hidden, dark, JetBrains Mono, corners 1.0, the Margine palette
-  (`palettes/Margine.json` with the keys renamed: `mPrimary` becomes
-  `primary`, and so on) with five roles in the blues of the wallpaper's sky
-  (`surface #0e1020` the fields, `surface_variant #171a2e` the card,
-  `on_surface_variant #aaa6bb`, `outline #2e3150`, `hover #262a45`), and the
-  login wallpaper `/usr/share/backgrounds/lucciola/lucciola-login.png`
-  (`fill_mode = "crop"`, section 5).
+  installed systems): the website's, only text showing. `scheme = "Synced"`
+  pinned, the palette selector hidden, dark, JetBrains Mono, corners 1.0,
+  background `color:#121212`, and a palette that blends every box into it:
+  `surface` (the fields), `surface_variant` (the card), `outline` (their
+  edges), `primary` (the focused field's border, the login button, the ring
+  of the account picture) and `shadow` all `#121212`; `on_surface` and
+  `on_primary` (text, the login button's arrow) the site's ivory `#e6d5bf`;
+  `on_surface_variant #8c8579` (placeholder, messages), `hover #1e1e1e`,
+  `error #ff938c`. What still shows: the account picture, the name, the
+  placeholder, the session menu (icon, name, chevron), the power buttons as
+  bare icons in the text colour at 78% (the greeter has no separate colour
+  for them; `power_buttons_position = "hidden"` is the only way to drop
+  them).
+- **Account picture**: the firefly, `/usr/share/lucciola/avatar/lucciola.png`
+  (`lucciola/assets/icons/lucciola-mark-256.png`, installed by
+  `50-branding/install.sh`; the greeter draws it 64 px, 128 at scale 2).
+  The greeter takes pictures only from AccountsService (`IconFile` of the
+  account; not `~/.face`, which the `greetd` account cannot read in a
+  private home). `lucciola-default-avatar.service` (helper
+  `/usr/libexec/lucciola/default-avatar`, at each boot, before
+  `accounts-daemon.service`) gives it to every account with UID 1000 to
+  59999 and a login shell whose `/var/lib/AccountsService/users/<name>`
+  has no `Icon=` line: it copies the picture to `icons/<name>` (0644,
+  `accountsd_var_lib_t` through `restorecon`) and writes the line. An
+  `Icon=` line, a chosen picture or an empty one (picture removed), is never
+  touched. Test: `tests/default-avatar.test.sh`.
 - **Starting session** (`.../greeter/sync.toml`, copied once to
   `/var/lib/noctalia-greeter/sync.toml` by tmpfiles): `[session] last =
   "Lucciola"`, nothing else.
 - **Logo** (`.../greeter/greeter.toml`, linked as
-  `/var/lib/noctalia-greeter/greeter.toml`): `hide_logo = false`. The greeter
+  `/var/lib/noctalia-greeter/greeter.toml`): `hide_logo = true`, since the
+  firefly is the account picture. With it on, the greeter
   has no setting for its logo: it draws `assets/noctalia.svg` 64 px high at the
   bottom centre, **tinted** with the palette's `on_surface` (multiplied).
   `noctalia-greeter.spec` installs `lucciola-mark.svg` in its place
@@ -332,6 +351,12 @@ starts when the greeter cannot come up, and keeps the dconf branding above).
   password, login not allowed, auth service not answering); anything else and
   the log stay raw. Upstream candidate. When the pinned tag moves, check the
   patch still applies (`%autosetup -p1` fails the build otherwise).
+- **Caret**: `lucciola/greeter/0003-caret-in-palette-colour.patch` (the
+  text field in `src/ui/controls/input.cpp`). The greeter set the caret's
+  colour once, before the synced palette applies, so it stayed Noctalia's
+  yellow `#fff59b`; the patch sets it with the field's other colours, in
+  `on_surface` (with `primary` equal to the background an accent caret
+  would vanish). Upstream candidate.
 - **Fingerprint first**: `lucciola/greeter/0002-start-auth-on-select.patch`
   adds `[auth] start_on_select` (on in `greeter.toml`): the greeter opens
   greetd's conversation when a user is selected, so pam_fprintd's prompt
@@ -381,12 +406,7 @@ the default everywhere but the login screen:
 - Noctalia: `lucciola/system_files/usr/share/lucciola/noctalia/15-wallpaper.toml`
   (`[wallpaper.default] path`; a wallpaper picked in Noctalia goes to its
   `settings.toml`, which wins);
-- the greeter: `lucciola-login.png`, the same scene blurred (Gaussian, 35
-  units of the 3840x2400 master, 28 px on the 2880x1920 reference) and at
-  85% brightness, written by `make-wallpaper.py` as `lucciola-login.svg`
-  and rendered by `render.sh` at 1920x1200: blurred, a bigger file shows
-  nothing more, and the greeter crops it to any screen (`greeter.toml`,
-  section 4b).
+- not the greeter: a plain `#121212` (section 4b).
 
 Compat links `/usr/share/backgrounds/margine/{margine,autumn-leaves}.png` →
 `../lucciola/lucciola.png` keep every old path (user dconf, installed

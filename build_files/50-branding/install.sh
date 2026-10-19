@@ -40,6 +40,10 @@ for n in 16 24 32 48 64 128 256 512; do
 done
 need "$A/icons/lucciola-mark-256.png"
 install -Dm0644 "$A/icons/lucciola-mark-256.png" /usr/share/icons/hicolor/256x256/apps/lucciola-mark.png
+# The firefly as the default account picture: lucciola-default-avatar.service
+# copies it into AccountsService for every account without a picture, and
+# the login screen shows it (64 px, 128 at scale 2; 256 leaves room).
+install -Dm0644 "$A/icons/lucciola-mark-256.png" /usr/share/lucciola/avatar/lucciola.png
 install -Dm0644 "$A/icons/lucciola-logo-256.png" /usr/share/pixmaps/lucciola-logo.png
 # margine-logo: the old name, now carrying the Lucciola tile. The live
 # ISO's installer icon (live-env/src/build.sh), a notification sent by an
@@ -53,16 +57,13 @@ log "Installed lucciola-logo (tile) and lucciola-mark: hicolor scalable + raster
 #     (lucciola/assets/wallpaper/make-wallpaper.py). lucciola.png is the 16:9
 #     render and the default everywhere (GNOME and its lock screen, GDM,
 #     Noctalia through 15-wallpaper.toml); the 3:2 and 16:10 renders sit
-#     next to it for screens of those shapes. lucciola-login.png is the same
-#     scene blurred and darker, the login screen's (the greeter's
-#     greeter.toml names it), one 16:10 file the greeter crops to any screen.
+#     next to it for screens of those shapes. The login screen has no
+#     picture (the greeter's greeter.toml: a plain #121212).
 install -d -m0755 /usr/share/backgrounds/lucciola
 for size in 3840x2160 2880x1920 2560x1600; do
   need "$A/wallpaper/lucciola-$size.png"
   install -m0644 "$A/wallpaper/lucciola-$size.png" "/usr/share/backgrounds/lucciola/lucciola-$size.png"
 done
-need "$A/wallpaper/lucciola-login.png"
-install -m0644 "$A/wallpaper/lucciola-login.png" /usr/share/backgrounds/lucciola/lucciola-login.png
 ln -sf lucciola-3840x2160.png /usr/share/backgrounds/lucciola/lucciola.png
 # Margine's paths stay, as links to the new wallpaper: the login screen's
 # sync.toml on installed systems (copied once, never rewritten) and anyone
