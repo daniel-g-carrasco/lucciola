@@ -1,7 +1,7 @@
 {
-  "about": "Texts of the Welcome to Lucciola window (/usr/libexec/margine/welcome), drawn in this order. Edit them with `just edit` (tools/content-editor). Commands go between ` marks.",
+  "about": "Texts of the Welcome to Lucciola window (/usr/libexec/margine/welcome), drawn in this order. Edit them with `just edit` (tools/content-editor). Commands go between ` marks, bold words between ** marks, and a link looks like [the guide](guide). A new line breaks the line, an empty line starts a paragraph.",
   "window_title": "Welcome to Lucciola",
-  "intro": "Welcome to Lucciola, a distro born out of a love for simplicity and calm.\n\nIf you're here, you may already know the benefits of an atomic distribution, a performance-tuned CachyOS kernel, and the beautiful, production-ready combination of Niri and Noctalia. If not, read more here.\n\nLet's start by learning the keyboard shortcuts that make managing your windows easier. If any of them don't suit you, you can always change them later.",
+  "intro": "Welcome to Lucciola, a distro born out of a love for simplicity and calm.\n\nIf you're here, you may already know the benefits of an atomic distribution, a performance-tuned CachyOS kernel, and the beautiful, production-ready combination of niri and Noctalia. If not, [read more here](guide#h-what).\n\nLet's start by learning the keyboard shortcuts that make managing your windows easier. If any of them don't suit you, you can always change them later.",
   "sections": [
     {
       "id": "keys",
@@ -9,7 +9,7 @@
       "blocks": [
         {
           "type": "text",
-          "text": "In Lucciola, the Niri window manager arranges windows side by side in columns, along a horizontal strip that extends beyond the edges of the screen. "
+          "text": "In Lucciola, the niri window manager arranges windows side by side in columns, along a horizontal strip that extends beyond the edges of the screen."
         },
         {"type": "text", "text": "Use the keyboard shortcuts below to navigate and manage your windows."},
         {"type": "text", "text": "On most keyboards, “Super” is the key with the Windows logo.", "dim": true},
@@ -39,7 +39,7 @@
       "blocks": [
         {
           "type": "text",
-          "text": "Lucciola updates itself in the background without you can even notice. You have only to restart once the update is staged."
+          "text": "Lucciola updates itself in the background, without you even noticing. All you have to do is restart once the update is ready."
         },
         {
           "type": "items",
@@ -52,11 +52,6 @@
         {
           "type": "text",
           "text": "In the dock (the bar at the bottom of the screen), you'll find Lucciola System, marked with a firefly icon. It shows your current system version and whether an update is available.\n\nFrom there, you can update whenever you like, without waiting for the next scheduled update. You can also run system checks or roll back to the previous version.\n\nLucciola System will never restart your computer automatically."
-        },
-        {
-          "type": "text",
-          "text": "If you're a developer, you can install the development layer by running `ujust lucciola-devmode`. It includes tools such as VS Code (installed natively) and Homebrew.\n\nOnce Homebrew is installed, Lucciola updates its packages once a week, and Lucciola System shows any pending updates.",
-          "dim": true
         },
         {"type": "button", "action": "open-system", "label": "Open Lucciola System", "style": "plain"}
       ]
@@ -74,7 +69,42 @@
           "text": "On first boot, Lucciola downloads its default apps in the background, so some may take a few minutes to appear. GIMP, Inkscape, darktable, and OBS Studio are the largest downloads and take the longest to become available.",
           "dim": true
         },
-        {"type": "button", "action": "open-guide", "label": " Open Bazaar", "style": "plain"}
+        {
+          "type": "button",
+          "action": "open-app",
+          "app": "io.github.kolunmi.Bazaar.desktop",
+          "label": "Open Bazaar",
+          "style": "plain"
+        }
+      ]
+    },
+    {
+      "id": "extras",
+      "title": "extras",
+      "blocks": [
+        {
+          "type": "text",
+          "text": "Lucciola keeps the system lean, but you can add more whenever you need it. Each of these extras is a single command in the terminal."
+        },
+        {
+          "type": "items",
+          "items": [
+            "**Gaming**: `ujust lucciola-gaming` installs Steam, Lutris, Heroic, Bottles and RetroArch as Flatpaks, plus helpers such as MangoHud and gamescope. If you play every day, or your games need anti-cheat or VR, run `ujust lucciola-gaming-native` instead: it installs Steam, Lutris and RetroArch directly into the system. To remove either one, run the same command with `-remove` at the end.",
+            "**Development**: you can install the development layer by running `ujust lucciola-devmode`. It includes tools such as VS Code (installed natively), a C and C++ compiler, and Homebrew.\n\nOnce Homebrew is installed, Lucciola updates its packages once a week, and Lucciola System shows any pending updates.",
+            "**Virtual machines**: `ujust lucciola-vm` installs virt-manager with QEMU/KVM, UEFI firmware and a software TPM, everything you need to run Windows or another Linux in a window.",
+            "**Docker**: Podman already answers to the `docker` command. If a tool needs Docker's own engine, `ujust lucciola-docker` installs Docker CE in its place.",
+            "**Fedora's kernel**: Lucciola runs the CachyOS kernel. If a kernel update misbehaves on your PC, `ujust lucciola-kernel fedora` switches to the same Lucciola with Fedora's own kernel, from the next restart. `ujust lucciola-kernel cachyos` brings the CachyOS kernel back."
+          ]
+        },
+        {
+          "type": "text",
+          "text": "For development, virtual machines and Docker, add `status` to the command to see what is in place, or `remove` to take it away."
+        },
+        {
+          "type": "text",
+          "text": "These extras install packages into the system itself, so restart once the command is done. After that, system updates take a little longer, because Lucciola adds your extras to every new version.",
+          "dim": true
+        }
       ]
     },
     {
@@ -97,7 +127,7 @@
         },
         {
           "type": "text",
-          "text": "\nThis screen uses a US keyboard layout. Nothing appears while you type the password: this is normal.\n\n"
+          "text": "This screen uses a US keyboard layout. Nothing appears while you type the password: this is normal."
         },
         {
           "type": "text",
@@ -111,14 +141,9 @@
       "blocks": [
         {
           "type": "text",
-          "text": "The Lucciola Guide, in the dock, covers the rest: updates, going back to a previous version, disk unlock and where to ask for help. A copy ships with the system, so it opens without a network."
+          "text": "You'll find the Lucciola Guide (look for the book icon) in the dock. It covers updates, rolling back to a previous version, unlocking your disk, and where to get help. A local copy is included with the system, so you can read it even when you're offline."
         },
-        {"type": "button", "action": "open-guide", "label": "Open the guide", "style": "cta"},
-        {
-          "type": "text",
-          "text": "You'll find the Lucciola Guide (look for the book icon) in the dock. It covers updates, rolling back to a previous version, unlocking your disk, and where to get help. A local copy is included with the system, so you can read it even when you're offline.",
-          "dim": true
-        }
+        {"type": "button", "action": "open-guide", "label": "Open the guide", "style": "cta"}
       ]
     }
   ],
