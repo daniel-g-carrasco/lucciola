@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# The heavy half of flatpak-preinstall.service's heal chain, run only when
+# it can help.
+#
+# `restorecon -RF /var/lib/flatpak` and `flatpak repair --system` walk every
+# file and object of the installation. They are there for real incidents of
+# fresh installs (2026-06 forum 12247: a bake that left the repo mislabeled
+# or partial, so confined Flatpak was denied opendir(repo/objects) or
+# opendir(refs/remotes)), and they used to run at EVERY boot: on a laptop
+# with 351 refs, 34 s of relabelling plus 53 s of repair, a 15-17 GB memory
+# peak in page cache, holding multi-user.target for 89 s (2026-10-19).
+#
+# A healthy installation that passed its last preinstall needs neither. So:
+#
+#   (no argument, ExecStartPre)  repair when
+#     - the last run did not pass: a first boot, a failed or interrupted
+#       run (the marker is consumed here and written back only by
+#       --passed, so a run that dies leaves it missing), or an install
+#       that predates this marker;
+#     - or a cheap check finds the repo broken: one of its base
+#       directories missing, or a wrong SELinux type on the top paths.
+#     At most once per boot: the unit restarts every two minutes while
+#     preinstall fails (offline, Flathub down), and a repair per retry
+#     would only burn the disk.
+#   --passed  (ExecStartPost, after a preinstall that worked): write the
+#             marker.
+#
+# FLATPAK_REPAIR_DIR, STATE_DIRECTORY and FLATPAK_REPAIR_BOOT_MARK replace
+# /var/lib/flatpak, /var/lib/margine/flatpak-preinstall and the per-boot
+# mark in /run for tests/flatpak-repo-repair.test.sh.
+set -uo pipefail
+FP="${FLATPAK_REPAIR_DIR:-/var/lib/flatpak}"
+STATE="${STATE_DIRECTORY:-/var/lib/margine/flatpak-preinstall}"
+PASSED="$STATE/passed"
+BOOT_MARK="${FLATPAK_REPAIR_BOOT_MARK:-/run/margine-flatpak-repair-ran}"
+say() { echo "flatpak-repo-repair: $*"; }
+
+if [ "${1:-}" = "--passed" ]; then
+  mkdir -p "$STATE" && date -Is > "$PASSED"
+  exit 0
+fi
+
+broken=""
+if [ -d "$FP/repo" ]; then
+  for d in objects refs/heads refs/remotes tmp; do
+    [ -d "$FP/repo/$d" ] || broken="repo/$d missing"
+  done
+fi
+if [ -z "$broken" ] && command -v restorecon >/dev/null 2>&1; then
+  paths=()
+  for p in "$FP" "$FP/repo" "$FP/repo/objects" "$FP/repo/refs/remotes"; do
+    [ -e "$p" ] && paths+=("$p")
+  done
+  if (( ${#paths[@]} )) && [ -n "$(restorecon -n -v "${paths[@]}" 2>/dev/null)" ]; then
+    broken="SELinux labels differ from the policy"
+  fi
+fi
+
+if [ -n "$broken" ]; then
+  reason="$broken"
+elif [ -e "$PASSED" ]; then
+  rm -f "$PASSED"
+  say "the last preinstall passed and the repo looks sound: no repair"
+  exit 0
+else
+  reason="the last preinstall did not pass (or this is the first one)"
+fi
+
+if [ -e "$BOOT_MARK" ]; then
+  say "$reason, but a repair already ran in this boot: not again"
+  exit 0
+fi
+: > "$BOOT_MARK" 2>/dev/null || true
+say "$reason: relabelling and repairing $FP"
+restorecon -RF "$FP" || say "restorecon exited $?"
+flatpak repair --system || say "flatpak repair exited $?"
+exit 0

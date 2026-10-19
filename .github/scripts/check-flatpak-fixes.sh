@@ -58,6 +58,16 @@ if grep -q 'StartLimitIntervalSec=0' "$DROPIN" 2>/dev/null; then
   ok "flatpak-preinstall self-heal drop-in present (no 3-strike lockout)"
 else bad "flatpak-preinstall.service.d/10-margine.conf missing or lacks StartLimitIntervalSec=0"; fi
 
+# 4b) The relabel and repair run only when due (2026-10-20), but they must
+#     still be reachable: the drop-in calls the gate before the pull and
+#     marks a passed run after it, and the gate still relabels and repairs.
+REPAIR=build_files/system_files/usr/libexec/margine/flatpak-repo-repair
+if grep -qx 'ExecStartPre=-/usr/libexec/margine/flatpak-repo-repair' "$DROPIN" \
+   && grep -qx 'ExecStartPost=-/usr/libexec/margine/flatpak-repo-repair --passed' "$DROPIN" \
+   && grep -q '^restorecon -RF "\$FP"' "$REPAIR" && grep -q '^flatpak repair --system' "$REPAIR"; then
+  ok "preinstall drop-in still relabels and repairs when due (flatpak-repo-repair)"
+else bad "flatpak-repo-repair is no longer wired into the preinstall drop-in, or no longer runs restorecon -RF and flatpak repair"; fi
+
 echo "== Phantom-UART console fix invariants =="
 # 5) The shipped default ISO entries must NOT bake console=ttyS0.
 if grep -nE '^\s+linux:.*console=ttyS0' "$ISO" >/dev/null; then

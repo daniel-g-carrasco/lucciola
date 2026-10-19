@@ -166,6 +166,12 @@ jobs:
         # pins) and that it warns about TPM unlock first, is tested.
         run: bash tests/kernel-switch.test.sh
 
+      - name: Flatpak repair gate (flatpak-preinstall.service)
+        # Relabel and repair run on a first boot, after a failed run or on a
+        # broken repo, once per boot at most, and never on a settled boot.
+        # See tests/flatpak-repo-repair.test.sh.
+        run: bash tests/flatpak-repo-repair.test.sh
+
       - name: Shipped public key is the signing key
         # Devices verify against the copy in system_files; CI signs with the
         # private half of secrets/cosign.pub. If they ever differ, every

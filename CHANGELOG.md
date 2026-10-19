@@ -7,6 +7,26 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-20, boot)
+- **Every boot spent a minute and a half repairing Flatpak.**
+  `flatpak-preinstall.service` relabelled all of `/var/lib/flatpak`
+  (`restorecon -RF`) and ran `flatpak repair --system` before every
+  preinstall, with no time limit, and `multi-user.target` waited for it: on
+  a laptop with 351 refs, 34 s plus 53 s, a 15-17 GB memory peak (page
+  cache) and the target reached after 1 min 41 s. Both steps exist for
+  fresh installs whose bake went wrong (2026-06), and now run only then:
+  when the last preinstall did not pass (a first boot, a failed or
+  interrupted run) or a quick look at the repository finds it broken (a
+  base directory missing, a wrong SELinux type on the top paths), at most
+  once per boot (`/usr/libexec/margine/flatpak-repo-repair`). A settled
+  boot does the cheap steps and the preinstall itself, about 1.5 s. The
+  unit no longer holds `multi-user.target` or `graphical.target`, stops
+  after an hour (the restart two minutes later resumes the download), and
+  runs at the priority of the Flatpak updates (`Nice=10`, idle I/O) with
+  `MemoryHigh=2G`, so the page cache it fills is reclaimed from it first.
+  The first boot after this update repairs once more, since no run has
+  been marked as passed yet.
+
 ### Fixed (2026-10-20, apps)
 - **Apps that left the default set were uninstalled.** `flatpak preinstall`
   does not only install: it keeps a record of the apps it preinstalled (in
