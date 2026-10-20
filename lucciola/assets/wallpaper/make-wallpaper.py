@@ -13,14 +13,7 @@ the fireflies keep their place and only sky or the far sides are cropped.
 render.sh rewrites width/height for each PNG. Everything is computed here,
 nothing is random at render time: the same script writes the same file.
 
-The login screen's version (LOGIN.svg, optional) is the same scene blurred
-and a little darker, so the greeter's card and the logo stand out: a
-Gaussian blur of 35 units of this canvas (28 px on the 2880x1920 reference
-screen, the same share of any other size) and 85% brightness, in sRGB like
-an image editor. Sky, glow and hills reach 160 units past every edge there,
-so the blur meets more of the scene at the borders instead of transparency.
-
-Usage: make-wallpaper.py OUT.svg [LOGIN.svg]
+Usage: make-wallpaper.py OUT.svg
 """
 
 import math
@@ -49,23 +42,17 @@ FIREFLY_HALO = "#f0c88c"
 STAR = "#ece6df"
 
 
-# The login version (see the docstring).
-LOGIN_BLUR = 35
-LOGIN_BRIGHTNESS = 0.85
-LOGIN_MARGIN = 160
-
-
-def ridge(points, bottom=H + 4, pad=40):
+def ridge(points, bottom=H + 4):
     """A closed path along (x, y) points: a Catmull-Rom curve as cubics."""
     pts = [(points[0][0] - 400, points[0][1])] + points + [(points[-1][0] + 400, points[-1][1])]
-    d = [f"M {-pad} {bottom}", f"L {-pad} {points[0][1]:.1f}", f"L {points[0][0]:.1f} {points[0][1]:.1f}"]
+    d = [f"M -40 {bottom}", f"L -40 {points[0][1]:.1f}", f"L {points[0][0]:.1f} {points[0][1]:.1f}"]
     for i in range(1, len(pts) - 2):
         (x0, y0), (x1, y1), (x2, y2), (x3, y3) = pts[i - 1], pts[i], pts[i + 1], pts[i + 2]
         c1 = (x1 + (x2 - x0) / 6, y1 + (y2 - y0) / 6)
         c2 = (x2 - (x3 - x1) / 6, y2 - (y3 - y1) / 6)
         d.append(f"C {c1[0]:.1f} {c1[1]:.1f} {c2[0]:.1f} {c2[1]:.1f} {x2:.1f} {y2:.1f}")
-    d.append(f"L {W + pad} {points[-1][1]:.1f}")
-    d.append(f"L {W + pad} {bottom} Z")
+    d.append(f"L {W + 40} {points[-1][1]:.1f}")
+    d.append(f"L {W + 40} {bottom} Z")
     return " ".join(d)
 
 
@@ -86,20 +73,19 @@ def firefly(x, y, r, strength, soft=False):
     return out
 
 
-def scene(login=False):
-    """The wallpaper's SVG text; login=True for the login screen's version."""
+def main():
+    if len(sys.argv) != 2:
+        sys.exit(__doc__)
     rnd = random.Random(20261018)
-    m = LOGIN_MARGIN if login else 0
-    edge = {"bottom": H + m + 4, "pad": m + 40}
 
     # Three ranges, none parallel to the next: a broad distant mound on the
     # right, a closer hill rising on the left, a foreground slope.
     far = ridge([(0, 1700), (420, 1668), (980, 1702), (1560, 1680), (2120, 1636), (2560, 1594),
-                 (2960, 1580), (3360, 1618), (3840, 1664)], **edge)
+                 (2960, 1580), (3360, 1618), (3840, 1664)])
     mid = ridge([(0, 1744), (460, 1716), (1040, 1772), (1660, 1846), (2280, 1840), (2840, 1806),
-                 (3340, 1838), (3840, 1890)], **edge)
+                 (3340, 1838), (3840, 1890)])
     near = ridge([(0, 2050), (640, 2008), (1360, 2056), (2160, 2124), (2960, 2082), (3480, 2016),
-                  (3840, 1992)], **edge)
+                  (3840, 1992)])
 
     # Faint stars, only in the upper sky and away from the centre column.
     stars = []
@@ -133,7 +119,7 @@ def scene(login=False):
         '<?xml version="1.0" encoding="UTF-8"?>',
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" '
         'preserveAspectRatio="xMidYMax slice">',
-        "<title>Lucciola: dusk, blurred for the login screen</title>" if login else "<title>Lucciola: dusk</title>",
+        "<title>Lucciola: dusk</title>",
         "<defs>",
         f'<linearGradient id="sky" x1="0" y1="0" x2="0" y2="{H}" gradientUnits="userSpaceOnUse">{sky_stops}</linearGradient>',
         # The horizon's warmth: an ellipse low and a little right of centre,
@@ -158,30 +144,14 @@ def scene(login=False):
         f'<stop offset="1" stop-color="{FIREFLY_HALO}" stop-opacity="0"/>'
         "</radialGradient>",
         '<filter id="soft" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="5"/></filter>',
+        "</defs>",
+        f'<rect width="{W}" height="{H}" fill="url(#sky)"/>',
+        f'<rect width="{W}" height="{H}" fill="url(#glow)"/>',
     ]
-    if login:
-        f = LOGIN_BRIGHTNESS
-        parts += [
-            f'<filter id="login" filterUnits="userSpaceOnUse" x="{-m}" y="{-m}" width="{W + 2 * m}" '
-            f'height="{H + 2 * m}" color-interpolation-filters="sRGB">'
-            f'<feGaussianBlur stdDeviation="{LOGIN_BLUR}"/>'
-            f'<feComponentTransfer><feFuncR type="linear" slope="{f}"/><feFuncG type="linear" slope="{f}"/>'
-            f'<feFuncB type="linear" slope="{f}"/></feComponentTransfer>'
-            "</filter>",
-        ]
-    parts.append("</defs>")
-    if login:
-        parts.append('<g filter="url(#login)">')
-    size = f'x="{-m}" y="{-m}" width="{W + 2 * m}" height="{H + 2 * m}"' if login else f'width="{W}" height="{H}"'
-    parts.append(f'<rect {size} fill="url(#sky)"/>')
-    parts.append(f'<rect {size} fill="url(#glow)"/>')
     for x, y, r in stars:
         parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.2f}" fill="{STAR}" opacity="{rnd.uniform(0.18, 0.42):.2f}"/>')
     parts.append(f'<path d="{far}" fill="{HILL_FAR}"/>')
-    if login:
-        parts.append(f'<rect x="{-m}" y="1560" width="{W + 2 * m}" height="340" fill="url(#haze)"/>')
-    else:
-        parts.append(f'<rect y="1560" width="{W}" height="340" fill="url(#haze)"/>')
+    parts.append(f'<rect y="1560" width="{W}" height="340" fill="url(#haze)"/>')
     parts.append(f'<path d="{mid}" fill="{HILL_MID}"/>')
     for x, y, r, s, soft in flies:
         if y < 1950:
@@ -190,19 +160,9 @@ def scene(login=False):
     for x, y, r, s, soft in flies:
         if y >= 1950:
             parts.extend(firefly(x, y, r, s, soft))
-    if login:
-        parts.append("</g>")
     parts.append("</svg>")
-    return "\n".join(parts) + "\n"
-
-
-def main():
-    if len(sys.argv) not in (2, 3):
-        sys.exit(__doc__)
-    outputs = [(sys.argv[1], False)] + ([(sys.argv[2], True)] if len(sys.argv) == 3 else [])
-    for path, login in outputs:
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(scene(login))
+    with open(sys.argv[1], "w", encoding="utf-8") as f:
+        f.write("\n".join(parts) + "\n")
 
 
 if __name__ == "__main__":

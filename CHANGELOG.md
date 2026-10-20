@@ -34,6 +34,32 @@ stable release is cut.
   generator now drops `LD_PRELOAD` entries whose file is missing before the
   session starts (from the next login).
 
+### Changed (login screen, 2026-10-19)
+- **The fingerprint reader listens as soon as the login screen is up.**
+  The greeter used to start the login only on Enter, so the reader waited
+  for an Enter first, and a password typed before it waited for the reader
+  to give up. Now
+  the login starts when a user is selected: touch the reader and you are
+  in (the keyring opens too). Without a reader or an enrolled finger the
+  password works as before; a password typed while the reader waits is
+  kept and used when the reader gives up (30 s); after a wrong password
+  the reader listens again. A Noctalia Greeter patch,
+  `[auth] start_on_select` in `greeter.toml`.
+- **A minimal login screen, like the website.** A plain `#121212`
+  background and no boxes: the card, the password field and the session
+  menu take the background's colour, so only the text shows, in
+  JetBrains Mono and the site's ivory. The firefly is the account picture,
+  in place of the generic person icon: every account without a picture gets
+  it at boot (`lucciola-default-avatar.service`), and a picture you choose
+  in the settings replaces it. The logo at the bottom is gone, and the
+  password field's cursor is no longer yellow but the text's colour (a
+  Noctalia Greeter patch). The blurred login wallpaper of the previous look
+  is no longer in the image.
+- **No more "Password:" under the password field.** The field already says
+  "Type password", so PAM's plain password prompt is no longer repeated on
+  the line below. Other questions, like a verification code, and the
+  fingerprint's messages still show there. A Noctalia Greeter patch.
+
 ### Added (the kernel reserve: Lucciola with Fedora's kernel)
 - **A second image, `:fedora-kernel`, the same Lucciola with Fedora's own
   kernel instead of the CachyOS one.** A bootc image carries one kernel,

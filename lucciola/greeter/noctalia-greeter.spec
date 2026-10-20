@@ -11,7 +11,7 @@
 
 Name:           noctalia-greeter
 Version:        %{greeter_version}
-Release:        2%{?dist}
+Release:        5%{?dist}
 Summary:        Login greeter for greetd with the look of Noctalia Shell
 License:        MIT AND (Apache-2.0 OR MIT)
 URL:            https://github.com/noctalia-dev/noctalia-greeter
@@ -24,6 +24,16 @@ Source1:        lucciola-mark.svg
 # A wrong password read "pam_authenticate: AUTH_ERR"; the patch says it in
 # words (the patch file says which results and why).
 Patch0:         0001-say-pam-results-in-words.patch
+# The fingerprint reader listens as soon as the login screen is up, without
+# an Enter first: [auth].start_on_select, turned on by Lucciola's
+# greeter.toml (the patch file says how it behaves).
+Patch1:         0002-start-auth-on-select.patch
+# The text field's caret (in the palette's text colour) and reveal icon follow
+# the palette, instead of keeping Noctalia's built-in colours from start-up.
+Patch2:         0003-caret-in-palette-colour.patch
+# PAM's bare "Password:" prompt is not written on the status line, as the
+# field's placeholder already asks for the password; other prompts show.
+Patch3:         0004-quiet-bare-password-prompt.patch
 
 # The pkg-config names come from meson.build of the tag.
 BuildRequires:  gcc
@@ -100,6 +110,19 @@ install -m 0644 %{SOURCE1} %{buildroot}%{_datadir}/noctalia-greeter/assets/nocta
 %{_datadir}/polkit-1/actions/org.noctalia.greeter.apply-appearance.policy
 
 %changelog
+* Mon Oct 19 2026 Daniel Grasso Carrasco <code@danielgrasso.com> - %{greeter_version}-5
+- PAM's generic password prompt ("Password:", in any case, or a Linux-PAM
+  translation of it) is not written on the status line; other prompts are
+
+* Mon Oct 19 2026 Daniel Grasso Carrasco <code@danielgrasso.com> - %{greeter_version}-4
+- The text field's caret in the palette's text colour and its reveal icon
+  in the palette's, re-applied with the palette, instead of the colours of
+  Noctalia's built-in palette from start-up
+
+* Mon Oct 19 2026 Daniel Grasso Carrasco <code@danielgrasso.com> - %{greeter_version}-3
+- [auth].start_on_select: the login conversation starts when a user is
+  selected, so the fingerprint reader listens without an Enter first
+
 * Sun Oct 18 2026 Daniel Grasso Carrasco <code@danielgrasso.com> - %{greeter_version}-2
 - Lucciola's firefly as the logo; PAM results in words on a failed login
 

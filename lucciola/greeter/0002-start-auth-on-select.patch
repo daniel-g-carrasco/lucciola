@@ -1,0 +1,665 @@
+Lucciola: start the login conversation when a user is selected
+
+The greeter calls greetd's create_session only when the password is
+submitted, so with a fingerprint reader in the PAM stack (Fedora's
+authselect with-fingerprint: pam_fprintd sufficient, then pam_unix)
+the reader starts listening only after Enter. A new key,
+[auth].start_on_select (default false), opens the conversation as soon
+as a user is selected and nothing is running: at startup, after a user
+switch, after a failed attempt, after a logout (a new greeter). The
+fingerprint prompt shows on the status line and a touch logs in.
+
+With the key on:
+- PAM's password prompt (no reader, no enrolled finger, pam_fprintd
+  timed out) is answered as before: type, Enter. An empty Enter there
+  starts a new conversation, so the reader listens again.
+- A password submitted while pam_fprintd still waits is kept and sent
+  at the password prompt that follows. greetd reads one request at a
+  time per client and holds its lock while PAM waits, so neither an
+  answer nor a cancel can reach PAM sooner; the field stays usable
+  while PAM waits, and the status line says the password is ready.
+- A user switch cancels the conversation (cancel_session; after the
+  in-flight reply when there is one, whatever that reply says) and the
+  next one starts for the new user.
+- After a submitted attempt fails, the next conversation starts by
+  itself and the failure stays on the status line next to its first
+  message. A conversation that fails with no input from the user is not
+  restarted until a submit, so it cannot fail in a loop.
+- With several outputs there is one conversation: it moves to the
+  output in use (the connection to greetd is shared) and survives an
+  unplugged output; its messages show on every output.
+With the key off nothing changes.
+
+Applied by lucciola/greeter/noctalia-greeter.spec to the v1.6.0 tag,
+after 0001. Could be proposed upstream (noctalia-dev/noctalia-greeter):
+the key, its parsing and writing, the docs and the example are in the
+patch.
+
+--- a/docs/user/configuration.md
++++ b/docs/user/configuration.md
+@@ -74,6 +74,7 @@ Set these keys in `greeter.toml`. A command-line `--session` or `--user` value t
+ | `[keyboard].layout` / `.variant` / `.options` / `.numlock` | XKB keymap |
+ | `[auth].allow_empty_password` | Permit an empty submission to start fprintd or smartcard PAM; this does not make password and fingerprint checks run in parallel |
+ | `[auth].request_timeout` | Seconds to wait for each greetd reply (`0`–`3600`, default `60`); `0` disables the watchdog |
++| `[auth].start_on_select` | Start the PAM conversation as soon as a user is selected, without waiting for Enter, so `pam_fprintd` listens at once; a password typed meanwhile is kept for PAM's password prompt, and an empty Enter at that prompt starts the fingerprint again (default `false`) |
+ 
+ Display and input settings have task-oriented guides:
+ 
+--- a/docs/user/troubleshooting.md
++++ b/docs/user/troubleshooting.md
+@@ -164,6 +164,11 @@ Choose the behavior that fits the system:
+ - A custom Authselect profile can instead give `pam_fprintd` a shorter
+   `timeout` or fewer `max-tries`, reducing the delay before password fallback.
+ 
++`[auth].start_on_select = true` starts PAM as soon as a user is selected, so
++the reader listens without an Enter first. A password typed and submitted
++while it listens is kept and sent at PAM's password prompt, once
++`pam_fprintd` gives up.
++
+ `[auth].allow_empty_password = true` only permits submitting an empty password
+ field so fingerprint or smartcard PAM can start. It does not make fingerprint
+ and password authentication parallel. Keep `[auth].request_timeout` longer
+--- a/examples/greeter.toml
++++ b/examples/greeter.toml
+@@ -123,3 +123,6 @@ allow_empty_password = false
+ # Seconds to wait for each greetd reply (0-3600). Keep this longer than any
+ # fingerprint timeout; 0 disables the watchdog.
+ request_timeout = 60
++# Start PAM as soon as a user is selected, so a fingerprint reader listens
++# without an Enter first. Default false.
++start_on_select = false
+--- a/src/greeter/greeter.cpp
++++ b/src/greeter/greeter.cpp
+@@ -74,6 +74,7 @@ bool Greeter::initialize(WaylandClient& client) {
+   const greeter::GreeterPreferences prefs = greeter::loadGreeterPreferences();
+ 
+   m_greetdClient.setRequestTimeout(std::chrono::seconds(prefs.authRequestTimeoutSec));
++  m_startOnSelect = prefs.authStartOnSelect;
+ 
+   Input::setPasswordMaskStyle(
+       prefs.passwordMaskStyle == greeter::PasswordMaskStyle::RandomIcons ? Input::PasswordMaskStyle::RandomIcons
+@@ -155,6 +156,10 @@ int Greeter::run(WaylandClient& client, const std::atomic<bool>& shutdownRequest
+   while (!m_exitRequested && !shutdownRequested.load(std::memory_order_relaxed)) {
+     client.repeatTick();
+ 
++    if (m_startOnSelect) {
++      driveStartOnSelect();
++    }
++
+     if (client.flush() < 0) {
+       kLog.error("Wayland flush failed");
+       return 1;
+@@ -276,10 +281,25 @@ void Greeter::syncOutputWindows() {
+       ++it;
+       continue;
+     }
+-    if (m_authSurface == it->surface.get()) {
+-      markGreetdUnavailable("Login interrupted after the display configuration changed. Restart greetd.");
++    GreeterSurface* const removed = it->surface.get();
++    if (m_authSurface == removed) {
++      if (m_startOnSelect) {
++        // The conversation outlives its output: another output takes it,
++        // or the surface stays (without a window) until one comes back.
++        const auto heir = std::ranges::find_if(m_views, [&](const View& view) {
++          return view.surface.get() != removed && isTargetOutput(view.output);
++        });
++        if (heir != m_views.end()) {
++          moveAuthTo(heir->surface.get());
++        } else {
++          it->surface->setWindow(nullptr);
++          m_orphanAuthSurface = std::move(it->surface);
++        }
++      } else {
++        markGreetdUnavailable("Login interrupted after the display configuration changed. Restart greetd.");
++      }
+     }
+-    if (m_activeSurface == it->surface.get()) {
++    if (m_activeSurface == removed) {
+       m_activeSurface = nullptr;
+     }
+     it = m_views.erase(it);
+@@ -396,12 +416,50 @@ void Greeter::syncOutputWindows() {
+ }
+ 
+ void Greeter::setActiveSurface(GreeterSurface* surface) {
++  // start_on_select keeps a conversation open while idle: it follows the
++  // output in use, so typing there reaches it.
++  if (m_startOnSelect && surface != nullptr && m_authSurface != nullptr && m_authSurface != surface) {
++    moveAuthTo(surface);
++  }
+   m_activeSurface = surface;
+   for (auto& view : m_views) {
+     view.surface->setKeyboardOwner(view.surface.get() == surface);
+   }
+ }
+ 
++void Greeter::moveAuthTo(GreeterSurface* heir) {
++  if (heir == nullptr || m_authSurface == nullptr || heir == m_authSurface) {
++    return;
++  }
++  kLog.info("greetd conversation moves to another output's surface");
++  m_authSurface->handOverAuthTo(*heir);
++  m_authSurface = heir;
++  for (auto& view : m_views) {
++    if (view.surface) {
++      view.surface->setSharedAuthBlocked(view.surface.get() != heir);
++    }
++  }
++}
++
++void Greeter::driveStartOnSelect() {
++  if (m_orphanAuthSurface != nullptr && m_authSurface != m_orphanAuthSurface.get()) {
++    m_orphanAuthSurface.reset(); // its conversation ended or moved on
++  }
++  if (m_greetdUnavailable || m_views.empty()) {
++    return;
++  }
++  GreeterSurface* active = m_activeSurface != nullptr ? m_activeSurface : m_views.front().surface.get();
++  if (m_authSurface != nullptr) {
++    m_authSurface->cancelStaleAuth();
++  } else {
++    active->startAuthOnSelect();
++  }
++  const GreeterSurface* source = m_authSurface != nullptr ? m_authSurface : active;
++  for (auto& view : m_views) {
++    view.surface->mirrorStatusFrom(*source);
++  }
++}
++
+ void Greeter::syncStateFrom(const GreeterSurface* source) {
+   if (source == nullptr) {
+     return;
+--- a/src/greeter/greeter.h
++++ b/src/greeter/greeter.h
+@@ -53,6 +53,11 @@ private:
+   void syncOutputWindows();
+   void syncStateFrom(const GreeterSurface* source);
+   void setActiveSurface(GreeterSurface* surface);
++  // [auth].start_on_select, once per loop turn: open the conversation for
++  // the selected user, cancel it when the selection changed, show its
++  // messages on every output.
++  void driveStartOnSelect();
++  void moveAuthTo(GreeterSurface* heir);
+   [[nodiscard]] View* viewForWindow(GreeterWindow& window) noexcept;
+   [[nodiscard]] View* viewForSurface(wl_surface* surface) noexcept;
+ 
+@@ -63,6 +68,11 @@ private:
+   GreetdClient m_greetdClient;
+   GreeterSurface* m_activeSurface = nullptr;
+   GreeterSurface* m_authSurface = nullptr;
++  // start_on_select: the surface of an unplugged output whose conversation
++  // had nowhere to go (no output left). It keeps reading greetd's replies,
++  // without a window, until an output comes back and takes the conversation.
++  std::unique_ptr<GreeterSurface> m_orphanAuthSurface;
++  bool m_startOnSelect = false;
+ 
+   std::string m_defaultUsername;
+   bool m_exitRequested = false;
+--- a/src/greeter/greeter_config_io.cpp
++++ b/src/greeter/greeter_config_io.cpp
+@@ -95,7 +95,7 @@ namespace {
+   }
+ 
+   [[nodiscard]] bool isKnownAuthKey(std::string_view key) {
+-    return key == "allow_empty_password" || key == "request_timeout";
++    return key == "allow_empty_password" || key == "request_timeout" || key == "start_on_select";
+   }
+ 
+   [[nodiscard]] std::optional<std::string> stringValue(const toml::node& node) {
+@@ -369,6 +369,12 @@ namespace {
+             } else {
+               kLog.warn("{}: invalid auth.allow_empty_password value", path.string());
+             }
++          } else if (entryView == "start_on_select") {
++            if (const auto value = entryNode.value<bool>()) {
++              config.authStartOnSelect = *value;
++            } else {
++              kLog.warn("{}: invalid auth.start_on_select value", path.string());
++            }
+           } else if (const auto timeout = authRequestTimeoutValue(entryNode)) {
+             config.authRequestTimeoutSec = *timeout;
+           } else {
+@@ -608,7 +614,8 @@ namespace {
+       root.insert("keyboard", std::move(keyboard));
+     }
+ 
+-    if (config.authAllowEmptyPassword.has_value() || config.authRequestTimeoutSec.has_value()) {
++    if (config.authAllowEmptyPassword.has_value() || config.authRequestTimeoutSec.has_value()
++        || config.authStartOnSelect.has_value()) {
+       toml::table auth;
+       if (config.authAllowEmptyPassword.has_value()) {
+         auth.insert_or_assign("allow_empty_password", *config.authAllowEmptyPassword);
+@@ -616,6 +623,9 @@ namespace {
+       if (config.authRequestTimeoutSec.has_value()) {
+         auth.insert_or_assign("request_timeout", static_cast<int64_t>(*config.authRequestTimeoutSec));
+       }
++      if (config.authStartOnSelect.has_value()) {
++        auth.insert_or_assign("start_on_select", *config.authStartOnSelect);
++      }
+       root.insert("auth", std::move(auth));
+     }
+ 
+@@ -943,7 +953,8 @@ namespace greeter::config {
+     out << "# [output] name/layout/scale/scales/width/height/refresh_rate/transforms, "
+            "[idle] timeout, [cursor] theme/size/path\n";
+     out << "# [keyboard] layout/variant/options/numlock\n";
+-    out << "# [auth] allow_empty_password (bool), request_timeout (0-3600 seconds; default 60, 0 disables)\n";
++    out << "# [auth] allow_empty_password (bool), request_timeout (0-3600 seconds; default 60, 0 disables), "
++           "start_on_select (bool)\n";
+     out << '\n';
+     out << formatToml(table);
+ 
+--- a/src/greeter/greeter_config_store.h
++++ b/src/greeter/greeter_config_store.h
+@@ -76,6 +76,7 @@ namespace greeter::config {
+ 
+     std::optional<bool> authAllowEmptyPassword;
+     std::optional<int> authRequestTimeoutSec;
++    std::optional<bool> authStartOnSelect;
+   };
+ 
+   // Sync + UI mutable file (sync.toml). Never managed by Nix. Loses to greeter.toml.
+--- a/src/greeter/greeter_preferences.cpp
++++ b/src/greeter/greeter_preferences.cpp
+@@ -429,6 +429,9 @@ namespace greeter {
+     if (file.authRequestTimeoutSec.has_value()) {
+       prefs.authRequestTimeoutSec = *file.authRequestTimeoutSec;
+     }
++    if (file.authStartOnSelect.has_value()) {
++      prefs.authStartOnSelect = *file.authStartOnSelect;
++    }
+     return prefs;
+   }
+ 
+--- a/src/greeter/greeter_preferences.h
++++ b/src/greeter/greeter_preferences.h
+@@ -32,6 +32,9 @@ namespace greeter {
+     PasswordMaskStyle passwordMaskStyle = PasswordMaskStyle::Default;
+     bool allowEmptyPassword = false;
+     int authRequestTimeoutSec = 60;
++    // Start the PAM conversation as soon as a user is selected, so a
++    // fingerprint reader (pam_fprintd) listens without waiting for Enter.
++    bool authStartOnSelect = false;
+     bool hideLogo = false;
+     // UI element positioning: "hidden", "bottom-left", "bottom-right", "top-left", "top-right"
+     std::optional<std::string> powerButtonsPosition;
+--- a/src/greeter/greeter_surface.cpp
++++ b/src/greeter/greeter_surface.cpp
+@@ -82,6 +82,14 @@ namespace {
+     return description;
+   }
+ 
++  // pam_fprintd's prompts and errors all name the finger ("Place your right
++  // index finger...", "Failed to match fingerprint").
++  bool speaksOfFinger(std::string_view text) {
++    std::string lower(text);
++    std::ranges::transform(lower, lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
++    return lower.find("finger") != std::string::npos;
++  }
++
+   Button::ButtonStateColors
+   makePaletteState(ColorRole bg, std::optional<ColorRole> border, ColorRole label, float alpha = 1.0f) {
+     return Button::ButtonStateColors{
+@@ -1400,6 +1408,9 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
+ }
+ 
+ void GreeterSurface::tryAuthenticate() {
++  if (m_startOnSelect && startOnSelectSubmit()) {
++    return;
++  }
+   // Ignore re-submits while a request is already in flight.
+   if (m_greetdClient == nullptr || m_greetdUnavailable || m_sharedAuthBlocked || awaitingReply()) {
+     return;
+@@ -1423,6 +1434,10 @@ void GreeterSurface::tryAuthenticate() {
+     m_pendingResponse = m_password;
+     m_hasPendingResponse = true;
+     m_authenticating = true;
++    m_authUser = m_username;
++    m_userAnswered = true;
++    m_autoStartHeldFor.clear();
++    m_fingerOffered = false;
+     kLog.info("greetd: create_session for '{}'", m_username);
+     if (!m_greetdClient->requestCreateSession(m_username)) {
+       reportGreetdTransportError(
+@@ -1439,6 +1454,155 @@ void GreeterSurface::tryAuthenticate() {
+   }
+ }
+ 
++bool GreeterSurface::startSessionPending() const {
++  return std::ranges::find(m_pendingReplies, AuthRequest::StartSession) != m_pendingReplies.end();
++}
++
++void GreeterSurface::startAuthOnSelect() {
++  if (!m_startOnSelect || m_greetdClient == nullptr || !m_greetdClient->isConnected() || m_greetdUnavailable
++      || m_sharedAuthBlocked || m_authSessionStarted || awaitingReply() || !m_passwordVisible || m_username.empty()
++      || m_autoStartHeldFor == m_username) {
++    return;
++  }
++  if (m_onAuthBeginRequested && !m_onAuthBeginRequested(this)) {
++    return;
++  }
++  // A password submitted while the previous conversation was being cancelled
++  // (user switch) stays armed for this one.
++  m_authenticating = m_hasPendingResponse;
++  m_userAnswered = m_hasPendingResponse;
++  m_secretPromptWaiting = false;
++  m_fingerOffered = false;
++  m_authUser = m_username;
++  kLog.info("greetd: create_session for '{}' (start_on_select)", m_username);
++  if (!m_greetdClient->requestCreateSession(m_username)) {
++    reportGreetdTransportError(
++        m_greetdClient->lastError().value_or(GreetdError{GreetdErrorType::Error, "failed to send request"})
++    );
++    return;
++  }
++  m_authSessionStarted = true;
++  m_pendingReplies.push_back(AuthRequest::CreateSession);
++  syncAuthInteractivity();
++  commitImmediateFrame(false);
++}
++
++bool GreeterSurface::startOnSelectSubmit() {
++  // A submit while the conversation start_on_select opened is running, and
++  // the user has not submitted yet. Anything else takes the usual path.
++  if (!m_authSessionStarted || m_authenticating || m_greetdClient == nullptr || m_greetdUnavailable
++      || m_sharedAuthBlocked || startSessionPending()) {
++    return false;
++  }
++  if (m_secretPromptWaiting && !m_cancelWanted) {
++    if (!m_password.empty()) {
++      m_authenticating = true;
++      m_userAnswered = true;
++      m_carryError.clear();
++      postAuthResponse(m_password);
++      return true;
++    }
++    // An empty submit at the password prompt starts over: a new
++    // conversation, so the fingerprint reader listens again.
++    kLog.info("greetd: empty submit at the password prompt, starting the conversation again");
++    m_secretPromptWaiting = false;
++    m_autoStartHeldFor.clear();
++    m_carryError.clear();
++    updateStatus("", false);
++    if (!resetAuthSession()) {
++      return true;
++    }
++    syncAuthInteractivity();
++    commitImmediateFrame(false);
++    return true;
++  }
++  if (m_password.empty()) {
++    return true; // PAM is waiting for something else (a finger): nothing to keep
++  }
++  // PAM is busy, typically pam_fprintd waiting for a finger. greetd reads one
++  // request at a time, so neither an answer nor a cancel reaches PAM before
++  // that module gives up; keep the password for the prompt that follows.
++  m_pendingResponse = m_password;
++  m_hasPendingResponse = true;
++  m_authenticating = true;
++  m_userAnswered = true;
++  m_carryError.clear();
++  // The status line is one line: short texts.
++  updateStatus(
++      m_fingerOffered ? "Password kept: sent when the reader stops waiting" : "Password kept for the password prompt",
++      false
++  );
++  syncAuthInteractivity();
++  commitImmediateFrame(false);
++  return true;
++}
++
++void GreeterSurface::cancelStaleAuth() {
++  if (!m_startOnSelect || !m_authSessionStarted || m_cancelWanted || startSessionPending()) {
++    return;
++  }
++  if (m_passwordVisible && m_authUser == m_username) {
++    return;
++  }
++  kLog.info("greetd: selection changed, cancelling the conversation for '{}'", m_authUser);
++  m_authenticating = false;
++  m_secretPromptWaiting = false;
++  m_hasPendingResponse = false;
++  m_pendingResponse.clear();
++  m_carryError.clear();
++  if (awaitingReply()) {
++    // greetd answers this request first (the fingerprint reader may hold it
++    // for a while); the cancel follows in handleGreetdResponse().
++    m_cancelWanted = true;
++    syncAuthInteractivity();
++    return;
++  }
++  if (!resetAuthSession()) {
++    return;
++  }
++  syncAuthInteractivity();
++  commitImmediateFrame(false);
++}
++
++void GreeterSurface::handOverAuthTo(GreeterSurface& other) {
++  if (&other == this) {
++    return;
++  }
++  other.m_authenticating = m_authenticating;
++  other.m_authSessionStarted = m_authSessionStarted;
++  other.m_secretPromptWaiting = m_secretPromptWaiting;
++  other.m_hasPendingResponse = m_hasPendingResponse;
++  other.m_pendingResponse = std::move(m_pendingResponse);
++  other.m_pendingReplies = std::move(m_pendingReplies);
++  other.m_authUser = m_authUser;
++  other.m_userAnswered = m_userAnswered;
++  other.m_autoStartHeldFor = m_autoStartHeldFor;
++  other.m_cancelWanted = m_cancelWanted;
++  other.m_fingerOffered = m_fingerOffered;
++  other.m_carryError = m_carryError;
++  other.updateStatus(m_status, m_statusIsError);
++
++  m_authenticating = false;
++  m_authSessionStarted = false;
++  m_secretPromptWaiting = false;
++  m_hasPendingResponse = false;
++  m_pendingResponse.clear();
++  m_pendingReplies.clear();
++  m_userAnswered = false;
++  m_cancelWanted = false;
++  m_carryError.clear();
++  syncAuthInteractivity();
++  other.syncAuthInteractivity();
++  other.commitImmediateFrame(false);
++}
++
++void GreeterSurface::mirrorStatusFrom(const GreeterSurface& other) {
++  if (&other == this || (m_status == other.m_status && m_statusIsError == other.m_statusIsError)) {
++    return;
++  }
++  updateStatus(other.m_status, other.m_statusIsError);
++}
++
+ void GreeterSurface::onGreetdReadable() {
+   if (m_greetdClient == nullptr) {
+     return;
+@@ -1483,6 +1647,21 @@ void GreeterSurface::handleGreetdResponse(const GreetdResponse& response) {
+     return;
+   }
+ 
++  if (m_cancelWanted) {
++    // The selection changed while this reply was on its way: whatever it
++    // says, even a success, was for the previous user.
++    kLog.info("greetd: reply for '{}' dropped, cancelling that conversation", m_authUser);
++    m_cancelWanted = false;
++    m_secretPromptWaiting = false;
++    m_pendingReplies.clear();
++    if (!resetAuthSession()) {
++      return;
++    }
++    syncAuthInteractivity();
++    commitImmediateFrame(false);
++    return;
++  }
++
+   switch (response.type) {
+   case GreetdResponseType::Error:
+     onAuthError(response.error);
+@@ -1498,6 +1677,10 @@ void GreeterSurface::handleGreetdResponse(const GreetdResponse& response) {
+       }
+     } else {
+       // Auth finished; launch the session.
++      if (m_startOnSelect) {
++        m_authenticating = true; // a finger can finish it without a submit
++        syncAuthInteractivity();
++      }
+       beginSessionStart();
+     }
+     return;
+@@ -1513,10 +1696,26 @@ void GreeterSurface::handleAuthMessage(const GreetdAuthMessage& message) {
+ 
+   if (message.type == GreetdAuthMessageType::Info || message.type == GreetdAuthMessageType::Error) {
+     const bool isError = message.type == GreetdAuthMessageType::Error;
++    if (m_startOnSelect && speaksOfFinger(message.message)) {
++      m_fingerOffered = true;
++    }
+     if (!message.message.empty()) {
+-      updateStatus(message.message, isError);
++      if (m_startOnSelect && !m_carryError.empty()) {
++        // Why the last attempt failed stays; the status line is one line,
++        // so the new prompt is only a short "or the fingerprint" next to it.
++        std::string text = m_carryError;
++        if (m_fingerOffered && text.size() <= 30) {
++          text += ", or use the fingerprint";
++        }
++        updateStatus(text, true);
++        m_carryError.clear();
++      } else {
++        updateStatus(message.message, isError);
++      }
+     }
+-    if (isError) {
++    // start_on_select: until a submit, the field holds what the user is
++    // still typing, not an answer PAM rejected.
++    if (isError && !(m_startOnSelect && !m_authenticating)) {
+       clearPasswordInput();
+     }
+     // Ack with an empty response to resume PAM; paint now so the message shows.
+@@ -1543,7 +1742,12 @@ void GreeterSurface::handleAuthMessage(const GreetdAuthMessage& message) {
+   }
+ 
+   m_secretPromptWaiting = true;
+-  if (!message.message.empty()) {
++  if (m_startOnSelect && !m_carryError.empty()) {
++    updateStatus(m_carryError, true); // the field is the prompt; keep the reason
++    m_carryError.clear();
++  } else if (m_startOnSelect && m_fingerOffered && message.type == GreetdAuthMessageType::Secret) {
++    updateStatus("Type the password, or Enter for the fingerprint", false);
++  } else if (!message.message.empty()) {
+     updateStatus(message.message, false);
+   }
+   syncAuthInteractivity();
+@@ -1566,7 +1770,11 @@ void GreeterSurface::postAuthResponse(const std::string& data) {
+ }
+ 
+ void GreeterSurface::syncAuthInteractivity() {
+-  const bool busy = m_greetdUnavailable || m_sharedAuthBlocked || awaitingReply();
++  // start_on_select: while the greeter's own conversation waits on PAM (a
++  // fingerprint reader) and the user has not submitted, the field stays open
++  // so a password can be typed meanwhile.
++  const bool listening = m_startOnSelect && m_authSessionStarted && !m_authenticating && !startSessionPending();
++  const bool busy = m_greetdUnavailable || m_sharedAuthBlocked || (awaitingReply() && !listening);
+   if (m_passwordField != nullptr) {
+     m_passwordField->setEnabled(!busy);
+   }
+@@ -1588,6 +1796,7 @@ void GreeterSurface::setGreetdUnavailable(const std::string_view reason) {
+   m_greetdUnavailable = true;
+   m_authenticating = false;
+   m_authSessionStarted = false;
++  m_cancelWanted = false;
+   m_secretPromptWaiting = false;
+   m_hasPendingResponse = false;
+   m_pendingResponse.clear();
+@@ -1687,6 +1896,15 @@ void GreeterSurface::clearPasswordInput() {
+ }
+ 
+ void GreeterSurface::onAuthError(const GreetdError& error) {
++  // start_on_select: after an attempt the user submitted, the next
++  // conversation starts by itself once the cancel is acknowledged. One that
++  // failed with no input from the user would only fail again: no new
++  // automatic start for this user until a submit.
++  const bool startAgain = m_startOnSelect && m_userAnswered;
++  if (m_startOnSelect && !m_userAnswered) {
++    m_autoStartHeldFor = m_authUser;
++  }
++  m_userAnswered = false;
+   m_authenticating = false;
+   m_secretPromptWaiting = false;
+   m_hasPendingResponse = false;
+@@ -1694,6 +1912,7 @@ void GreeterSurface::onAuthError(const GreetdError& error) {
+   m_pendingReplies.clear();
+   clearPasswordInput();
+   updateStatus(authErrorText(error.description), true);
++  m_carryError = startAgain ? m_status : std::string();
+   kLog.warn("authentication failed: {}", error.description);
+   if (!resetAuthSession()) {
+     return;
+@@ -2078,6 +2297,7 @@ void GreeterSurface::syncWallpaperTexture() {
+ void GreeterSurface::loadPreferences() {
+   const auto prefs = greeter::loadGreeterPreferences();
+   m_allowEmptyPassword = prefs.allowEmptyPassword;
++  m_startOnSelect = prefs.authStartOnSelect;
+   const auto initialSession = greeter::resolveInitialSessionName(prefs);
+ 
+   if (initialSession.has_value()) {
+--- a/src/greeter/greeter_surface.h
++++ b/src/greeter/greeter_surface.h
+@@ -68,6 +68,22 @@ public:
+   // True while this surface is mid-conversation with greetd.
+   [[nodiscard]] bool authInProgress() const noexcept { return m_authenticating; }
+ 
++  // [auth].start_on_select: open the greetd conversation for the selected
++  // user while the greeter is idle, without waiting for a submit, so PAM
++  // modules that need no typing (pam_fprintd) start at once. The greeter
++  // calls these from its loop; they do nothing when the key is off.
++  void startAuthOnSelect();
++  // Cancel the running conversation when the selected user changed or the
++  // password step was left (deferred until greetd answers, when a request is
++  // in flight: greetd reads one request at a time).
++  void cancelStaleAuth();
++  // Move the running conversation (state and pending replies) to another
++  // output's surface, so it follows the pointer and survives an unplugged
++  // output. The connection to greetd is shared, so nothing is sent.
++  void handOverAuthTo(GreeterSurface& other);
++  // Show another surface's status line (the owner's PAM messages on every output).
++  void mirrorStatusFrom(const GreeterSurface& other);
++
+   void onPointerLeave();
+   void onPointerEvent(float x, float y, std::uint32_t button, bool pressed);
+   void onPointerMotion(float x, float y);
+@@ -224,6 +240,7 @@ private:
+   bool m_canRebootToFirmware = false;
+ 
+   bool m_allowEmptyPassword = false;
++  bool m_startOnSelect = false;
+ 
+   // greetd replies in request order, so m_pendingReplies (a FIFO of these) tells
+   // which request each reply answers.
+@@ -248,6 +265,23 @@ private:
+   bool m_hasPendingResponse = false;  // user-supplied input armed for next prompt
+   std::string m_pendingResponse;
+   std::deque<AuthRequest> m_pendingReplies;
++  // start_on_select state. m_authUser: whom the running conversation is for.
++  // m_userAnswered: the user submitted something in it (an error then
++  // restarts the conversation; without it, an error would only repeat).
++  // m_autoStartHeldFor: no automatic start for this user until a submit,
++  // after a conversation failed on its own. m_cancelWanted: cancel once the
++  // in-flight reply arrives. m_fingerOffered: a PAM message of this
++  // conversation spoke of a finger (pam_fprintd is, or was, listening).
++  // m_carryError: the last attempt's error, kept on the status line next to
++  // the new conversation's first message.
++  std::string m_authUser;
++  bool m_userAnswered = false;
++  std::string m_autoStartHeldFor;
++  bool m_cancelWanted = false;
++  bool m_fingerOffered = false;
++  std::string m_carryError;
++  [[nodiscard]] bool startSessionPending() const;
++  [[nodiscard]] bool startOnSelectSubmit();
+   std::function<void()> m_onExitRequested;
+   std::function<bool(GreeterSurface*)> m_onAuthBeginRequested;
+   std::function<void(GreeterSurface*)> m_onAuthEnded;

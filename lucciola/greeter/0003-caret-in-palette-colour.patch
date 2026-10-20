@@ -1,0 +1,70 @@
+Lucciola: draw the text field's caret in the palette's text colour
+
+Input sets the colours of its caret and of the password reveal icon once,
+in its constructor, from the palette of that moment: the greeter builds
+its widgets with Noctalia's built-in palette and applies the synced one
+afterwards, so the caret stays Noctalia's yellow (#fff59b) and the icon
+its lavender whatever colours greeter.toml or Sync give. Set them in
+applyVisualState() instead, which runs again on every layout, palette
+changes included, like the field's background and text.
+
+The caret takes the text colour (on_surface) rather than primary, as
+carets usually follow the text: a palette that blends the field into the
+background (primary equal to the surface, so that no focus border
+shows) would otherwise hide it.
+
+Applied by lucciola/greeter/noctalia-greeter.spec to the v1.6.0 tag,
+after 0002. Could be proposed upstream (noctalia-dev/noctalia-greeter).
+
+--- a/src/ui/controls/input.cpp
++++ b/src/ui/controls/input.cpp
+@@ -101,14 +101,9 @@
+   label->setColor(colorForRole(ColorRole::OnSurface));
+   m_label = static_cast<Label*>(m_textViewport->addChild(std::move(label)));
+ 
++  // The caret's colour is set in applyVisualState(), which runs again when
++  // the palette changes.
+   auto cursor = std::make_unique<RectNode>();
+-  cursor->setStyle(
+-      RoundedRectStyle{
+-          .fill = colorForRole(ColorRole::Primary),
+-          .fillMode = FillMode::Solid,
+-          .radius = 1.0f,
+-      }
+-  );
+   cursor->setVisible(false);
+   m_cursor = static_cast<RectNode*>(m_textViewport->addChild(std::move(cursor)));
+ 
+@@ -139,7 +134,6 @@
+ 
+   auto revealIcon = std::make_unique<GlyphNode>();
+   revealIcon->setCodepoint(GlyphRegistry::lookup("eye"));
+-  revealIcon->setColor(colorForRole(ColorRole::OnSurfaceVariant));
+   revealIcon->setHitTestVisible(false);
+   revealIcon->setVisible(false);
+   m_revealIcon = static_cast<GlyphNode*>(addChild(std::move(revealIcon)));
+@@ -516,6 +510,24 @@
+     return;
+   }
+ 
++  // The caret and the reveal icon take their colours from the current
++  // palette. Set once in the constructor they kept the palette of that
++  // moment (Noctalia's built-in one, before a synced palette is applied).
++  // The caret takes the text colour: an accent caret disappears with a
++  // palette whose primary is the background colour.
++  if (m_cursor != nullptr) {
++    m_cursor->setStyle(
++        RoundedRectStyle{
++            .fill = colorForRole(ColorRole::OnSurface),
++            .fillMode = FillMode::Solid,
++            .radius = 1.0f,
++        }
++    );
++  }
++  if (m_revealIcon != nullptr) {
++    m_revealIcon->setColor(colorForRole(ColorRole::OnSurfaceVariant));
++  }
++
+   const bool focused = m_inputArea != nullptr && m_inputArea->focused();
+   const bool hovered = m_inputArea != nullptr && m_inputArea->hovered();
+ 

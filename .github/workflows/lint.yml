@@ -121,6 +121,12 @@ jobs:
         # See tests/greeter-look.test.sh.
         run: bash tests/greeter-look.test.sh
 
+      - name: Default account picture helper
+        # Writes AccountsService's files as root at every boot: which
+        # accounts get the firefly and that a picture someone chose (or
+        # removed) is never touched, is tested. See tests/default-avatar.test.sh.
+        run: bash tests/default-avatar.test.sh
+
       - name: Welcome window at the first login
         # session-start opens it for new users until it is closed once, and
         # never for accounts that had Lucciola sessions before it existed.
