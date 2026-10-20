@@ -17,11 +17,20 @@ def run(cmd):
 
 
 # Get current booted image reference
-r = run(["bootc", "status", "--json"])
+# Read-only rpm-ostree status works for the session user and with layers;
+# bootc status may require root, making a user timer silently do nothing.
+r = run(["rpm-ostree", "status", "--booted", "--json"])
 if r.returncode != 0:
-    sys.exit(0)  # no bootc, no-op
-booted = json.loads(r.stdout)["status"]["booted"]
-image_ref = booted["image"]["image"]["image"]  # e.g. ghcr.io/daniel-g-carrasco/lucciola:stable
+    sys.exit(0)
+try:
+    deployments = json.loads(r.stdout).get("deployments", [])
+    booted = next((d for d in deployments if d.get("booted")), {})
+    origin = booted.get("container-image-reference") or ""
+except (ValueError, TypeError):
+    sys.exit(0)
+image_ref = origin.partition(":")[2].removeprefix("docker://")
+if not image_ref.startswith("ghcr.io/daniel-g-carrasco/lucciola:") or "@" in image_ref:
+    sys.exit(0)  # another image or a deliberate digest pin
 
 # Inspect upstream :stable to find its creation timestamp
 r = run(["skopeo", "inspect", "--no-tags", f"docker://{image_ref}"])

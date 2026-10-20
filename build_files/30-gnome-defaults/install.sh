@@ -42,6 +42,14 @@ accent-color='yellow'
 [org.virt-manager.virt-manager.connections]
 uris=['qemu:///system', 'qemu:///session']
 autoconnect=['qemu:///session']
+
+# Ptyxis: a new terminal starts in the home folder. Upstream restores the
+# last session, tabs and working folders included, which reopened terminals
+# in whatever folder the last one was closed in (2026-10-19, seen on a
+# system moved from Margine). A user who wants it back turns it on in
+# Ptyxis' preferences.
+[org.gnome.Ptyxis]
+restore-session=false
 OVERRIDE
 
 # The dconf profile reads the distro database (authselect's defaults live

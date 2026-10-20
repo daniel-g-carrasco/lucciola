@@ -161,8 +161,11 @@ jobs:
           sudo chown "$(id -u):$(id -g)" -R output/
 
       - name: Prepare Secure Boot variables (Microsoft keys + Margine MOK)
+        # The certificate comes from the NEW image: it is its kernel that must
+        # boot after the rebase, and a stock Fedora starting point (Silverblue,
+        # Kinoite) carries no MOK.der at all (2026-10-20).
         env:
-          IMG: ${{ steps.ref.outputs.from }}
+          IMG: ${{ steps.ref.outputs.to }}
         run: |
           set -euo pipefail
           sudo podman run --rm --entrypoint /usr/bin/cat "$IMG" /usr/share/cert/MOK.der | cat > MOK.der

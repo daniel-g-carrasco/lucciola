@@ -53,12 +53,12 @@ def find_secret(data):
     """First real-looking secret in data, or None."""
     for m in PEM_RE.finditer(data):
         if PEM_BODY_RE.search(data, m.end(), m.end() + 800):
-            return m.group(0)
+            return b"private key"
     for m in TOKEN_RE.finditer(data):
         # AWS's documented example key (AKIAIOSFODNN7EXAMPLE) is everywhere
         # in SDK docs; real access key IDs never end in EXAMPLE.
         if not m.group(0).endswith(b"EXAMPLE"):
-            return m.group(0)
+            return b"access token"
     return None
 SECRET_SCAN_ALWAYS = ("etc/", "var/", "root/", "usr/local/")
 SECRET_MAX_BYTES = 1 << 20
@@ -125,7 +125,7 @@ def scan_secrets(root, owned):
         except OSError:
             continue
         if found:
-            hits.append(f"{rel}: {found[:40].decode(errors='replace')}")
+            hits.append(f"{rel}: {found.decode()}")
     for rel in sorted(walk(root, "etc/ssh")) if os.path.isdir(os.path.join(root, "etc/ssh")) else []:
         if re.search(r"ssh_host_[a-z0-9]+_key$", rel):
             hits.append(f"{rel}: ssh host key baked into the image")
@@ -195,17 +195,53 @@ def scan_units(root):
     return sorted(out)
 
 
+def image_path(root, rel):
+    """Resolve links using the image's /, never the scanner host's /."""
+    root = os.path.abspath(root)
+    resolved = []
+    pending = rel.split("/")
+    links = 0
+    while pending:
+        part = pending.pop(0)
+        if part in ("", "."):
+            continue
+        if part == "..":
+            if resolved:
+                resolved.pop()
+            continue
+        path = os.path.join(root, *resolved, part)
+        if os.path.islink(path):
+            links += 1
+            if links > 40:
+                raise ValueError("symlink loop in image configuration")
+            target = os.readlink(path)
+            if target.startswith("/"):
+                resolved = []
+            pending = target.split("/") + pending
+        else:
+            resolved.append(part)
+    return os.path.join(root, *resolved)
+
+
 def scan_configs(root):
     found = {}
     for pattern in CONFIG_GLOBS:
         d = os.path.dirname(pattern)
-        base = os.path.join(root, d)
+        try:
+            base = image_path(root, d)
+        except (OSError, ValueError):
+            continue
         if not os.path.isdir(base):
             continue
         for name in sorted(os.listdir(base)):
             rel = f"{d}/{name}"
-            if fnmatch.fnmatch(rel, pattern) and os.path.isfile(os.path.join(root, rel)):
-                found[rel] = os.path.join(root, rel)
+            if fnmatch.fnmatch(rel, pattern):
+                try:
+                    path = image_path(root, rel)
+                except (OSError, ValueError):
+                    continue
+                if os.path.isfile(path):
+                    found[rel] = path
     return found
 
 
@@ -238,6 +274,18 @@ def main():
     allow = read_list(os.path.join(a.baseline, "secrets-allow.txt"))
     secrets = [s for s in secrets if not any(fnmatch.fnmatch(s.split(":")[0], g) for g in allow)]
 
+    # A fatal scan must not publish the offending bytes in a config diff or
+    # copy them into the proposed baseline artifact (uploaded even on failure).
+    # Keep only path + category in the report. The CI handoff expects a
+    # directory even on failure, but it must contain no image configuration.
+    if secrets:
+        if a.write_baseline:
+            os.makedirs(a.write_baseline, exist_ok=True)
+        with open(a.report, "w") as f:
+            f.write("## SECRETS (fatal: these must never ship)\n\n")
+            f.write("\n".join(f"- `{s}`" for s in secrets) + "\n")
+        return 2
+
     if a.write_baseline:
         os.makedirs(a.write_baseline, exist_ok=True)
         for name, lines in current.items():
@@ -252,10 +300,6 @@ def main():
 
     report = []
     drift = False
-    if secrets:
-        report.append("## SECRETS (fatal: these must never ship)\n")
-        report += [f"- `{s}`" for s in secrets]
-        report.append("")
     for name, lines in current.items():
         base = read_list(os.path.join(a.baseline, f"{name}.txt"))
         added = sorted(set(lines) - set(base))
@@ -284,8 +328,6 @@ def main():
 
     with open(a.report, "w") as f:
         f.write("\n".join(report) + ("\n" if report else "no security drift, no secrets\n"))
-    if secrets:
-        return 2
     return 1 if drift else 0
 
 

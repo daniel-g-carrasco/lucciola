@@ -30,9 +30,11 @@ curl --fail --silent --show-error --location --retry 5 --retry-all-errors --retr
   -o "$TOP/SOURCES/v${V}.tar.gz" "$URL"
 echo "${NOCTALIA_GREETER_SHA256}  $TOP/SOURCES/v${V}.tar.gz" | sha256sum -c -
 # Lucciola's own sources next to the tarball: the patches and the logo the
-# spec installs (Source1, Patch0 to Patch2).
+# spec installs (Source1, Patch0 to Patch4).
 cp /src/0001-say-pam-results-in-words.patch /src/0002-start-auth-on-select.patch \
-  /src/0003-caret-in-palette-colour.patch /src/lucciola-mark.svg "$TOP/SOURCES/"
+  /src/0003-caret-in-palette-colour.patch /src/0004-quiet-bare-password-prompt.patch \
+  /src/0005-password-follows-the-conversation.patch \
+  /src/lucciola-mark.svg "$TOP/SOURCES/"
 
 # The same RPM from one build to the next: build time and file times from
 # the spec's changelog date, a fixed build host. Otherwise the package, and

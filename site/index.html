@@ -576,6 +576,7 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
       <div class="term-head"><span>terminal</span><button type="button" id="copy">Copy</button></div>
       <div class="term-body">
         <pre id="cmd"><span class="prompt">$</span> sudo rpm-ostree rebase ostree-unverified-registry:ghcr.io/daniel-g-carrasco/lucciola:stable</pre>
+        <p class="comment"># :stable starts with Fedora 45, planned for 27 October 2026. Until then, write <code>:candidate</code>, the test build.</p>
         <p class="comment"># Restart, then choose Lucciola at login.</p>
         <p class="comment"># Updates arrive on their own, signature-checked.</p>
         <p class="comment"># Choose the previous version in the boot menu.</p>
@@ -618,6 +619,7 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
       <li><a href="#g-updates">updates</a></li>
       <li><a href="#g-back">going back</a></li>
       <li><a href="#g-kernel">fedora’s kernel</a></li>
+      <li><a href="#g-finger">fingerprint</a></li>
       <li><a href="#g-unlock">disk unlock</a></li>
       <li><a href="#g-help">help</a></li>
     </ul>
@@ -631,6 +633,8 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
     <p>If the command prints a line with “supported”, you are ready. If it prints nothing, Lucciola’s usual kernel will not start on this PC: take the version with Fedora’s kernel instead (see <a href="#g-kernel">fedora’s kernel</a>).</p>
     <p>AMD and Intel graphics work out of the box. Lucciola does not yet ship NVIDIA’s own driver.</p>
     <p>You switch to Lucciola from a Fedora Atomic system, such as Silverblue, Kinoite, or Bluefin. Lucciola has no installer image yet, so on an empty disk you install Fedora Silverblue first.</p>
+    <p>Before you switch, save the name of the system you have now, for the way back (see <a href="#g-back">going back</a>). This command writes it to <code>lucciola-came-from.txt</code> in your home folder:</p>
+    <div class="cmd"><pre>rpm-ostree status --booted | sed -n 's/^[●*] //p' &gt; ~/lucciola-came-from.txt</pre><button type="button">Copy</button></div>
   </section>
 
   <section id="g-install" aria-labelledby="g-h-install">
@@ -647,6 +651,7 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
         <p>This command downloads Lucciola next to your current system, which stays as it is until you restart.</p>
         <div class="cmd"><pre>sudo rpm-ostree rebase ostree-unverified-registry:ghcr.io/daniel-g-carrasco/lucciola:stable</pre><button type="button">Copy</button></div>
         <div class="cmd"><pre>systemctl reboot</pre><button type="button">Copy</button></div>
+        <p class="note">The first <code>:stable</code> comes out with Fedora 45, planned for 27 October 2026; until it exists, the command stops with “manifest unknown”. To try Lucciola before then, write <code>lucciola:candidate</code>, the test build, and run the same command with <code>:stable</code> once it is out.</p>
       </li>
       <li>
         <h3>Log in to Lucciola</h3>
@@ -703,7 +708,7 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
   <section id="g-apps" aria-labelledby="g-h-apps">
     <h2 id="g-h-apps">apps</h2>
     <p>Bazaar, the app store, installs apps from Flathub. They update on their own twice a day, except when the battery is low or the connection is metered.</p>
-    <p>A preinstalled app you remove comes back at the next restart, because Lucciola keeps its default set in place. To stop that, run <code>ujust lucciola-slim</code>: it lists what it removes, some of the larger apps included, and asks before doing anything. <code>ujust lucciola-slim-restore</code> undoes it.</p>
+    <p>A preinstalled app you remove stays removed: Lucciola remembers it and does not install it again. An app that leaves Lucciola’s default set stays on your PC. <code>ujust lucciola-slim</code> removes some of the larger apps in one go: it lists what it removes and asks before doing anything. <code>ujust lucciola-slim-restore</code> brings back the default apps you removed.</p>
     <p>For developer tools, use a Toolbox: a Fedora container with its own <code>dnf</code>, where you install anything without touching the system.</p>
     <div class="cmd"><pre>toolbox create</pre><button type="button">Copy</button></div>
     <div class="cmd"><pre>toolbox enter</pre><button type="button">Copy</button></div>
@@ -727,9 +732,12 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
     <p>Every update keeps the previous version. If something goes wrong after an update, restart, tap ↓ while the boot menu shows, and choose the second entry. To stay on that version, run:</p>
     <div class="cmd"><pre>sudo rpm-ostree rollback</pre><button type="button">Copy</button></div>
     <div class="cmd"><pre>systemctl reboot</pre><button type="button">Copy</button></div>
-    <p>To leave Lucciola, switch back to the system you had. For Fedora Silverblue, run:</p>
-    <div class="cmd"><pre>sudo rpm-ostree rebase ostree-unverified-registry:quay.io/fedora/fedora-silverblue:44</pre><button type="button">Copy</button></div>
-    <p>Your files, settings, and Flatpak apps stay. If your disk unlocks through the TPM, the PC asks for the passphrase once.</p>
+    <p>Going back a version changes the system only: your files, your settings, and the apps you added or removed meanwhile stay as they are.</p>
+    <p>To leave Lucciola, switch back to the system you came from, whose name you saved before switching:</p>
+    <div class="cmd"><pre>sudo rpm-ostree rebase "$(cat ~/lucciola-came-from.txt)"</pre><button type="button">Copy</button></div>
+    <div class="cmd"><pre>systemctl reboot</pre><button type="button">Copy</button></div>
+    <p>Without that file, write the name after <code>rebase</code> yourself: <code>ostree-unverified-registry:</code> followed by <code>quay.io/fedora/fedora-silverblue:45</code> for Silverblue, <code>quay.io/fedora/fedora-kinoite:45</code> for Kinoite, or <code>ghcr.io/ublue-os/bluefin:stable</code> for Bluefin. 45 is the Fedora release Lucciola is built on, so nothing goes backwards.</p>
+    <p>Your files and settings stay, and so do your Flatpak apps and their data. The apps Lucciola installed stay too, unless the system you return to keeps its own list of apps, as Bluefin does: then it may remove the ones not on that list. If your disk unlocks through the TPM, the PC asks for the passphrase once.</p>
   </section>
 
   <section id="g-kernel" aria-labelledby="g-h-kernel">
@@ -741,6 +749,16 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
     <p><code>ujust lucciola-kernel</code> shows which kernel you run, and <code>ujust lucciola-kernel cachyos</code> brings the CachyOS kernel back. Your files, settings, and apps stay either way.</p>
     <p class="note">If your disk unlocks through the TPM, the first start after a switch asks for the passphrase. Once it has started, run <code>ujust lucciola-tpm-unlock enable</code> and the TPM unlocks it again.</p>
     <p>On a processor without x86-64-v3, switch to Lucciola straight onto Fedora’s kernel: in step 2 of <a href="#g-install">switch to lucciola</a>, write <code>lucciola:fedora-kernel</code> in place of <code>lucciola:stable</code>. Fedora signs its own kernel, so it starts with Secure Boot on, and you can skip step 1.</p>
+    <p class="note">This version is published together with the first <code>:stable</code>, planned for 27 October 2026. Until then there is none to switch to, and <code>ujust lucciola-kernel fedora</code> changes nothing.</p>
+  </section>
+
+  <section id="g-finger" aria-labelledby="g-h-finger">
+    <h2 id="g-h-finger">fingerprint</h2>
+    <p>If your PC has a fingerprint reader, you can log in with a finger. First turn on fingerprint login for the system, then register a finger: touch the reader each time the terminal asks, until it says the finger is enrolled.</p>
+    <div class="cmd"><pre>sudo authselect enable-feature with-fingerprint</pre><button type="button">Copy</button></div>
+    <div class="cmd"><pre>fprintd-enroll</pre><button type="button">Copy</button></div>
+    <p><code>fprintd-verify</code> checks that the reader recognizes it. From the next login, the reader listens as soon as the login screen shows: touch it, or type your password. <code>sudo</code> accepts the finger too.</p>
+    <p class="note">To register another finger, add its name, such as <code>fprintd-enroll -f left-index-finger</code>. <code>sudo authselect disable-feature with-fingerprint</code> turns fingerprint login off again.</p>
   </section>
 
   <section id="g-unlock" aria-labelledby="g-h-unlock">
