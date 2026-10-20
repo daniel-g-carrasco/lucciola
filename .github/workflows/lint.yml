@@ -309,3 +309,18 @@ jobs:
         # lint.yml, build.yml and Renovate agree with it. See
         # tests/vm-test-gate.test.sh.
         run: bash tests/vm-test-gate.test.sh
+
+      - name: The secret-scope checker (fixtures)
+        # A secret on the wrong stage or without --network=none, a job off
+        # the allowlist, an action between staging and the build, a late
+        # wipe: each caught on fixtures. See tests/secret-scope.test.sh.
+        run: bash tests/secret-scope.test.sh
+
+      # Last on purpose: red until the mok-sign stage lands (pull request
+      # #30), and the verdicts above must stay readable meanwhile.
+      - name: Build secrets only where tests/policy allows
+        # The MOK key on the mok-sign stage's RUN alone, with no network;
+        # secrets.MOK_* and secrets.COSIGN* in the listed jobs alone, staged
+        # right before the build and wiped right after it, no action in
+        # between (review N1). See .github/scripts/check-secret-scope.py.
+        run: python3 .github/scripts/check-secret-scope.py

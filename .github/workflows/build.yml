@@ -361,22 +361,6 @@ jobs:
           echo "$RESOLVED" >> "$GITHUB_OUTPUT"
           echo "$RESOLVED"
 
-      - name: Stage MOK secrets for BuildKit
-        # Key + cert only. The enrollment PASSPHRASE is public by design
-        # (printed in the live-ISO dialog and the install docs) and is a
-        # constant in custom-kernel/install.sh since 2026-06-12 — the
-        # MOK_PASSWORD repo secret is no longer consumed and can be
-        # deleted from the repository settings.
-        env:
-          MOK_KEY:      ${{ secrets.MOK_KEY }}
-          MOK_CERT:     ${{ secrets.MOK_CERT }}
-        run: |
-          mkdir -p /tmp/margine-secrets
-          chmod 700 /tmp/margine-secrets
-          printf '%s' "$MOK_KEY"      > /tmp/margine-secrets/MOK.key
-          printf '%s' "$MOK_CERT"     > /tmp/margine-secrets/MOK.pem
-          chmod 600 /tmp/margine-secrets/*
-
       - name: Get current date
         id: date
         run: |
@@ -413,6 +397,27 @@ jobs:
             org.opencontainers.image.base.name=${{ steps.base.outputs.name }}
           sep-tags: " "
           sep-annotations: " "
+
+      - name: Stage MOK secrets for BuildKit
+        # Key + cert only. The enrollment PASSPHRASE is public by design
+        # (printed in the live-ISO dialog and the install docs) and is a
+        # constant in custom-kernel/install.sh since 2026-06-12 — the
+        # MOK_PASSWORD repo secret is no longer consumed and can be
+        # deleted from the repository settings.
+        # Right before the build and wiped right after it (2026-10-20,
+        # second review): staged earlier, the key sat on the runner's disk
+        # while third-party actions (metadata, uploads, syft) ran, and until
+        # the last step of the job. tests/policy/secret-jobs.txt and
+        # .github/scripts/check-secret-scope.py keep the three steps together.
+        env:
+          MOK_KEY:      ${{ secrets.MOK_KEY }}
+          MOK_CERT:     ${{ secrets.MOK_CERT }}
+        run: |
+          mkdir -p /tmp/margine-secrets
+          chmod 700 /tmp/margine-secrets
+          printf '%s' "$MOK_KEY"      > /tmp/margine-secrets/MOK.key
+          printf '%s' "$MOK_CERT"     > /tmp/margine-secrets/MOK.pem
+          chmod 600 /tmp/margine-secrets/*
 
       - name: Build image (kernel signing via BuildKit secrets)
         # Direct `sudo buildah build` shell call instead of the
@@ -469,6 +474,10 @@ jobs:
           # the rechunk step will find it. The action used to do this
           # implicitly; doing it explicitly keeps the contract obvious.
           sudo buildah images "${IMG}:${{ steps.metadata.outputs.version }}"
+
+      - name: Wipe staged secrets
+        if: always()
+        run: rm -rf /tmp/margine-secrets
 
       # NOTE: no "Move to root storage" step here — `sudo buildah build`
       # above already writes to /var/lib/containers (root storage),
@@ -941,10 +950,6 @@ jobs:
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "image_ref=${IMG_FULL}@${DIGEST}" >> "$GITHUB_OUTPUT"
           echo "Pushed manifest: ${IMG_FULL}@${DIGEST}"
-
-      - name: Wipe staged secrets
-        if: always()
-        run: rm -rf /tmp/margine-secrets
 
   sign:
     name: Cosign sign (by digest) + SBOM attach + sign

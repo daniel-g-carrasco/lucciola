@@ -28,6 +28,19 @@ stable release is cut.
   the label is missing; adding the label re-runs it and makes `build.yml`
   build `:pr-N`. Renovate adds the label to the same paths. Meant to be a
   required check (see `tools/repo-guard.sh`). `tests/vm-test-gate.test.sh`.
+- **Where the signing secrets may appear is written down and checked.**
+  `tests/policy/secret-stages.txt` names the Containerfile stage whose RUN
+  may mount a build secret (`mok-sign`, with `--network=none`; the final
+  stage never may) and `tests/policy/secret-jobs.txt` the workflow jobs
+  that may name `secrets.MOK_*` and `secrets.COSIGN*`; lint fails on a
+  secret anywhere else, on a stale entry, on a secret outside a step's
+  `env:`, and unless the step that stages the MOK key to disk is followed
+  at once by the build and then by the wipe, with no action in between
+  (`.github/scripts/check-secret-scope.py`). `build.yml` now stages the
+  key right before `buildah build` and wipes it right after, instead of
+  before the metadata action and at the end of the job. The Containerfile
+  part is red until the signing stage (pull request #30) is in main: that
+  is the state of the tree. `tests/secret-scope.test.sh`.
 
 ### Removed (2026-10-20, developer tools)
 - **Margine's ISO tooling is archived.** `live-env/` (the Titanoboa live
