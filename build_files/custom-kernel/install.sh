@@ -1,9 +1,16 @@
 #!/bin/bash
 #
 # Install the CachyOS kernel from COPR (bieszczaders/kernel-cachyos),
-# sign the vmlinuz and modules with the Margine MOK, build v4l2loopback
-# against it, and create a one-shot systemd unit that imports the MOK
-# certificate on first boot.
+# build v4l2loopback against it, list what the Margine MOK must sign, and
+# create the systemd unit that has shim enroll the MOK certificate.
+#
+# No signing here (review N1, 2026-10-20). This step installs packages from
+# COPR and RPM Fusion, runs their scriptlets as root and is followed by
+# build.sh in the same RUN, so the private key does not belong in it. It
+# writes /usr/share/margine/mok-sign.list instead: the Containerfile's
+# mok-sign stage (mok-sign.sh, the only place the key is mounted) signs the
+# files it names, and finalize.sh puts the signed bytes in place in the last
+# RUN, after checking they were signed from exactly these files.
 #
 # Inspired by Origami Linux's modules/custom-kernel/custom-kernel.sh
 # (https://gitlab.com/origami-linux/images), simplified for Margine:
@@ -11,21 +18,19 @@
 #     (Margine's :lts flavour, issue #382, and its :nvidia variant, ADR
 #     0009, were not carried over to Lucciola)
 #   - signing is mandatory: this image is meant to boot under Secure Boot
+#     (mok-sign.sh and finalize.sh, see above)
 #
 # KERNEL_FLAVOR (build argument, 2026-10-18) picks the kernel:
 #   cachyos  (default) the above: :stable, :candidate, every PR image
 #   fedora   the kernel reserve: the base's own Fedora kernel stays, signed
 #            by Fedora and built for any x86-64 CPU. No kernel COPR, no
 #            swap, vmlinuz and Fedora's modules untouched; only what this
-#            build compiles (v4l2loopback) is signed with the MOK. Every
+#            build compiles (v4l2loopback) is listed for the MOK. Every
 #            other step below runs the same for both. Published as
 #            :fedora-kernel by build-fedora-kernel.yml.
 #
-# Inputs (BuildKit secrets):
-#   /run/margine-certs/MOK.key        — RSA private key (PEM)
-#   /run/margine-certs/MOK.pem        — X509 certificate (PEM)
-# (The mokutil enrollment passphrase is public by design and lives as
-#  a constant below — see the MOK_PASSWORD comment.)
+# Inputs: none secret. (The mokutil enrollment passphrase is public by
+# design and lives as a constant below, see the MOK_PASSWORD comment.)
 #
 set -euo pipefail
 
@@ -36,16 +41,11 @@ set -euo pipefail
 log() { printf '[custom-kernel] %s\n' "$*"; }
 err() { printf '[custom-kernel] ERROR: %s\n' "$*" >&2; }
 
-# NOT under /tmp: the same RUN mounts a tmpfs on /tmp, and with
-# --layers=false buildah orders that mount after the secrets, so a
-# secret at /tmp/certs is masked by the empty tmpfs and the build dies
-# with "Missing secret" (2026-08-18).
-SIGNING_KEY="/run/margine-certs/MOK.key"
-SIGNING_CERT="/run/margine-certs/MOK.pem"
+refuse_signing_key
 
-for f in "$SIGNING_KEY" "$SIGNING_CERT"; do
-  [[ -f "$f" ]] || { err "Missing secret: $f"; exit 1; }
-done
+# What the mok-sign stage reads (header lines, then one sign=<path> per
+# file, paths relative to /usr/lib/modules); finalize.sh removes it.
+SIGN_LIST=/usr/share/margine/mok-sign.list
 
 # --- Third-party signing keys: pin the fingerprints ----------------------
 # This build bootstraps third-party repos from a URL, RPMFusion for one (a
@@ -101,18 +101,6 @@ NEGATIVO17_FPR="0C5D0F470484AE2FC40A9B6597F3008993E8909B"
 # against typability. ublue-os reached the same conclusion:
 # "universalblue", letters only.
 MOK_PASSWORD="margine"
-
-# Validate that key and cert match.
-openssl pkey -in "$SIGNING_KEY"  -noout >/dev/null \
-  || { err "MOK.key is not a valid private key"; exit 1; }
-openssl x509 -in "$SIGNING_CERT" -noout >/dev/null \
-  || { err "MOK.pem is not a valid X509 cert"; exit 1; }
-_tmp1=$(mktemp); _tmp2=$(mktemp)
-openssl pkey -in "$SIGNING_KEY"  -pubout        >"$_tmp1"
-openssl x509 -in "$SIGNING_CERT" -pubkey -noout >"$_tmp2"
-cmp -s "$_tmp1" "$_tmp2" \
-  || { rm -f "$_tmp1" "$_tmp2"; err "MOK.key and MOK.pem don't match"; exit 1; }
-rm -f "$_tmp1" "$_tmp2"
 
 COPR_REPO="bieszczaders/kernel-cachyos"
 # COPR signing keys, pinned by fingerprint like RPMFusion and negativo17. Read
@@ -174,10 +162,13 @@ case "$KERNEL_FLAVOR" in
 esac
 log "Kernel flavour: $KERNEL_FLAVOR"
 # TRANSIENT packages are installed for build time only and removed at the end.
-# sbsigntools provides sbsign/sbverify; akmods is needed for v4l2loopback (best-effort).
-TRANSIENT=(akmods sbsigntools "$KERNEL_DEVEL_PKG")
+# akmods is needed for v4l2loopback (best-effort).
+TRANSIENT=(akmods "$KERNEL_DEVEL_PKG")
 
-# Install the signing tools up-front so they're available when we sign vmlinuz.
+# sbsigntools: sbverify checks Fedora's signature on the reserve's vmlinuz
+# below, and finalize.sh checks the MOK signature on the signed one with it
+# (the clean base the mok-sign stage runs on has no sbverify). Build-time
+# only: finalize.sh removes it once it has checked.
 log "Installing sbsigntools (build-time only)"
 dnf -y install sbsigntools
 
@@ -230,84 +221,6 @@ restore_akmodsbuild() {
     && mv -f /usr/sbin/akmodsbuild.backup /usr/sbin/akmodsbuild
 }
 
-sign_kernel() {
-  _vmlinuz="/usr/lib/modules/${KERNEL_VERSION}/vmlinuz"
-  [[ -f "$_vmlinuz" ]] || { err "vmlinuz not found at $_vmlinuz"; return 1; }
-  _tmp=$(mktemp)
-  # systemd-sbsign, not sbsign (2026-10-03). sbsign stamps the signature
-  # with the wall clock (PKCS#7 signingTime) and has no way to fix it, so
-  # vmlinuz changed on every build and every update re-downloaded the
-  # whole kernel layer (219 MiB, with kernel-devel) for one attribute:
-  # measured on candidate.20261003 vs pr-439, the only differing file in
-  # that layer, with all 34665 others identical. systemd-sbsign (shipped
-  # in the base's systemd) takes SOURCE_DATE_EPOCH for that attribute;
-  # pinned to the kernel package's build time, the same kernel and key
-  # give the same bytes. Checked against sbsign on this vmlinuz: same
-  # signed attributes, same Authenticode digest, identical image bytes
-  # outside the certificate table, and sbverify accepts both.
-  _sign_epoch=$(rpm -qf --qf '%{BUILDTIME}\n' "$_vmlinuz" | head -n1)
-  [[ "$_sign_epoch" =~ ^[0-9]+$ ]] || { err "no build time for the package owning $_vmlinuz"; return 1; }
-  SOURCE_DATE_EPOCH="$_sign_epoch" /usr/lib/systemd/systemd-sbsign sign \
-    --private-key "$SIGNING_KEY" --certificate "$SIGNING_CERT" \
-    --output "$_tmp" "$_vmlinuz"
-  sbverify --cert "$SIGNING_CERT" "$_tmp" \
-    || { rm -f "$_tmp"; err "sbverify failed on signed kernel"; return 1; }
-  cp "$_tmp" "$_vmlinuz"
-  chmod 0644 "$_vmlinuz"
-  rm -f "$_tmp"
-  # Stamp for the end-of-script integrity check (back-ported from the
-  # Origami reference script): if any later step — akmods, dracut,
-  # cleanup — rewrites vmlinuz after signing, the build must fail
-  # rather than ship an unsigned kernel that Secure Boot rejects.
-  sha256sum "$_vmlinuz" > /tmp/vmlinuz.sha
-}
-
-sign_kernel_modules() {
-  _module_root="/usr/lib/modules/${KERNEL_VERSION}"
-  find "$_module_root" -type f \( \
-      -name "*.ko" -o -name "*.ko.xz" -o -name "*.ko.zst" -o -name "*.ko.gz" \
-    \) | sign_module_files
-}
-
-# Sign the module files named on stdin (one path per line) with the MOK.
-# The CachyOS flavour feeds it every module of the kernel; the Fedora
-# flavour only what this build compiled, because Fedora's own modules
-# carry Fedora's signature, which the kernel trusts without the MOK:
-# signing them again would make every module depend on an enrolled MOK.
-# xz with CRC32 and a 1 MiB dictionary, as the kernel's own module install
-# does (scripts/Makefile.modinst): with CONFIG_MODULE_DECOMPRESS (Fedora's
-# kernel) kmod hands the .ko.xz to the kernel, whose xz decoder checks
-# CRC32 only, and xz's default (CRC64) would not load.
-sign_module_files() {
-  _sign_file="/usr/lib/modules/${KERNEL_VERSION}/build/scripts/sign-file"
-  [[ -x "$_sign_file" ]] || { err "sign-file missing: $_sign_file"; return 1; }
-  while IFS= read -r _mod; do
-    case "$_mod" in
-      *.ko)
-        "$_sign_file" sha256 "$SIGNING_KEY" "$SIGNING_CERT" "$_mod" ;;
-      *.ko.xz)
-        _raw="${_mod%.xz}"
-        xz -d -q "$_mod"
-        "$_sign_file" sha256 "$SIGNING_KEY" "$SIGNING_CERT" "$_raw"
-        xz -z -q --check=crc32 --lzma2=dict=1MiB "$_raw" ;;
-      *.ko.zst)
-        _raw="${_mod%.zst}"
-        zstd -d -q --rm "$_mod"
-        "$_sign_file" sha256 "$SIGNING_KEY" "$SIGNING_CERT" "$_raw"
-        # --rm: unlike xz and gzip, zstd keeps its input. Without it every
-        # CachyOS module shipped twice, the signed .ko.zst that modules.dep
-        # names and an uncompressed .ko nothing loads: 6491 files, 686 MiB
-        # on 7.2.9-cachyos1 (counted on an installed system, 2026-10-18).
-        zstd -q --rm "$_raw" ;;
-      *.ko.gz)
-        _raw="${_mod%.gz}"
-        gunzip -q "$_mod"
-        "$_sign_file" sha256 "$SIGNING_KEY" "$SIGNING_CERT" "$_raw"
-        gzip -q "$_raw" ;;
-    esac
-  done
-}
-
 # install_fedora_kernel_devel <kver>
 # akmods, with kernel-devel of exactly the base's kernel to build
 # v4l2loopback against. Two traps, both met on the first try (2026-10-18):
@@ -353,12 +266,11 @@ install_fedora_kernel_devel() {
   rm -rf "$dir"
 }
 
+# The unit only: /usr/share/cert/MOK.der, the certificate it enrolls, comes
+# from the mok-sign stage and finalize.sh installs it.
 create_mok_enroll_unit() {
   _mok_cert="/usr/share/cert/MOK.der"
   _unit_file="/usr/lib/systemd/system/mok-enroll.service"
-  mkdir -p "$(dirname "$_mok_cert")"
-  openssl x509 -in "$SIGNING_CERT" -outform DER -out "$_mok_cert"
-  chmod 0644 "$_mok_cert"
   mkdir -p "$(dirname "$_unit_file")"
   # The logic lives in /usr/libexec/margine/mok-enroll (system_files,
   # copied into the rootfs later by 10-os-identity, so read here from
@@ -481,7 +393,7 @@ else
     # No akmods then, so no v4l2loopback (best-effort, as below), and
     # nothing of it to remove at the end.
     KDEVEL_OK=0
-    TRANSIENT=(sbsigntools)
+    TRANSIENT=()
   fi
 
   # Same as the CachyOS flavour: the base's COPR repo files leave the
@@ -755,45 +667,56 @@ if (( _n686 > 0 )); then
 fi
 
 # ---------------------------------------------------------------------------
-# Signing
+# What the MOK signs (the mok-sign stage does it, see the header)
 # ---------------------------------------------------------------------------
-# Signing rewrites a module, so it would carry the build time, and the
-# modules' layers (and the initramfs that packs them) changed on every build
-# with identical bytes inside. Back to the kernel package's build time, the
-# same clock vmlinuz is signed with.
+# Two clocks, as when this step signed: systemd-sbsign stamps vmlinuz's
+# signature with SOURCE_DATE_EPOCH (sbsign_epoch, the build time of the
+# package that owns vmlinuz), and finalize.sh sets the signed files' mtimes
+# to the kernel package's build time (mtime_epoch). Signing rewrites a
+# module, so without them the modules' layers (and the initramfs that packs
+# them) would change on every build with identical bytes inside.
+_vmlinuz="/usr/lib/modules/${KERNEL_VERSION}/vmlinuz"
+[[ -f "$_vmlinuz" ]] || { err "vmlinuz not found at $_vmlinuz"; exit 1; }
+_sign_epoch=$(rpm -qf --qf '%{BUILDTIME}\n' "$_vmlinuz" | head -n1)
+[[ "$_sign_epoch" =~ ^[0-9]+$ ]] || { err "no build time for the package owning $_vmlinuz"; exit 1; }
 _mod_epoch=$(rpm -q --qf '%{BUILDTIME}\n' "$KERNEL_PKG" | head -n1)
 [[ "$_mod_epoch" =~ ^[0-9]+$ ]] || { err "no build time for $KERNEL_PKG"; exit 1; }
 if [[ "$KERNEL_FLAVOR" == cachyos ]]; then
-  log "Signing kernel image with MOK"
-  sign_kernel
-
-  log "Signing kernel modules with MOK"
-  sign_kernel_modules
-  find "/usr/lib/modules/${KERNEL_VERSION}" -type f \( -name '*.ko' -o -name '*.ko.*' \) \
-    -exec touch -h -d "@${_mod_epoch}" {} +
-  touch -h -d "@${_mod_epoch}" "/usr/lib/modules/${KERNEL_VERSION}/vmlinuz"
+  # vmlinuz and every module of the kernel.
+  _to_sign=("$_vmlinuz")
+  mapfile -t -O 1 _to_sign < <(find "/usr/lib/modules/${KERNEL_VERSION}" -type f \( \
+      -name "*.ko" -o -name "*.ko.xz" -o -name "*.ko.zst" -o -name "*.ko.gz" \) | LC_ALL=C sort)
+  log "For the MOK: vmlinuz and $(( ${#_to_sign[@]} - 1 )) modules of $KERNEL_VERSION"
 else
   # vmlinuz and Fedora's modules stay as Fedora signed them. Only the
   # modules this build compiled (the kmod-* packages akmods installed for
   # this kernel) get the MOK signature: the kernel accepts them once the
   # MOK is enrolled (CONFIG_INTEGRITY_MACHINE_KEYRING=y in Fedora's
   # config), and refuses only them, not the system, when it is not.
+  # Fedora's own modules are not signed again: that would make every
+  # module depend on an enrolled MOK.
   log "Fedora's vmlinuz and modules keep Fedora's signature"
-  sha256sum "/usr/lib/modules/${KERNEL_VERSION}/vmlinuz" > /tmp/vmlinuz.sha
-  mapfile -t _own < <(rpm -qa --qf '%{NAME}\n' 'kmod-*' | sort -u \
+  mapfile -t _to_sign < <(rpm -qa --qf '%{NAME}\n' 'kmod-*' | sort -u \
                        | xargs -r rpm -ql 2>/dev/null \
-                       | grep -E "^(/usr)?/lib/modules/${KERNEL_VERSION//./\\.}/.*\\.ko(\\.(xz|zst|gz))?\$" || true)
-  if (( ${#_own[@]} )); then
-    log "Signing the modules built here with MOK: ${_own[*]}"
-    printf '%s\n' "${_own[@]}" | sign_module_files
-    for _m in "${_own[@]}"; do
-      touch -h -d "@${_mod_epoch}" "$_m"
-      log "  $(basename "$_m"): signer $(modinfo -F signer "$_m" 2>/dev/null || echo '?')"
-    done
+                       | grep -E "^(/usr)?/lib/modules/${KERNEL_VERSION//./\\.}/.*\\.ko(\\.(xz|zst|gz))?\$" | LC_ALL=C sort -u || true)
+  if (( ${#_to_sign[@]} )); then
+    log "For the MOK: the modules built here: ${_to_sign[*]}"
   else
-    log "No module was built here: nothing to sign with MOK"
+    log "No module was built here: nothing for the MOK to sign"
   fi
 fi
+install -d -m0755 "$(dirname "$SIGN_LIST")"
+{
+  echo "# Files for the Margine MOK: read by the mok-sign stage, removed by finalize.sh"
+  echo "flavor=$KERNEL_FLAVOR"
+  echo "kver=$KERNEL_VERSION"
+  echo "sbsign_epoch=$_sign_epoch"
+  echo "mtime_epoch=$_mod_epoch"
+  for _f in "${_to_sign[@]}"; do
+    _f="$(realpath -m "$_f")"
+    echo "sign=${_f#/usr/lib/modules/}"
+  done
+} > "$SIGN_LIST"
 
 log "Creating MOK enroll unit for first-boot import"
 create_mok_enroll_unit
@@ -805,7 +728,7 @@ log "Removing transient build-only packages: ${TRANSIENT[*]}"
 dnf -y remove "${TRANSIENT[@]}" || true
 
 # Drop a dracut config to disable host-only mode for every subsequent
-# dracut invocation in this image (50-branding's, the build's only one,
+# dracut invocation in this image (finalize.sh's, the build's only one,
 # and any user-triggered `rpm-ostree initramfs` post-install). Without
 # this, dracut runs in the build container — where there's no LUKS,
 # no btrfs root, no virtio-net — and bakes an initramfs that boots only
@@ -832,12 +755,13 @@ CONF
 # resize (margine.script refresh_callback). On bare metal the real GPU driver
 # (e.g. amdgpu) is already in the generic set. So: no virtio_gpu drop-in.
 
-# The initramfs is generated ONCE per build, by 50-branding, right after the
-# Plymouth theme is set (2026-10-18). Until then it was also generated here,
-# and every build ran dracut twice over the same kernel: this copy was
-# always overwritten by the second one, which is the one that carries the
-# Margine boot splash. Nothing between here and 50-branding needs an
-# initramfs. 50-branding writes it where bootc/ostree expect it,
+# The initramfs is generated ONCE per build (2026-10-18), since 2026-10-20
+# by finalize.sh in the last RUN: it packs modules, so it must be written
+# after the MOK-signed ones are in place, and 50-branding, which wrote it
+# until then, runs before the mok-sign stage. Until 2026-10-18 it was also
+# generated here, and every build ran dracut twice over the same kernel.
+# Nothing between here and finalize.sh needs an initramfs. finalize.sh
+# writes it where bootc/ostree expect it,
 # /usr/lib/modules/<KVER>/initramfs.img, with regenerate_initramfs
 # (00-common.sh): generic (the drop-in above), --add ostree, zstd, and
 # byte-reproducible; and fails the build when a kernel ends up without one.
@@ -868,15 +792,11 @@ ROOT_HOME="$(realpath -m /root)"
 mkdir -p "$ROOT_HOME"
 chmod 700 "$ROOT_HOME"
 
-# Final integrity check (Origami pattern): vmlinuz must still be the
-# exact bytes sign_kernel produced (on the Fedora flavour, the bytes Fedora
-# signed): a post-signing rewrite would ship a kernel Secure Boot rejects
-# with the cryptic "bad shim signature".
-sha256sum -c /tmp/vmlinuz.sha >/dev/null \
-  || { err "vmlinuz was modified AFTER signing — refusing to ship"; exit 1; }
-# Kept for 50-branding (same RUN, same /tmp): it checks again after the
-# build's dracut run, then deletes it.
-log "vmlinuz signature integrity verified at the end of the kernel step"
+# The bytes of vmlinuz at the end of the kernel step (the reserve's are
+# Fedora's signed ones): finalize.sh refuses an image whose vmlinuz changed
+# after this point other than by the MOK signature, which would ship a
+# kernel Secure Boot rejects with the cryptic "bad shim signature".
+echo "vmlinuz_sha256=$(sha256sum "$_vmlinuz" | cut -d' ' -f1)" >> "$SIGN_LIST"
 
 # The Fedora flavour ships the base's kernel and nothing else: if any step
 # above changed it (an upgrade pulled in by a dependency, as akmods once

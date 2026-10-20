@@ -175,8 +175,16 @@
     {
       // scrcpy (Phone Camera engine), pinned release tarball in
       // 70-phone-cam. Same sha-companion pattern: renovate bumps
-      // SCRCPY_VERSION, .github/workflows/scrcpy-pin-sha.yml recomputes
-      // SCRCPY_SHA256 on the branch.
+      // SCRCPY_VERSION, .github/workflows/scrcpy-pin-sha.yml sets
+      // SCRCPY_SHA256 on the branch. Since 2026-10-20 (review N2) that hash
+      // is upstream's: read from the release's SHA256SUMS.txt once its
+      // OpenPGP signature checks out against the maintainer's key pinned in
+      // .github/keys, and build.yml's pins job checks it again on the PR
+      // with main's copy of the verifier. A release without signed sums,
+      // or signed by another key, turns the PR red, so automerge (which
+      // waits for every check) stays off it until someone has looked. And
+      // the build that runs the new binary no longer has the MOK key in
+      // reach (review N1): only the mok-sign stage mounts it.
       customType: 'regex',
       managerFilePatterns: ['/build_files/70-phone-cam/install\\.sh$/'],
       matchStrings: ['SCRCPY_VERSION=(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)'],

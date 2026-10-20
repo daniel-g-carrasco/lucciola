@@ -1,3 +1,3 @@
-run/systemd
-run/systemd/resolve
-run/systemd/resolve/stub-resolv.conf
+# Empty since 2026-10-20 (review N3): the scan reads the chunked image, and
+# the chunker prunes /run, where the only residue (buildah's resolv.conf mount
+# point) was.
