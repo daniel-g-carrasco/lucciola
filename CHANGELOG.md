@@ -7,6 +7,11 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (terminal)
+- **A new terminal opens in the home folder.** Ptyxis no longer restores the
+  last session by default, which reopened terminals in the folder the last
+  one was closed in. It can be turned back on in Ptyxis' preferences.
+
 ### Fixed (2026-10-19, build)
 - **Builds stopped on `/etc/machine-id`.** Since this morning something in
   the build writes a machine id into the image (the base ships the file
