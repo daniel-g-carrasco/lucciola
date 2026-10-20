@@ -160,6 +160,9 @@ jobs:
         # alone (other images, no policy, failed verification) is tested.
         run: bash tests/signed-origin.test.sh
 
+      - name: User-session staleness check
+        run: bash tests/staleness.test.sh
+
       - name: Kernel switch helper (CachyOS kernel and Fedora's)
         # Moves an install between :stable and the kernel reserve: what it
         # refuses (no x86-64-v3, Secure Boot without the key, other images,

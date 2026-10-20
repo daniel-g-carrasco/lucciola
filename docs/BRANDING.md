@@ -367,6 +367,14 @@ starts when the greeter cannot come up, and keeps the dconf branding above).
   password prompt after a fingerprint prompt), "Wrong password, try again,
   or use the fingerprint" (after a failed attempt). The status line is one
   line wide as the card: keep them short. Upstream candidate.
+- **Bare password prompt**: `lucciola/greeter/0004-quiet-bare-password-prompt.patch`
+  (`isGenericPasswordPrompt` in `src/greeter/greeter_surface.cpp`). PAM's
+  generic secret prompt (Linux-PAM's "Password: ", any case, or one of its
+  translations in Linux-PAM 1.7's catalogs) is not written on the status
+  line, since the field's placeholder says "Type password": the line keeps
+  a PAM message of the same conversation, otherwise it is cleared. Other
+  prompts ("Verification code:", "Password for ...:") and 0002's texts
+  still show. Upstream candidate, with 0002.
 - **Session name**: the greeter lists sessions by the `.desktop` file's
   `Name=`, so the seeded `last` must stay equal to `Name=Lucciola` in
   `lucciola.desktop` (lucciola/build.sh 5d checks it).
