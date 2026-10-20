@@ -7,6 +7,18 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-20, layering)
+- **An outage of Cisco's openh264 mirror no longer fails `rpm-ostree
+  install`.** rpm-ostree fetches the metadata of every enabled repository
+  before it layers anything and ignores `skip_if_unavailable`; on
+  2026-10-20 Cisco's mirror was down for over ten minutes and every
+  layering failed, in the upgrade test as on installed systems. The image
+  now ships `fedora-cisco-openh264` disabled: its openh264 comes from
+  negativo17 and updates with the image, nothing is layered from Cisco.
+  `validate-margine-system` checks it (9f). The upgrade test also makes
+  three attempts at layering, 45 seconds apart, for the older images it
+  starts from, which still have the repository on.
+
 ### Fixed (2026-10-20, lint)
 - **The MOK signer test runs whole on the lint runner.** The runner has no
   `systemd-sbsign` and keeps its kernel image root-only, so the test put
