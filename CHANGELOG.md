@@ -83,6 +83,17 @@ stable release is cut.
   `tests/policy/strict-mode-allowlist.txt`, and an entry without a reason,
   for a missing file or for a script that is strict after all fails. One
   test had `set -u` alone and is strict now. `tests/strict-mode.test.sh`.
+- **Branch protection as code.** `tools/repo-guard.sh` (`just repo-guard`)
+  holds the protection `main` should have: the always-running lint jobs
+  (`lint`, `flatpak-preinstall`, `build-inputs-need-vm-test`, `policy`)
+  as required checks on an up-to-date branch, a pull request with no
+  approval needed, conversations resolved, admins included, no force-push,
+  no deletion. `check` prints the drift and `apply` sets it after a typed
+  yes; neither has been run: `main` is unprotected today. A weekly
+  workflow (`repo-guard.yml`) reads the public `protected` field and
+  notifies when it is false. Only jobs that run on every pull request may
+  be required: one that does not run blocks the merge forever (the pitfall
+  is written in the script). `tests/repo-guard.test.sh`.
 
 ### Removed (2026-10-20, developer tools)
 - **Margine's ISO tooling is archived.** `live-env/` (the Titanoboa live

@@ -321,6 +321,12 @@ jobs:
         # is run by lint.yml or mutation.yml. See .github/scripts/check-claims.py.
         run: python3 .github/scripts/check-claims.py
 
+      - name: Branch protection as code (fixtures)
+        # tools/repo-guard.sh against recorded states, apply through a fake
+        # gh, and its required checks equal to this workflow's always-running
+        # jobs. See tests/repo-guard.test.sh.
+        run: bash tests/repo-guard.test.sh
+
       - name: The strict-mode lint (fixtures)
         # Which `set` forms count, which do not, and the allowlist's own
         # rules (a reason, an existing file, a script still not strict).

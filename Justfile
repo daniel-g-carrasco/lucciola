@@ -338,3 +338,8 @@ mutate *args:
     set -euo pipefail
     # The system python first: a virtualenv's has no PyYAML.
     PATH="/usr/bin:/bin:$PATH" python3 .github/scripts/mutation-check.py {{ args }}
+
+# Compare main's branch protection with the policy in tools/repo-guard.sh (`just repo-guard apply` sets it, after a typed yes)
+[group('Checks')]
+repo-guard mode="check":
+    tools/repo-guard.sh {{ mode }}
