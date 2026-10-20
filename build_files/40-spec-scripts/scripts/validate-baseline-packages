@@ -72,6 +72,8 @@ for L in lists:
 PY
 )"
 
+# A missing or empty list is an error, not "every package found".
+[[ -n "$packages" ]] || { echo "no package under host_packages.baseline in $yaml" >&2; exit 1; }
 count="$(printf '%s\n' "$packages" | wc -l)"
 printf '== Validating %d packages against %s + RPMFusion ==\n' "$count" "$image"
 
@@ -82,7 +84,7 @@ fi
 # Run dnf inside the container with both RPMFusion repos enabled.
 # Pass the package list via env var to avoid quoting complexity.
 result="$(podman run --rm -e PKG_LIST="$packages" "$image" bash -c '
-  set -e
+  set -euo pipefail
   dnf install -y --quiet \
     https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm \
     https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm >/dev/null 2>&1
@@ -100,6 +102,14 @@ ok_count="$(printf '%s\n' "$result" | grep -c '^OK ' || true)"
 miss_count="$(printf '%s\n' "$result" | grep -c '^MISS ' || true)"
 
 printf '%s\n' "$result" | sort
+
+# Every package must have a verdict: a run that stopped half-way (or never
+# got to the loop) is not a pass.
+if (( ok_count + miss_count != count )); then
+  printf '\n%d of %d packages got a verdict: the check did not complete.\n' \
+    "$(( ok_count + miss_count ))" "$count" >&2
+  exit 1
+fi
 
 printf '\n== Summary ==\n'
 printf 'OK:    %d\n' "$ok_count"
@@ -142,12 +152,13 @@ PY
 
 printf '  override_remove: %s\n' "$override_remove_pkgs"
 printf '  install:         %s\n' "$install_pkgs"
+[[ -n "$install_pkgs" ]] || { echo "no codec_replacement.install list in $yaml" >&2; exit 1; }
 
 resolution="$(podman run --rm \
   -e INSTALL_PKGS="$install_pkgs" \
   -e REMOVE_PKGS="$override_remove_pkgs" \
   "$image" bash -c '
-    set -e
+    set -euo pipefail
     # Simulate Silverblue stock: install ffmpeg-free (drags in all its split
     # libav*-free / libsw*-free subpackages) and core Mesa packages.
     dnf install -y --quiet ffmpeg-free mesa-vulkan-drivers mesa-dri-drivers \
@@ -159,7 +170,12 @@ resolution="$(podman run --rm \
     # Remove (override_remove equivalent) then install — no --allowerasing
     # so we get the same depsolve behaviour as rpm-ostree
     dnf remove -y --quiet $REMOVE_PKGS >/dev/null 2>&1 || true
-    if dnf install -y --setopt=tsflags=test $INSTALL_PKGS 2>&1 | tail -5; then
+    # The verdict is the exit status of dnf, not of tail: the output is
+    # captured first and only its end printed (review R6, 2026-10-20).
+    rc=0
+    out="$(dnf install -y --setopt=tsflags=test $INSTALL_PKGS 2>&1)" || rc=$?
+    printf "%s\n" "$out" | tail -5
+    if [ "$rc" = 0 ]; then
       echo "RESOLUTION_OK"
     else
       echo "RESOLUTION_FAIL"

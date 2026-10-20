@@ -131,6 +131,9 @@ sudo rpm-ostree rebase ostree-unverified-registry:ghcr.io/daniel-g-carrasco/lucc
 systemctl reboot
 ```
 
+The first `:stable` comes out with Fedora 45, planned for 27 October 2026;
+until then, write `:candidate` (the test build) in its place.
+
 The transport is unverified because the policy on a `margine:lucciola`
 install knows only the Margine repository; the new deployment brings the
 scope for this one, and `margine-signed-origin.service` moves it to the

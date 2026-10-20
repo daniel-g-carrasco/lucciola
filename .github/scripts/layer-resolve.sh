@@ -71,13 +71,14 @@ if (( ${#pkgs[@]} == 0 )); then
 fi
 
 # The repository the layer needs, set up by the image itself. A refused
-# key is a failure (the recipe would refuse too); a download that does not
-# happen is no verdict, like an unreachable Fedora mirror.
+# key or repository file is a failure (the recipe would refuse too; layer-repo
+# says "refusing"); a download that does not happen is no verdict, like an
+# unreachable Fedora mirror.
 if [[ -n "$SETUP" ]]; then
   if ! out="$($SETUP 2>&1)"; then
     echo "$out" | tail -n 10
-    if grep -q "fingerprint mismatch" <<<"$out"; then
-      echo "$MARK: FAIL $SETUP refused the repository signing key: $RECIPE cannot run"; exit 1
+    if grep -q "refusing" <<<"$out"; then
+      echo "$MARK: FAIL $SETUP refused the repository signing key or file: $RECIPE cannot run"; exit 1
     fi
     echo "$MARK: UNKNOWN $SETUP could not set up the repository (network?)"; exit 2
   fi

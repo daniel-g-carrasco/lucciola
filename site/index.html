@@ -576,6 +576,7 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
       <div class="term-head"><span>terminal</span><button type="button" id="copy">Copy</button></div>
       <div class="term-body">
         <pre id="cmd"><span class="prompt">$</span> sudo rpm-ostree rebase ostree-unverified-registry:ghcr.io/daniel-g-carrasco/lucciola:stable</pre>
+        <p class="comment"># :stable starts with Fedora 45, planned for 27 October 2026. Until then, write <code>:candidate</code>, the test build.</p>
         <p class="comment"># Restart, then choose Lucciola at login.</p>
         <p class="comment"># Updates arrive on their own, signature-checked.</p>
         <p class="comment"># Choose the previous version in the boot menu.</p>
@@ -650,6 +651,7 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
         <p>This command downloads Lucciola next to your current system, which stays as it is until you restart.</p>
         <div class="cmd"><pre>sudo rpm-ostree rebase ostree-unverified-registry:ghcr.io/daniel-g-carrasco/lucciola:stable</pre><button type="button">Copy</button></div>
         <div class="cmd"><pre>systemctl reboot</pre><button type="button">Copy</button></div>
+        <p class="note">The first <code>:stable</code> comes out with Fedora 45, planned for 27 October 2026; until it exists, the command stops with “manifest unknown”. To try Lucciola before then, write <code>lucciola:candidate</code>, the test build, and run the same command with <code>:stable</code> once it is out.</p>
       </li>
       <li>
         <h3>Log in to Lucciola</h3>
@@ -706,7 +708,7 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
   <section id="g-apps" aria-labelledby="g-h-apps">
     <h2 id="g-h-apps">apps</h2>
     <p>Bazaar, the app store, installs apps from Flathub. They update on their own twice a day, except when the battery is low or the connection is metered.</p>
-    <p>A preinstalled app you remove comes back at the next restart, because Lucciola keeps its default set in place. To stop that, run <code>ujust lucciola-slim</code>: it lists what it removes, some of the larger apps included, and asks before doing anything. <code>ujust lucciola-slim-restore</code> undoes it.</p>
+    <p>A preinstalled app you remove stays removed: Lucciola remembers it and does not install it again. An app that leaves Lucciola’s default set stays on your PC. <code>ujust lucciola-slim</code> removes some of the larger apps in one go: it lists what it removes and asks before doing anything. <code>ujust lucciola-slim-restore</code> brings back the default apps you removed.</p>
     <p>For developer tools, use a Toolbox: a Fedora container with its own <code>dnf</code>, where you install anything without touching the system.</p>
     <div class="cmd"><pre>toolbox create</pre><button type="button">Copy</button></div>
     <div class="cmd"><pre>toolbox enter</pre><button type="button">Copy</button></div>
@@ -747,6 +749,7 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
     <p><code>ujust lucciola-kernel</code> shows which kernel you run, and <code>ujust lucciola-kernel cachyos</code> brings the CachyOS kernel back. Your files, settings, and apps stay either way.</p>
     <p class="note">If your disk unlocks through the TPM, the first start after a switch asks for the passphrase. Once it has started, run <code>ujust lucciola-tpm-unlock enable</code> and the TPM unlocks it again.</p>
     <p>On a processor without x86-64-v3, switch to Lucciola straight onto Fedora’s kernel: in step 2 of <a href="#g-install">switch to lucciola</a>, write <code>lucciola:fedora-kernel</code> in place of <code>lucciola:stable</code>. Fedora signs its own kernel, so it starts with Secure Boot on, and you can skip step 1.</p>
+    <p class="note">This version is published together with the first <code>:stable</code>, planned for 27 October 2026. Until then there is none to switch to, and <code>ujust lucciola-kernel fedora</code> changes nothing.</p>
   </section>
 
   <section id="g-finger" aria-labelledby="g-h-finger">

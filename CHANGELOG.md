@@ -50,6 +50,119 @@ stable release is cut.
   (`authselect enable-feature with-fingerprint`, which the image does not
   enable) and registers a finger with `fprintd-enroll`.
 
+### Removed (2026-10-20, developer tools)
+- **Margine's ISO tooling is archived.** `live-env/` (the Titanoboa live
+  image), `tools/iso-builder/` (the window that built it) and
+  `tools/bench/` moved to `docs/history/margine/`, with a README. They
+  built and tested Margine, not Lucciola, and the window dispatched a
+  workflow this repository does not have. Gone with them: the `just
+  build-iso`, `build-iso-fast`, `test-install-vm`, `iso-gui` and
+  `install-desktop` recipes, the lint step that compared the ISO's Flatpak
+  list with the image's, and the static checks of the ISO's kickstarts
+  (the Flatpak preinstall check stays). Lucciola moves installs by rebase
+  first; the ISO comes later, ported from the archive.
+  `installer/flatpaks-base`, which the image build reads, stays.
+  `tests/retired-iso-tooling.test.sh`.
+
+### Fixed (2026-10-20, build)
+- **The base an image records is the base it was built on.** The build
+  looked up the digest of `silverblue-main:45` only for the
+  `org.opencontainers.image.base.digest` label, and if the lookup failed
+  the label stayed empty; buildah then pulled the tag again. Had the tag
+  moved in between, the label named a base the image was not built on, and
+  the kernel reserve, which builds on the labelled digest, would have used
+  a different base from the image it stands in for. The base is now
+  resolved once (`.github/scripts/resolve-base.sh`): the build is FROM that
+  digest, both labels come from the same lookup (`base.name` now follows a
+  trial base too), and a build whose base cannot be resolved stops.
+  `tests/resolve-base.test.sh`.
+
+### Fixed (2026-10-20, checks)
+- **Some checks passed when the command they ran had failed.** The upgrade
+  test sent `rpm-ostree rebase`, the layering of a package and the
+  gaming-native dry run to the test machine as `command | tail`, in a shell
+  without `pipefail`, so the status it read was `tail`'s, always a success;
+  a missing gaming package list counted as a pass. The same held for the
+  dependency check in `validate-baseline-packages`, which also reported
+  every package found when its container stopped before checking any. Each
+  now keeps the command's own exit status, prints only the end of its
+  output, and fails on a missing list. `tests/pipeline-status.test.sh`.
+
+### Security (2026-10-20, third-party repositories)
+- **A pinned signing key now means that key alone.** The build and the
+  `ujust lucciola-docker`, `lucciola-tailscale`, `lucciola-vscode` and
+  `lucciola-devmode` recipes checked only the first fingerprint in a
+  downloaded key file and then handed rpm the whole file, and rpm imports
+  every key in it: a file with the right key first and another one after it
+  passed, and packages signed by the second key would have installed. The
+  repository file was kept as downloaded apart from its `gpgkey=` lines, so
+  `gpgcheck=0` in any section survived too. Both now go through one helper,
+  `/usr/libexec/margine/rpm-trust`: a key file with any other primary key is
+  refused and only the pinned certificate (with its own subkeys) is saved or
+  imported; a repository file that turns signature checking off in any
+  section is refused, and every section gets `gpgcheck=1` and the local,
+  verified key in place of whatever `gpgkey` it named. The same applies to
+  the RPM Fusion and negativo17 repository files the build reads.
+  Checked against the live Docker CE, Tailscale, VS Code, COPR, RPM Fusion
+  and negativo17 keys and repositories. `tests/rpm-trust.test.sh`.
+### Fixed (2026-10-20, docs)
+- **The install instructions named images that do not exist yet.** The
+  README, the website (home page and guide), `lucciola/README.md` and
+  `SECURITY.md` send people to `:stable`, and the guide and the README to
+  `:fedora-kernel`, but neither is published before Fedora 45's release
+  (the promotion is held on purpose until then): following the guide meant
+  turning Secure Boot off and then getting "manifest unknown". Each of
+  those commands now has a short note beside it: the first `:stable`, and
+  the Fedora-kernel version with it, comes out with Fedora 45, planned for
+  27 October 2026, and until then `:candidate` is the test build to use.
+  The notes stay true after that date and can go once it has passed. When
+  `ujust lucciola-kernel` cannot stage an image, it now names "an image not
+  published yet" among the causes.
+
+### Fixed (2026-10-20, boot)
+- **Every boot spent a minute and a half repairing Flatpak.**
+  `flatpak-preinstall.service` relabelled all of `/var/lib/flatpak`
+  (`restorecon -RF`) and ran `flatpak repair --system` before every
+  preinstall, with no time limit, and `multi-user.target` waited for it: on
+  a laptop with 351 refs, 34 s plus 53 s, a 15-17 GB memory peak (page
+  cache) and the target reached after 1 min 41 s. Both steps exist for
+  fresh installs whose bake went wrong (2026-06), and now run only then:
+  when the last preinstall did not pass (a first boot, a failed or
+  interrupted run) or a quick look at the repository finds it broken (a
+  base directory missing, a wrong SELinux type on the top paths), at most
+  once per boot (`/usr/libexec/margine/flatpak-repo-repair`). A settled
+  boot does the cheap steps and the preinstall itself, about 1.5 s. The
+  unit no longer holds `multi-user.target` or `graphical.target`, stops
+  after an hour (the restart two minutes later resumes the download), and
+  runs at the priority of the Flatpak updates (`Nice=10`, idle I/O) with
+  `MemoryHigh=2G`, so the page cache it fills is reclaimed from it first.
+  The first boot after this update repairs once more, since no run has
+  been marked as passed yet.
+
+### Fixed (2026-10-20, apps)
+- **Apps that left the default set were uninstalled.** `flatpak preinstall`
+  does not only install: it keeps a record of the apps it preinstalled (in
+  the system repository's config) and uninstalls any of them the image
+  stops listing. When Bitwarden, VS Code, GNOME Weather, GNOME Maps,
+  Blanket and Fragments left the list on 2026-10-18, the next boot removed
+  them wherever they were on that record, against what this changelog
+  promised. Before every preinstall, `flatpak-preinstall-keep` now takes
+  an installed app that is no longer listed off the record, so it stays as
+  the user's own app; if the helper fails, the preinstall does not run. An
+  app the user removed stays on the record, so Flatpak still does not
+  install it again. The real `flatpak preinstall` is tested against a
+  local repository, before and after (tests/flatpak-preinstall-keep.test.sh).
+  Machines already affected do not get the apps back on their own, since
+  some may have been removed on purpose since: their data in `~/.var/app`
+  is still there, and Bazaar installs them again.
+- **A default app you remove now stays removed on every install.** On
+  installs whose record started after their apps were there (those that
+  came from Margine), a removed default came back at the next boot. The
+  same helper puts every installed default on the record, as Flatpak does
+  on a fresh install. `ujust lucciola-slim-restore` now really brings the
+  removed defaults back: unmasking the service was not enough, because
+  Flatpak remembers the removals; the recipe now forgets them for the apps
+  in the stock list.
 ### Changed (terminal)
 - **A new terminal opens in the home folder.** Ptyxis no longer restores the
   last session by default, which reopened terminals in the folder the last
@@ -260,7 +373,10 @@ stable release is cut.
     margine-test-vm` points to it when they are missing.
   - **Six preinstalled apps:** VS Code, Bitwarden, GNOME Weather, GNOME
     Maps, Blanket and Fragments, all in Bazaar (`ujust margine-vscode`
-    still layers the VS Code RPM). An install that has them keeps them.
+    still layers the VS Code RPM). An install that had them lost them at
+    the next boot until the 2026-10-20 fix ("Apps that left the default set
+    were uninstalled"); from that fix on, an install that has them keeps
+    them.
   - **The Koofr tray shim** (47-koofr-tray-fix): it downloaded gcc and
     glibc-devel on every build and left cpp (42.6 MiB) behind, for a
     client Spola replaced. libappindicator-gtk3 went with it. `ujust
@@ -312,7 +428,9 @@ stable release is cut.
   - wayland-scroll-factor (45-wsf, `ujust wsf-preload`), which only loads
     into gnome-shell; niri sets the scroll speed itself;
   - Smile and Extension Manager from the preinstalled and baked Flatpaks
-    (an install that has them keeps them);
+    (an install that has them keeps them, reliably only since the
+    2026-10-20 fix: before it, Flatpak uninstalled them wherever its
+    preinstall record listed them);
   - the GNOME first-login helpers (`margine-configure-gnome-*`,
     `margine-install-user-extensions`) and the two first-login autostart
     entries. `ujust margine-bootstrap` keeps its other steps (home layout,

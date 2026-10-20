@@ -329,6 +329,16 @@ jobs:
         # publish under :trial and never touch :candidate: smoke-boot
         # promotes whatever :candidate points at, and a trial base would
         # otherwise become :stable on every user's next update.
+        #
+        # The base is resolved to a digest here, once, and that digest is
+        # both what the build is FROM (outputs.base, repository@digest) and
+        # what the base.digest label records (outputs.digest), next to the
+        # reference as written (outputs.name, the base.name label). No
+        # digest, no build: until 2026-10-20 the lookup was best-effort, for
+        # the label only, and the build pulled the tag again, so the label
+        # could name a base the image was not built on (review R9). Every
+        # reader of the labels (base-watch, the kernel reserve, the /status
+        # page) relies on them matching. .github/scripts/resolve-base.sh.
         env:
           BASE_OVERRIDE: ${{ github.event.inputs.base_image || '' }}
           CHUNKER: ${{ github.event.inputs.chunker || 'chunkah' }}
@@ -336,34 +346,18 @@ jobs:
           set -euo pipefail
           DEFAULT_BASE="$(sed -nE 's/^ARG BASE_IMAGE=(.*)$/\1/p' Containerfile | head -1)"
           if [ -n "$BASE_OVERRIDE" ]; then
-            echo "base=$BASE_OVERRIDE" >> "$GITHUB_OUTPUT"
+            REF="$BASE_OVERRIDE"
             echo "publish_tag=trial" >> "$GITHUB_OUTPUT"
             echo "::notice::TRIAL build against $BASE_OVERRIDE (publishes :trial only)"
           else
-            echo "base=$DEFAULT_BASE" >> "$GITHUB_OUTPUT"
+            REF="$DEFAULT_BASE"
             echo "publish_tag=${CANDIDATE_TAG}" >> "$GITHUB_OUTPUT"
           fi
-
-
-      - name: Resolve base image digest (best-effort)
-        # Stamp the digest of the base this image is built FROM as the
-        # standard OCI base.digest label. The status.json producer compares
-        # it against the *current* digest of that base to tell whether
-        # Margine is on the latest upstream (baseDigestMatchesBluefin on the
-        # /status page). Best-effort: continue-on-error keeps a skopeo/network
-        # hiccup from ever failing the critical build path — the label just
-        # ends up empty and the page shows "unknown".
-        id: basedigest
-        continue-on-error: true
-        run: |
-          # Emitted before the network call: the name is a constant and must
-          # survive a skopeo hiccup, which only costs us the digest.
-          BASE_REF="${{ steps.base.outputs.base }}"
-          echo "name=${BASE_REF}" >> "$GITHUB_OUTPUT"
+          [ -n "$REF" ] || { echo "::error::no base image (ARG BASE_IMAGE missing from the Containerfile)"; exit 1; }
           command -v skopeo >/dev/null 2>&1 || { sudo apt-get update -qq && sudo apt-get install -y -qq skopeo; }
-          DIGEST="$(skopeo inspect --no-tags "docker://${BASE_REF}" --format '{{.Digest}}' 2>/dev/null || echo '')"
-          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
-          echo "base (${BASE_REF}) digest: ${DIGEST:-<unresolved>}"
+          RESOLVED="$(.github/scripts/resolve-base.sh "$REF")"
+          echo "$RESOLVED" >> "$GITHUB_OUTPUT"
+          echo "$RESOLVED"
 
       - name: Stage MOK secrets for BuildKit
         # Key + cert only. The enrollment PASSPHRASE is public by design
@@ -413,8 +407,8 @@ jobs:
             io.artifacthub.package.license=Apache-2.0
             io.artifacthub.package.prerelease=false
             containers.bootc=1
-            org.opencontainers.image.base.digest=${{ steps.basedigest.outputs.digest }}
-            org.opencontainers.image.base.name=ghcr.io/ublue-os/silverblue-main:45
+            org.opencontainers.image.base.digest=${{ steps.base.outputs.digest }}
+            org.opencontainers.image.base.name=${{ steps.base.outputs.name }}
           sep-tags: " "
           sep-annotations: " "
 
@@ -712,8 +706,8 @@ jobs:
           IMAGE_KEYWORDS: ${{ env.IMAGE_KEYWORDS }}
           REPO: ${{ github.repository }}
           OWNER: ${{ github.repository_owner }}
-          BASE_DIGEST: ${{ steps.basedigest.outputs.digest }}
-          BASE_NAME: ${{ steps.basedigest.outputs.name }}
+          BASE_DIGEST: ${{ steps.base.outputs.digest }}
+          BASE_NAME: ${{ steps.base.outputs.name }}
           CREATED: ${{ steps.date.outputs.date }}
         run: |
           set -euo pipefail

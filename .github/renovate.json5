@@ -11,6 +11,20 @@
   // outage. Rebasing when main moves is what makes the automation
   // self-sufficient: fresh checks, then Renovate merges on its own.
   rebaseWhen: 'behind-base-branch',
+  // Archived Margine files (docs/history/, e.g. the live ISO's Containerfile)
+  // are not maintained: no update PRs for them (2026-10-20). Setting
+  // ignorePaths replaces the preset's list, so its entries are repeated.
+  ignorePaths: [
+    '**/node_modules/**',
+    '**/bower_components/**',
+    '**/vendor/**',
+    '**/examples/**',
+    '**/__tests__/**',
+    '**/test/**',
+    '**/tests/**',
+    '**/__fixtures__/**',
+    'docs/history/**',
+  ],
   packageRules: [
     {
       matchDepNames: [

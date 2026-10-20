@@ -37,6 +37,28 @@ PROMPT = "MPROMPT> "
 # paste) and OSC sequences (Fedora's bash shell integration, OSC 3008, wraps
 # every prompt and command). Both are stripped before matching.
 ESCAPES = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-9;?]*[ -/]*[@-~]|\r")
+GAMING_LIST = "/usr/share/margine/gaming-native-packages.txt"
+
+
+def keep_status(cmd, lines):
+    """Guest shell that runs cmd, prints the last `lines` lines of its output
+    and leaves cmd's own exit status in $?. A plain `cmd | tail` reports
+    tail's status (always 0), and the guest shell has no pipefail: that would
+    break `... | grep ... || echo none` and can fail `echo pw | sudo -S` when
+    sudo does not read its password (review R6, 2026-10-20).
+    tests/upgrade-smoke-status.test.sh runs it."""
+    return (f'__o="$({cmd} 2>&1)"; __r=$?; '
+            f'printf "%s\\n" "$__o" | tail -n {lines}; (exit $__r)')
+
+
+def gaming_dry_run(sudo, lst=GAMING_LIST):
+    """Guest shell for the gaming-native dry run on the new deployment: the
+    list is required (the image ships it, and `ujust lucciola-gaming-native`
+    reads it), and the verdict is rpm-ostree's exit status."""
+    pkgs = f"$(grep -vE '^[[:space:]]*(#|$)' {lst})"
+    return (f"if [ -n \"{pkgs}\" ]; then "
+            + keep_status(sudo + f"timeout 600 rpm-ostree install --dry-run {pkgs}", 4)
+            + f"; else echo 'no gaming package list at {lst}'; false; fi")
 
 
 class Serial:
@@ -198,7 +220,7 @@ def main():
         fail("old image not booted with Secure Boot enabled")
     if a.layer:
         say(f"layering {a.layer} on the old image")
-        rc, out = capture(sudo + f"rpm-ostree install -y --idempotent {a.layer} 2>&1 | tail -5", 1200)
+        rc, out = capture(keep_status(sudo + f"rpm-ostree install -y --idempotent {a.layer}", 5), 1200)
         if rc != 0:
             fail(f"layering {a.layer} failed: {out}")
         else:
@@ -210,7 +232,7 @@ def main():
         target = f"ostree-unverified-registry:{a.to}"
     say(f"rebasing to {target}")
     t_rebase = time.monotonic()
-    rc, out = capture(sudo + f"rpm-ostree rebase {target} 2>&1 | tail -8", 2400)
+    rc, out = capture(keep_status(sudo + f"rpm-ostree rebase {target}", 8), 2400)
     say(f"rebase took {int(time.monotonic() - t_rebase)}s, rc={rc}")
     if rc != 0:
         say(out or "")
@@ -325,8 +347,7 @@ def main():
         fail("enablement links of the old base survived the /etc merge: " + out.strip().replace("\n", " "))
     rc, out = capture("ostree admin config-diff 2>/dev/null | head -30", 60)
     say("/etc differences from the image (first 30):\n" + (out or ""))
-    rc, out = capture("L=/usr/share/margine/gaming-native-packages.txt; if [ -r $L ]; then " + sudo +
-                      "timeout 600 rpm-ostree install --dry-run $(grep -vE '^\\s*(#|$)' $L) 2>&1 | tail -4; else echo 'no gaming list'; fi", 900)
+    rc, out = capture(gaming_dry_run(sudo), 900)
     say("gaming-native dry run: " + (out or "").strip().replace("\n", " | ")[-400:])
     if rc != 0:
         fail("the gaming-native layer does not resolve on the new deployment")
