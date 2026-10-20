@@ -289,5 +289,11 @@ jobs:
           FLATPAK_TEST_REQUIRED: "1"
         run: |
           set -euo pipefail
-          dnf -y -q install flatpak ostree python3
+          # Fedora's mirrors answer 503 now and then (updates-testing on
+          # 2026-10-20): three attempts, then the packages must be there.
+          for i in 1 2 3; do
+            dnf -y -q install flatpak ostree python3 && break
+            echo "dnf attempt $i failed, retrying in 30 s"; sleep 30
+          done
+          rpm -q flatpak ostree python3
           bash tests/flatpak-preinstall-keep.test.sh
