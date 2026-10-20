@@ -3,12 +3,16 @@
 
     python3 tools/content-editor/serve.py      (or: just edit)
 
-Opens http://127.0.0.1:<port> in the browser. Only this computer can reach
-it. Python's standard library only; nothing to install.
+Opens http://127.0.0.1:<port>/#k=<key> in the browser. Only this computer
+can reach it, and only the page opened with that address can use it: the key
+is made at each start and is never sent by the server, so another program on
+this computer (a Flatpak app that shares the network, say) cannot save,
+commit or push through it. Python's standard library only; nothing to install.
 """
 
 import argparse
 import datetime
+import hmac
 import json
 import re
 import secrets
@@ -35,7 +39,12 @@ FILES = [SITE, WELCOME]
 UI = HERE / "ui"
 TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
          ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml"}
+# The key of this run. It reaches the browser only in the fragment of the
+# address the editor opens (#k=..., which the browser never sends back), and
+# every /api/ request must carry it in X-Editor-Token. Nothing the server
+# answers contains it: the page and its files are the same for anyone.
 TOKEN = secrets.token_urlsafe(24)
+NO_KEY = "This request did not come from the editor page. Open the address printed in the terminal where the editor runs."
 LOCK = threading.Lock()
 MAX_BODY = 8 * 1024 * 1024
 
@@ -236,6 +245,15 @@ class Handler(BaseHTTPRequestHandler):
         host = (self.headers.get("Host") or "").split(":")[0]
         return host in ("127.0.0.1", "localhost")
 
+    def _key_ok(self):
+        """The run's key, and no foreign page: a browser sends Origin on a
+        POST, and it must be this editor's own address."""
+        if not hmac.compare_digest(self.headers.get("X-Editor-Token") or "", TOKEN):
+            return False
+        origin = self.headers.get("Origin")
+        port = self.server.server_address[1]
+        return origin is None or origin in (f"http://127.0.0.1:{port}", f"http://localhost:{port}")
+
     def _send(self, status, body, ctype="application/json; charset=utf-8"):
         data = body if isinstance(body, bytes) else (
             body.encode("utf-8") if isinstance(body, str) else json.dumps(body).encode("utf-8"))
@@ -250,10 +268,11 @@ class Handler(BaseHTTPRequestHandler):
         if not self._host_ok():
             return self._send(HTTPStatus.FORBIDDEN, {"error": "bad host"})
         path = self.path.split("?")[0]
+        if path.startswith("/api/") and not self._key_ok():
+            return self._send(HTTPStatus.FORBIDDEN, {"error": NO_KEY})
         try:
             if path == "/":
-                page = read(UI / "editor.html").replace("__TOKEN__", TOKEN)
-                return self._send(200, page, TYPES[".html"])
+                return self._send(200, read(UI / "editor.html"), TYPES[".html"])
             if path == "/site":
                 return self._send(200, served_site(), TYPES[".html"])
             if path.startswith("/ui/"):
@@ -273,8 +292,8 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, {"error": "not found"})
 
     def do_POST(self):
-        if not self._host_ok() or self.headers.get("X-Editor-Token") != TOKEN:
-            return self._send(HTTPStatus.FORBIDDEN, {"error": "This request did not come from the editor page."})
+        if not self._host_ok() or not self._key_ok():
+            return self._send(HTTPStatus.FORBIDDEN, {"error": NO_KEY})
         n = int(self.headers.get("Content-Length") or 0)
         if n > MAX_BODY:
             return self._send(413, {"error": "too large"})
@@ -297,9 +316,9 @@ class Handler(BaseHTTPRequestHandler):
 
 def already_running(port):
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/state", timeout=2) as r:
-            return "branch" in json.loads(r.read())
-    except (OSError, ValueError):
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/ui/editor.css", timeout=2) as r:
+            return (r.headers.get("Server") or "").startswith(Handler.server_version)
+    except OSError:
         return False
 
 
@@ -313,14 +332,13 @@ def main():
         srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     except OSError:
         if args.port and already_running(args.port):
-            url = f"http://127.0.0.1:{args.port}/"
-            print(f"The editor is already running: {url}\n(To restart it, press Ctrl+C in the terminal where it runs.)")
-            if not args.no_browser:
-                webbrowser.open(url)
+            # Its key is in that terminal only: this one cannot open it.
+            print("The editor is already running in another terminal: open the address printed there,\n"
+                  "or press Ctrl+C there and start it again.")
             return
         srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     srv.verbose = args.verbose
-    url = f"http://127.0.0.1:{srv.server_address[1]}/"
+    url = f"http://127.0.0.1:{srv.server_address[1]}/#k={TOKEN}"
     print(f"Lucciola content editor: {url}\nWorking on branch: {branch() or '(none)'}\nPress Ctrl+C to stop.",
           flush=True)
     if not args.no_browser:

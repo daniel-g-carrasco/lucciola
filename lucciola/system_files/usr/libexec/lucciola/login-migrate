@@ -11,9 +11,14 @@
 #   1. A link still pointing at GDM (the merge kept a local version of it) is
 #      switched to greetd for the NEXT boot. Not this one: GDM's start is
 #      already queued, and swapping display managers in the middle of a boot
-#      is how people end up without a login screen. A link pointing anywhere
-#      else, or none, was a choice made on this machine and stays.
-#   2. GDM autologin (/etc/gdm/custom.conf) carries over to greetd's
+#      is how people end up without a login screen.
+#   2. A link to a display manager this image does not have (SDDM kept from
+#      Kinoite, LightDM, any other) would leave no login screen at all: it
+#      is switched to greetd, and greetd is started for THIS boot too,
+#      since no display manager is queued to clash with it. A link to one
+#      that exists (layered with rpm-ostree, a local unit), or no link, was
+#      a choice made on this machine and stays.
+#   3. GDM autologin (/etc/gdm/custom.conf) carries over to greetd's
 #      [initial_session] through `lucciola-autologin on`, which also checks
 #      the account is still a real one.
 # GDM is not removed: greetd.service falls back to it when it cannot start.
@@ -21,7 +26,10 @@
 # retried at the next boot, without ever stopping a display manager.
 set -uo pipefail
 
-# Paths can be pointed elsewhere for tests (tests/login-migrate.test.sh).
+# Paths can be pointed elsewhere for tests (tests/login-migrate.test.sh);
+# LOGIN_MIGRATE_ROOT is where unit files are looked up.
+UNIT_ROOT="${LOGIN_MIGRATE_ROOT:-}"
+SYSTEMCTL="${LOGIN_MIGRATE_SYSTEMCTL:-systemctl}"
 MARKER="${LOGIN_MIGRATE_MARKER:-/var/lib/lucciola/login-migrated}"
 DM_LINK="${LOGIN_MIGRATE_DM_LINK:-/etc/systemd/system/display-manager.service}"
 GREETD_UNIT=/usr/lib/systemd/system/greetd.service
@@ -30,6 +38,18 @@ GREETD_CONF="${LOGIN_MIGRATE_GREETD_CONF:-/etc/greetd/config.toml}"
 AUTOLOGIN="${LOGIN_MIGRATE_AUTOLOGIN:-/usr/bin/lucciola-autologin}"
 log() { echo "lucciola-login-migrate: $*"; }
 rc=0
+
+# Does this system have a unit file for NAME (the link's target, or a unit of
+# that name anywhere systemd looks for one)? -e follows symlinks, so a unit
+# that is itself a dangling link does not count.
+unit_present() {
+  local target="$1" name="${1##*/}" dir
+  [[ "$target" == /* && -e "$UNIT_ROOT$target" ]] && return 0
+  for dir in /etc/systemd/system /run/systemd/system /usr/local/lib/systemd/system /usr/lib/systemd/system; do
+    [[ "$UNIT_ROOT$dir/$name" != "$DM_LINK" && -e "$UNIT_ROOT$dir/$name" ]] && return 0
+  done
+  return 1
+}
 
 target="$(readlink "$DM_LINK" 2>/dev/null || true)"
 case "${target##*/}" in
@@ -44,7 +64,17 @@ case "${target##*/}" in
   "")
     log "no display manager enabled on this machine: left as it is" ;;
   *)
-    log "display manager: ${target##*/}, chosen on this machine: left as it is" ;;
+    if unit_present "$target"; then
+      log "display manager: ${target##*/}, chosen on this machine: left as it is"
+    elif ln -sfn "$GREETD_UNIT" "$DM_LINK"; then
+      log "WARNING: display manager was ${target##*/}, which this image does not have (no login screen would start): switched to greetd"
+      # Nothing is queued for display-manager.service (its unit is missing),
+      # so starting greetd now cannot clash with another login screen.
+      "$SYSTEMCTL" start --no-block greetd.service \
+        || log "could not start greetd now: it is the login screen from the next boot"
+    else
+      log "could not switch $DM_LINK (${target##*/}, not in this image) to greetd: there is no login screen; from a text console: sudo systemctl enable --force greetd.service"; rc=1
+    fi ;;
 esac
 
 # GDM autologin -> greetd [initial_session], only when greetd is (now) the

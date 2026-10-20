@@ -7,6 +7,49 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-20, second review)
+- **`ujust lucciola-autologin` changes both login screens or neither.** It
+  writes greetd's config and mirrors the choice into GDM's, and wrote them
+  one after the other in place: if the GDM file could not be written, the
+  command failed with greetd's passwordless login already on. Both files
+  are now prepared next to the originals first and only then swapped in;
+  if the second swap fails the first is put back, and the error says that
+  nothing was changed. The file that removes the password is always
+  swapped last.
+- **No login screen after moving from Kinoite with SDDM selected.** A
+  display manager link changed on the old system survives the update; the
+  login migration left any link other than GDM's alone, so one to SDDM
+  (or LightDM, or any display manager Lucciola does not have) pointed at
+  nothing and no login screen started. It now keeps such a link only when
+  that display manager is installed; otherwise it switches to greetd,
+  starts it at once and says so in the journal.
+- **The content editor (`just edit`) answers only the page it opened.**
+  Its key was written into the page the server handed to anyone who asked,
+  so another program on the computer (a Flatpak app with network access
+  reaches 127.0.0.1 too) could read it and save, commit, push and open a
+  pull request with your GitHub login while the editor ran. The key now
+  travels only in the address the editor opens (`#k=...`, which the browser
+  never sends back), every `/api/` request needs it, and a request from a
+  foreign page is refused. If the tab gets closed, open the address
+  printed in the terminal again.
+- **Login screen on two monitors: the password typed on one is sent from
+  the other.** The login conversation follows the screen the pointer is
+  on, but the text typed in the password field stayed in the first
+  screen's field: Enter on the second found it empty and started the
+  fingerprint over instead of logging in, and unplugging the first screen
+  lost the text. The typed password now moves with the conversation and
+  the old field is emptied (greeter patch 0005, release 6).
+- **The guide's way back works for every starting system.** "Going back"
+  gave only Fedora Silverblue 44's address, wrong for Kinoite and Bluefin
+  and a step backwards from Fedora 45. "Before you start" now saves the
+  name of the system you have (`~/lucciola-came-from.txt`), "going back"
+  switches to it, lists the addresses for Silverblue, Kinoite and Bluefin
+  on the release Lucciola is built on, and says what stays: files,
+  settings and Flatpak apps, and that going back a version does not undo
+  app changes. A new "fingerprint" section turns on fingerprint login
+  (`authselect enable-feature with-fingerprint`, which the image does not
+  enable) and registers a finger with `fprintd-enroll`.
+
 ### Removed (2026-10-20, developer tools)
 - **Margine's ISO tooling is archived.** `live-env/` (the Titanoboa live
   image), `tools/iso-builder/` (the window that built it) and
