@@ -1,0 +1,36 @@
+#!/usr/bin/bash
+# Lucciola: write a report of this system for a bug report.
+#
+#   system-report [OUTPUT]      default ~/lucciola-report.txt
+#
+# One definition, two callers: `ujust lucciola-report` (which then opens the
+# issue page in the terminal's words) and Lucciola System's "Report a
+# Problem" (which shows where the file is and offers the page). Nothing here
+# needs privileges; the report holds no secrets: image and versions, the
+# hardware's names, Secure Boot state, Flatpak counts and this boot's error
+# lines from the journal.
+set -uo pipefail
+OUT="${1:-$HOME/lucciola-report.txt}"
+{
+  echo "=== Lucciola report ($(date -u +%FT%TZ)) ==="
+  echo
+  echo "--- image ---"
+  grep -E '^(PRETTY_NAME|VARIANT_ID|VERSION)=' /etc/os-release
+  rpm-ostree status -b 2>/dev/null | head -8
+  echo
+  echo "--- hardware ---"
+  echo "cpu: $(lscpu 2>/dev/null | grep 'Model name' | sed 's/.*: *//')"
+  echo "gpu: $(lspci 2>/dev/null | grep -iE 'vga|3d' | sed 's/.*: //' | head -2)"
+  echo "ram: $(free -h | awk '/Mem:/{print $2}')"
+  echo
+  echo "--- secure boot ---"
+  mokutil --sb-state 2>/dev/null || echo "mokutil unavailable"
+  echo
+  echo "--- flatpak ---"
+  echo "system apps: $(flatpak --system list --app 2>/dev/null | wc -l)"
+  systemctl is-active flatpak-preinstall.service 2>/dev/null | sed 's/^/preinstall: /'
+  echo
+  echo "--- recent errors (this boot) ---"
+  journalctl -b -p err --no-pager 2>/dev/null | tail -30
+} > "$OUT" 2>&1
+echo "$OUT"

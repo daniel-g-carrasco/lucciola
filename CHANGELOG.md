@@ -7,6 +7,38 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (2026-10-21, Lucciola System)
+- **Lucciola System speaks to people who never open a terminal.** Pending
+  app updates are named by app, not by Flatpak id; the texts no longer
+  quote commands; the rows are either information or a link, and the
+  actions are button rows (Run System Check…, Roll Back…, Update Apps
+  Now, Update Command-Line Tools), as the HIG asks. While it checks, it
+  shows a spinner instead of a frozen icon; when the registry cannot be
+  reached it says so (offline, too slow, unreachable) and offers Try
+  Again; it refreshes on its own every ten minutes and when the window
+  comes back after a while. The window opens at once and About no longer
+  freezes it while `lucciola-status` runs. A long operation shows a
+  sentence and a spinner with the output under Details; the dialog can be
+  closed and a message follows, with the log one click away if it failed.
+  The menu gains Keyboard Shortcuts, Help (the guide, offline too) and
+  Report a Problem…, which writes `~/lucciola-report.txt` and offers the
+  issue page; `ujust lucciola-report` now calls the same
+  `system-report`. The System Check results can be copied. Apps the
+  update watchdog excluded are listed under Apps with Update Now, which
+  takes them back into automatic updates; the notification that used to
+  quote a command now points there and opens Lucciola System when
+  clicked, as the "update ready" ones do.
+- **Privileged actions go through `/usr/libexec/lucciola/admin`**, one
+  polkit action each (`dev.lucciola.admin.update`, `.rollback`,
+  `.flatpak-unblock`): the authentication dialog says what is about to
+  happen, an administrator can allow one action without the others, and
+  an active user keeps the authentication for a few minutes. The helper
+  validates its arguments, runs fixed argument vectors and never a
+  shell; `tests/system-logic.test.sh` checks the refusals and that every
+  verb has its policy. The toolkit-free part of the app lives in
+  `/usr/share/lucciola/system/lucciola_system.py`, tested without a
+  display.
+
 ### Fixed (2026-10-20, lint)
 - **The MOK signer test runs whole on the lint runner.** The runner has no
   `systemd-sbsign` and keeps its kernel image root-only, so the test put

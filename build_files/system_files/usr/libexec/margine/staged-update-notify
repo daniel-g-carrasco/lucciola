@@ -42,9 +42,9 @@ if [[ -n "$STAGED_JSON" ]]; then
   # doesn't burn the notice.
   SEEN="$STAMP_DIR/staged-seen"
   if [[ -n "$STAGED_SUM" && "$(cat "$SEEN" 2>/dev/null)" != "$STAGED_SUM" ]]; then
-    "$MN" -u normal \
+    "$MN" -u normal -d dev.margine.System \
       "Update ready" \
-      "Lucciola ${STAGED_VER} is downloaded and staged. Reboot whenever it suits you to apply it." \
+      "Lucciola ${STAGED_VER} is downloaded and staged. Restart whenever it suits you to apply it; Lucciola System has the button." \
       && printf '%s\n' "$STAGED_SUM" > "$SEEN"
   fi
 
@@ -55,9 +55,9 @@ if [[ -n "$STAGED_JSON" ]]; then
     STAMP="$STAMP_DIR/staged-notify.stamp"
     TODAY="$(date +%F)"
     if (( AGE_DAYS >= MIN_AGE_DAYS )) && [[ "$(cat "$STAMP" 2>/dev/null)" != "$TODAY" ]]; then
-      "$MN" -u normal \
+      "$MN" -u normal -d dev.margine.System \
         "Update staged for ${AGE_DAYS} days" \
-        "A newer Lucciola is already downloaded and waiting. Reboot whenever it suits you to apply it; until then you keep running the previous version." \
+        "A newer Lucciola is already downloaded and waiting. Restart whenever it suits you to apply it; until then you keep running the previous version." \
         && printf '%s\n' "$TODAY" > "$STAMP"
     fi
   fi
@@ -71,9 +71,9 @@ if [[ -s "$BLOCKED" ]]; then
   while read -r app when _reason; do
     [[ -n "$app" ]] || continue
     grep -qx "$app" "$NOTIFIED" && continue
-    "$MN" -u normal \
+    "$MN" -u normal -d dev.margine.System \
       "$app excluded from automatic updates" \
-      "Its vendor download kept hanging unattended updates (since $when). Update it when you want with: ujust lucciola-update-unblock $app" \
+      "Its vendor download kept hanging unattended updates (since $when). Update it when you want from Lucciola System, under Apps: that takes it back in." \
       && printf '%s\n' "$app" >> "$NOTIFIED"
   done < "$BLOCKED"
 fi

@@ -1032,37 +1032,18 @@ lucciola-keyring ACTION="status":
 [group('Lucciola')]
 lucciola-report:
     #!/usr/bin/bash
+    # One definition of the report, shared with Lucciola System's "Report a
+    # Problem": /usr/libexec/margine/system-report writes it and prints its path.
     set -uo pipefail
-    OUT="$HOME/lucciola-report.txt"
-    {
-      echo "=== Lucciola report ($(date -u +%FT%TZ)) ==="
-      echo
-      echo "--- image ---"
-      grep -E '^(PRETTY_NAME|VARIANT_ID|VERSION)=' /etc/os-release
-      rpm-ostree status -b 2>/dev/null | head -8
-      echo
-      echo "--- hardware ---"
-      echo "cpu: $(lscpu 2>/dev/null | grep 'Model name' | sed 's/.*: *//')"
-      echo "gpu: $(lspci 2>/dev/null | grep -iE 'vga|3d' | sed 's/.*: //' | head -2)"
-      echo "ram: $(free -h | awk '/Mem:/{print $2}')"
-      echo
-      echo "--- secure boot ---"
-      mokutil --sb-state 2>/dev/null || echo "mokutil unavailable"
-      echo
-      echo "--- flatpak ---"
-      echo "system apps: $(flatpak --system list --app 2>/dev/null | wc -l)"
-      systemctl is-active flatpak-preinstall.service 2>/dev/null | sed 's/^/preinstall: /'
-      echo
-      echo "--- recent errors (this boot) ---"
-      journalctl -b -p err --no-pager 2>/dev/null | tail -30
-    } > "$OUT" 2>&1
+    OUT="$(/usr/libexec/margine/system-report)" || { echo "Could not write the report."; exit 1; }
     echo "Report written to: $OUT"
     echo
     sed -n '1,12p' "$OUT"
     echo "  [...]"
     echo
     echo "Opening the bug-report page. Attach or paste $OUT into the Logs field."
-    xdg-open "https://github.com/daniel-g-carrasco/lucciola/issues/new/choose" >/dev/null 2>&1 ||       echo "Open manually: https://github.com/daniel-g-carrasco/lucciola/issues/new/choose"
+    xdg-open "https://github.com/daniel-g-carrasco/lucciola/issues/new/choose" >/dev/null 2>&1 || \
+      echo "Open manually: https://github.com/daniel-g-carrasco/lucciola/issues/new/choose"
 
 # Create + boot a throwaway test VM from an ISO (libvirt).
 [group('Lucciola')]

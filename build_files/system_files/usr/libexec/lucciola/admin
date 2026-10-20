@@ -1,0 +1,130 @@
+#!/usr/bin/python3
+"""lucciola-admin: the privileged actions of Lucciola System, one at a time.
+
+    pkexec /usr/libexec/lucciola/admin ACTION [ARGS]
+    /usr/libexec/lucciola/admin --check ACTION [ARGS]   (no root: validate only)
+
+Every action has its own polkit action id (dev.lucciola.admin.<action>) in
+/usr/share/polkit-1/actions/dev.lucciola.admin.policy, matched by pkexec on
+this program's path and its first argument, so the authentication dialog
+says what is about to happen and an administrator can allow one action
+without the others. The app runs these through pkexec; the ujust recipes
+run the same code through sudo, so there is one definition of each.
+
+Rules of the house: the action and its arguments are validated before
+anything runs, the commands are fixed argument vectors (no shell), the
+environment is reset, and nothing here reads what the caller sends beyond
+argv.
+"""
+
+import os
+import re
+import subprocess
+import sys
+
+SYSTEM_UPDATE = "/usr/libexec/margine/system-update"
+BLOCKED = "/var/lib/margine/update-watchdog/blocked"
+STRIKES_DIR = "/var/lib/margine/update-watchdog"
+APP_ID = re.compile(r"^[A-Za-z][A-Za-z0-9._-]{2,254}$")
+
+ENV = {
+    "PATH": "/usr/sbin:/usr/bin:/sbin:/bin",
+    "LANG": "C.UTF-8",
+    "HOME": "/root",
+}
+
+
+def run(argv, check=True):
+    print("+ " + " ".join(argv), flush=True)
+    return subprocess.run(argv, env=ENV, check=check)
+
+
+def act_update(args):
+    """Stage the latest image of the followed tag (system-update decides
+    between bootc and rpm-ostree, as the recipe does)."""
+    if args:
+        raise SystemExit("update takes no arguments")
+    return [[SYSTEM_UPDATE]]
+
+
+def act_rollback(args):
+    """Make the previous deployment the default for the next boot."""
+    if args:
+        raise SystemExit("rollback takes no arguments")
+    return [["rpm-ostree", "rollback"]]
+
+
+def act_flatpak_unblock(args):
+    """Take an app back into unattended updates and update it now: the
+    watchdog masked it after its vendor download kept hanging."""
+    if len(args) != 1 or not APP_ID.match(args[0]):
+        raise SystemExit("flatpak-unblock takes one Flatpak app id")
+    app = args[0]
+    return [
+        ["flatpak", "mask", "--remove", app],
+        ["flatpak", "update", "-y", "--noninteractive", app],
+        ["__unblock_record", app],
+    ]
+
+
+def unblock_record(app):
+    """Drop the app from the watchdog's list and its strike counter."""
+    try:
+        with open(BLOCKED, encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+    except FileNotFoundError:
+        lines = []
+    kept = [ln for ln in lines if ln.split()[:1] != [app]]
+    if kept != lines:
+        with open(BLOCKED, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(kept) + ("\n" if kept else ""))
+    try:
+        os.remove(os.path.join(STRIKES_DIR, f"strikes-{app}"))
+    except FileNotFoundError:
+        pass
+    print(f"{app} is back in unattended updates", flush=True)
+
+
+ACTIONS = {
+    "update": act_update,
+    "rollback": act_rollback,
+    "flatpak-unblock": act_flatpak_unblock,
+}
+
+
+def plan(action, args):
+    if action not in ACTIONS:
+        raise SystemExit(f"unknown action '{action}'; one of: {', '.join(sorted(ACTIONS))}")
+    return ACTIONS[action](args)
+
+
+def main(argv):
+    check_only = False
+    if argv[:1] == ["--check"]:
+        check_only = True
+        argv = argv[1:]
+    if not argv:
+        raise SystemExit(__doc__.strip().splitlines()[0] + "\n" + "\n".join(f"  {a}" for a in sorted(ACTIONS)))
+    action, args = argv[0], argv[1:]
+    steps = plan(action, args)
+    if check_only:
+        for step in steps:
+            print(" ".join(step))
+        return 0
+    if os.geteuid() != 0:
+        raise SystemExit("this must run as root (pkexec from the app, sudo from a recipe)")
+    for step in steps:
+        if step[0] == "__unblock_record":
+            unblock_record(step[1])
+            continue
+        res = run(step, check=False)
+        if res.returncode != 0:
+            if action == "flatpak-unblock" and step[0] == "flatpak" and step[1] == "update":
+                # Keep it out of unattended updates if the update itself failed.
+                run(["flatpak", "mask", args[0]], check=False)
+            return res.returncode
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

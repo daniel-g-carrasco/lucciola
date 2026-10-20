@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!--
+  The privileged actions of Lucciola System, one polkit action each.
+  pkexec picks the action by this program's path AND its first argument
+  (the exec.argv1 annotation), so the dialog names what is about to happen
+  and each action can be allowed or refused on its own. Active local users
+  authenticate as an administrator once and keep it for a few minutes
+  (auth_admin_keep); remote or inactive sessions always authenticate.
+  See /usr/libexec/lucciola/admin.
+-->
+<policyconfig>
+  <vendor>Lucciola</vendor>
+  <vendor_url>https://github.com/daniel-g-carrasco/lucciola</vendor_url>
+  <icon_name>dev.margine.System</icon_name>
+
+  <action id="dev.lucciola.admin.update">
+    <description>Download the next Lucciola version</description>
+    <message>Authentication is required to download the next version of Lucciola. It is applied at the next restart.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">update</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.rollback">
+    <description>Boot the previous Lucciola version next time</description>
+    <message>Authentication is required to make the previous version of Lucciola start at the next restart.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">rollback</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.flatpak-unblock">
+    <description>Update an app excluded from automatic updates</description>
+    <message>Authentication is required to update this app and take it back into automatic updates.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">flatpak-unblock</annotate>
+  </action>
+</policyconfig>
