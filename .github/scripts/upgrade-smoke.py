@@ -220,9 +220,19 @@ def main():
         fail("old image not booted with Secure Boot enabled")
     if a.layer:
         say(f"layering {a.layer} on the old image")
-        rc, out = capture(keep_status(sudo + f"rpm-ostree install -y --idempotent {a.layer}", 5), 1200)
+        # rpm-ostree fetches the metadata of every enabled repository first,
+        # and a mirror down for a minute (Cisco's openh264 one, 2026-10-20)
+        # fails the whole transaction: three attempts, a pause between them.
+        rc, out = None, None
+        for attempt in range(1, 4):
+            rc, out = capture(keep_status(sudo + f"rpm-ostree install -y --idempotent {a.layer}", 5), 1200)
+            if rc == 0:
+                break
+            say(f"layering attempt {attempt} failed (rc {rc}): {(out or '').strip()[-400:]}")
+            if attempt < 3:
+                capture("sleep 45", 90)
         if rc != 0:
-            fail(f"layering {a.layer} failed: {out}")
+            fail(f"layering {a.layer} failed after 3 attempts: {out}")
         else:
             rc, out = capture("rpm-ostree status | grep -A1 -i LayeredPackages | head -3", 60)
             say("layered: " + (out or "").strip())

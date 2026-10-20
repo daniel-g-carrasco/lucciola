@@ -43,6 +43,21 @@ fi
 rm -f /var/lib/authselect/checksum
 rmdir /var/lib/authselect 2>/dev/null || true
 
+# Cisco's openh264 repository is enabled in Fedora's repo files, and
+# rpm-ostree fetches the metadata of every enabled repository before it
+# layers anything, ignoring skip_if_unavailable: while Cisco's mirror was
+# down on 2026-10-20 (over ten minutes), every `rpm-ostree install` failed,
+# on installed systems as in the upgrade test. The image's openh264 comes
+# from negativo17 and updates with the image; nothing is layered from
+# Cisco, and no build step reads this repository. Disabled in the shipped
+# file (dnf5 keeps the distribution's repo files under
+# /usr/share/dnf5/repos.d); validate-margine-system checks it.
+CISCO_REPO=/usr/share/dnf5/repos.d/fedora-cisco-openh264.repo
+[[ -f "$CISCO_REPO" ]] || { echo "ERROR: $CISCO_REPO is missing: the repository layout changed, update this step" >&2; exit 1; }
+sed -i '/^\[fedora-cisco-openh264\]$/,/^\[/{s/^enabled=1$/enabled=0/}' "$CISCO_REPO"
+sed -n '/^\[fedora-cisco-openh264\]$/,/^\[/p' "$CISCO_REPO" | grep -qx 'enabled=0' \
+  || { echo "ERROR: fedora-cisco-openh264 is still enabled in $CISCO_REPO" >&2; exit 1; }
+
 # Build state that changed on every rebuild and moved whole layers with
 # it (2026-10-03, measured file by file between two builds of the same
 # tree; the chunking step also prunes /run as a whole):

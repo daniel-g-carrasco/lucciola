@@ -871,6 +871,24 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+hdr "9f. Repositories for layering (rpm-ostree fetches every enabled one)"
+# ---------------------------------------------------------------------------
+# Cisco's openh264 repository goes down for minutes at a time, and
+# rpm-ostree fails the whole transaction on it, ignoring skip_if_unavailable
+# (2026-10-20): the image ships it disabled (99-cleanup.sh). openh264 comes
+# from negativo17 and updates with the image.
+CISCO_REPO=/usr/share/dnf5/repos.d/fedora-cisco-openh264.repo
+if [[ -f "$CISCO_REPO" ]]; then
+  if sed -n '/^\[fedora-cisco-openh264\]$/,/^\[/p' "$CISCO_REPO" | grep -qx 'enabled=0'; then
+    ok "fedora-cisco-openh264 disabled: layering does not depend on Cisco's mirror"
+  else
+    bad "fedora-cisco-openh264 is enabled: an outage of Cisco's mirror fails every rpm-ostree install"
+  fi
+else
+  info "no $CISCO_REPO (repository layout changed?)"
+fi
+
+# ---------------------------------------------------------------------------
 hdr "10. Failed services (regression detector)"
 # ---------------------------------------------------------------------------
 if (( ! IS_LIVE )); then
