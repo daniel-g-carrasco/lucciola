@@ -1,31 +1,51 @@
 #!/usr/bin/python3
 """lucciola-admin: the privileged actions of Lucciola System, one at a time.
 
-    pkexec /usr/libexec/lucciola/admin ACTION [ARGS]
-    /usr/libexec/lucciola/admin --check ACTION [ARGS]   (no root: validate only)
+    pkexec /usr/libexec/lucciola/admin VERB [ARGS]
+    /usr/libexec/lucciola/admin --check VERB [ARGS]   (no root: validate, print the plan)
 
-Every action has its own polkit action id (dev.lucciola.admin.<action>) in
-/usr/share/polkit-1/actions/dev.lucciola.admin.policy, matched by pkexec on
+Every verb has its own polkit action (dev.lucciola.admin.<verb>, in
+/usr/share/polkit-1/actions/dev.lucciola.admin.policy), matched by pkexec on
 this program's path and its first argument, so the authentication dialog
-says what is about to happen and an administrator can allow one action
-without the others. The app runs these through pkexec; the ujust recipes
-run the same code through sudo, so there is one definition of each.
+says what is about to happen and an administrator can allow one verb without
+the others. Verbs that only read (*-status) are allowed to an active local
+user without a password. The app runs these through pkexec; the ujust
+recipes run the same helpers through sudo, so there is one definition of
+each operation: this file only validates, sets the non-interactive switches
+the helpers offer (CONFIRM=yes, a key file, two lines on stdin) and runs
+fixed argument vectors, never a shell.
 
-Rules of the house: the action and its arguments are validated before
-anything runs, the commands are fixed argument vectors (no shell), the
-environment is reset, and nothing here reads what the caller sends beyond
-argv.
+Secrets (a disk passphrase, a boot-menu password) never travel as
+arguments, which any process can read in /proc: the window writes them on
+this program's standard input, one line, and they reach the helper as a
+root-only file in /run or on its own stdin.
 """
 
 import os
+import pwd
 import re
 import subprocess
 import sys
+import tempfile
 
 SYSTEM_UPDATE = "/usr/libexec/margine/system-update"
+KERNEL_SWITCH = "/usr/libexec/margine/kernel-switch"
+TPM_UNLOCK = "/usr/bin/lucciola-tpm-unlock"
+GRUB_LOCK = "/usr/libexec/margine/grub-lock"
+AUTOLOGIN = "/usr/bin/lucciola-autologin"
+MOK_ENROLL = "/usr/libexec/margine/mok-enroll"
+SCHEDULER_APPLY = "/usr/libexec/margine/scheduler-apply"
+SB_SWITCH = "/etc/margine/secureboot-enroll"
 BLOCKED = "/var/lib/margine/update-watchdog/blocked"
 STRIKES_DIR = "/var/lib/margine/update-watchdog"
+SECRET_DIR = "/run/lucciola-admin"
+
 APP_ID = re.compile(r"^[A-Za-z][A-Za-z0-9._-]{2,254}$")
+PCRS = re.compile(r"^[0-9]{1,2}(\+[0-9]{1,2})*$")
+SCHED_NAME = re.compile(r"^[a-z0-9]{2,32}$")
+# scx_loader's config takes the PascalCase mode, scxctl the lowercase one:
+# one argument here, so the two never disagree.
+SCHED_MODES = {"Auto": "auto", "Gaming": "gaming", "LowLatency": "lowlatency", "PowerSave": "powersave", "Server": "server"}
 
 ENV = {
     "PATH": "/usr/sbin:/usr/bin:/sbin:/bin",
@@ -34,37 +54,201 @@ ENV = {
 }
 
 
-def run(argv, check=True):
-    print("+ " + " ".join(argv), flush=True)
-    return subprocess.run(argv, env=ENV, check=check)
+class Step:
+    """One fixed command. env adds to the reset environment; stdin is
+    "password-twice" or "secret-file" when the step takes the secret the
+    caller sent; optional steps may fail without ending the verb."""
+
+    def __init__(self, argv, env=None, stdin=None, optional=False):
+        self.argv = argv
+        self.env = env or {}
+        self.stdin = stdin
+        self.optional = optional
+
+    def describe(self):
+        parts = [f"{k}={v}" for k, v in self.env.items() if k != "LUCCIOLA_UNLOCK_KEY_FILE"]
+        if self.stdin == "password-twice":
+            parts.append("(password on stdin, twice)")
+        if self.stdin == "secret-file":
+            parts.append("(passphrase in a root-only file)")
+        return " ".join(parts + self.argv)
+
+
+class Write:
+    """Write text to a path (root-only, atomic enough for a one-word file)."""
+
+    def __init__(self, path, text):
+        self.path, self.text = path, text
+
+    def describe(self):
+        return f"write {self.path!r}: {self.text!r}"
+
+
+class UnblockRecord:
+    def __init__(self, app):
+        self.app = app
+
+    def describe(self):
+        return f"take {self.app} back into unattended updates"
+
+
+def invoking_user():
+    """The user who asked: pkexec and sudo both say so; root at a shell
+    does not, and must name the user through the helper itself."""
+    uid = os.environ.get("PKEXEC_UID") or os.environ.get("SUDO_UID")
+    if uid is None:
+        if os.geteuid() != 0:
+            uid = str(os.getuid())
+        else:
+            raise SystemExit("autologin: run this through pkexec or sudo, so the user is known")
+    try:
+        return pwd.getpwuid(int(uid)).pw_name
+    except (ValueError, KeyError):
+        raise SystemExit("autologin: the invoking user is unknown") from None
+
+
+def no_args(verb, args):
+    if args:
+        raise SystemExit(f"{verb} takes no arguments")
 
 
 def act_update(args):
-    """Stage the latest image of the followed tag (system-update decides
-    between bootc and rpm-ostree, as the recipe does)."""
-    if args:
-        raise SystemExit("update takes no arguments")
-    return [[SYSTEM_UPDATE]]
+    no_args("update", args)
+    return [Step([SYSTEM_UPDATE])]
 
 
 def act_rollback(args):
-    """Make the previous deployment the default for the next boot."""
-    if args:
-        raise SystemExit("rollback takes no arguments")
-    return [["rpm-ostree", "rollback"]]
+    no_args("rollback", args)
+    return [Step(["rpm-ostree", "rollback"])]
 
 
 def act_flatpak_unblock(args):
-    """Take an app back into unattended updates and update it now: the
-    watchdog masked it after its vendor download kept hanging."""
     if len(args) != 1 or not APP_ID.match(args[0]):
         raise SystemExit("flatpak-unblock takes one Flatpak app id")
     app = args[0]
     return [
-        ["flatpak", "mask", "--remove", app],
-        ["flatpak", "update", "-y", "--noninteractive", app],
-        ["__unblock_record", app],
+        Step(["flatpak", "mask", "--remove", app]),
+        Step(["flatpak", "update", "-y", "--noninteractive", app]),
+        UnblockRecord(app),
     ]
+
+
+def act_kernel(args):
+    if len(args) != 1 or args[0] not in ("cachyos", "fedora"):
+        raise SystemExit("kernel takes one of: cachyos, fedora")
+    return [Step([KERNEL_SWITCH, args[0]], env={"CONFIRM": "yes"})]
+
+
+def act_tpm_unlock_status(args):
+    no_args("tpm-unlock-status", args)
+    return [Step([TPM_UNLOCK, "status"])]
+
+
+def act_tpm_unlock_enable(args):
+    if len(args) > 1 or (args and not PCRS.match(args[0])):
+        raise SystemExit("tpm-unlock-enable takes at most one argument: the PCRs, like 7 or 7+14")
+    pcrs = args[0] if args else "7"
+    return [Step([TPM_UNLOCK, "enable", pcrs], env={"CONFIRM": "yes"}, stdin="secret-file")]
+
+
+def act_tpm_unlock_disable(args):
+    no_args("tpm-unlock-disable", args)
+    return [Step([TPM_UNLOCK, "disable"], env={"CONFIRM": "yes"})]
+
+
+def act_grub_lock_status(args):
+    no_args("grub-lock-status", args)
+    return [Step([GRUB_LOCK, "status"])]
+
+
+def act_grub_lock_on(args):
+    no_args("grub-lock-on", args)
+    return [Step([GRUB_LOCK, "on"], stdin="password-twice")]
+
+
+def act_grub_lock_off(args):
+    no_args("grub-lock-off", args)
+    return [Step([GRUB_LOCK, "off"])]
+
+
+def act_autologin_on(args):
+    no_args("autologin-on", args)
+    return [Step([AUTOLOGIN, "on", invoking_user()])]
+
+
+def act_autologin_off(args):
+    no_args("autologin-off", args)
+    return [Step([AUTOLOGIN, "off"])]
+
+
+def act_secureboot_enroll(args):
+    no_args("secureboot-enroll", args)
+    return [
+        Step(["rm", "-f", SB_SWITCH]),
+        Step([MOK_ENROLL, "enroll"]),
+        Step(["mokutil", "--timeout", "-1"], optional=True),
+    ]
+
+
+def act_secureboot_never(args):
+    no_args("secureboot-never", args)
+    return [
+        Step(["mkdir", "-p", os.path.dirname(SB_SWITCH)]),
+        Write(SB_SWITCH, "off\n"),
+        Step(["mokutil", "--revoke-import"], optional=True),
+    ]
+
+
+def act_scheduler(args):
+    """Use a sched_ext CPU scheduler now and at every boot, in a mode."""
+    if not args or len(args) > 2 or not SCHED_NAME.match(args[0]):
+        raise SystemExit("scheduler takes a scheduler name (letters and digits) and a mode: " + ", ".join(SCHED_MODES))
+    mode = args[1] if len(args) == 2 else "Auto"
+    if mode not in SCHED_MODES:
+        raise SystemExit("scheduler mode must be one of: " + ", ".join(SCHED_MODES))
+    return [Step([SCHEDULER_APPLY, args[0], mode, SCHED_MODES[mode]])]
+
+
+def act_scheduler_off(args):
+    """Back to the kernel's own scheduler, now and at every boot."""
+    no_args("scheduler-off", args)
+    return [Step([SCHEDULER_APPLY, "off"])]
+
+
+ACTIONS = {
+    "update": act_update,
+    "rollback": act_rollback,
+    "flatpak-unblock": act_flatpak_unblock,
+    "kernel": act_kernel,
+    "tpm-unlock-status": act_tpm_unlock_status,
+    "tpm-unlock-enable": act_tpm_unlock_enable,
+    "tpm-unlock-disable": act_tpm_unlock_disable,
+    "grub-lock-status": act_grub_lock_status,
+    "grub-lock-on": act_grub_lock_on,
+    "grub-lock-off": act_grub_lock_off,
+    "autologin-on": act_autologin_on,
+    "autologin-off": act_autologin_off,
+    "secureboot-enroll": act_secureboot_enroll,
+    "secureboot-never": act_secureboot_never,
+    "scheduler": act_scheduler,
+    "scheduler-off": act_scheduler_off,
+}
+
+
+def plan(verb, args):
+    if verb not in ACTIONS:
+        raise SystemExit(f"unknown verb '{verb}'; one of: {', '.join(sorted(ACTIONS))}")
+    return ACTIONS[verb](args)
+
+
+def read_secret():
+    """One line from our own stdin, which pkexec passes through; an empty
+    line is a refusal, so the window must check before sending."""
+    line = sys.stdin.readline()
+    secret = line.rstrip("\r\n")
+    if not secret:
+        raise SystemExit("no secret was given on stdin")
+    return secret
 
 
 def unblock_record(app):
@@ -85,17 +269,29 @@ def unblock_record(app):
     print(f"{app} is back in unattended updates", flush=True)
 
 
-ACTIONS = {
-    "update": act_update,
-    "rollback": act_rollback,
-    "flatpak-unblock": act_flatpak_unblock,
-}
-
-
-def plan(action, args):
-    if action not in ACTIONS:
-        raise SystemExit(f"unknown action '{action}'; one of: {', '.join(sorted(ACTIONS))}")
-    return ACTIONS[action](args)
+def run_step(step, secret):
+    env = dict(ENV, **step.env)
+    stdin_text = None
+    secret_path = None
+    try:
+        if step.stdin == "password-twice":
+            stdin_text = f"{secret}\n{secret}\n"
+        elif step.stdin == "secret-file":
+            os.makedirs(SECRET_DIR, mode=0o700, exist_ok=True)
+            os.chmod(SECRET_DIR, 0o700)
+            fd, secret_path = tempfile.mkstemp(prefix="unlock.", dir=SECRET_DIR)
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(secret)   # no newline: the file IS the passphrase
+            env["LUCCIOLA_UNLOCK_KEY_FILE"] = secret_path
+        print("+ " + " ".join(step.argv), flush=True)
+        res = subprocess.run(step.argv, env=env, input=stdin_text, text=True, check=False)
+        return res.returncode
+    finally:
+        if secret_path:
+            try:
+                os.remove(secret_path)
+            except FileNotFoundError:
+                pass
 
 
 def main(argv):
@@ -105,24 +301,31 @@ def main(argv):
         argv = argv[1:]
     if not argv:
         raise SystemExit(__doc__.strip().splitlines()[0] + "\n" + "\n".join(f"  {a}" for a in sorted(ACTIONS)))
-    action, args = argv[0], argv[1:]
-    steps = plan(action, args)
+    verb, args = argv[0], argv[1:]
+    steps = plan(verb, args)
     if check_only:
         for step in steps:
-            print(" ".join(step))
+            print(step.describe())
         return 0
     if os.geteuid() != 0:
         raise SystemExit("this must run as root (pkexec from the app, sudo from a recipe)")
+    secret = None
+    if any(isinstance(s, Step) and s.stdin for s in steps):
+        secret = read_secret()
     for step in steps:
-        if step[0] == "__unblock_record":
-            unblock_record(step[1])
+        if isinstance(step, UnblockRecord):
+            unblock_record(step.app)
             continue
-        res = run(step, check=False)
-        if res.returncode != 0:
-            if action == "flatpak-unblock" and step[0] == "flatpak" and step[1] == "update":
+        if isinstance(step, Write):
+            with open(step.path, "w", encoding="utf-8") as fh:
+                fh.write(step.text)
+            continue
+        rc = run_step(step, secret)
+        if rc != 0 and not step.optional:
+            if verb == "flatpak-unblock" and step.argv[:2] == ["flatpak", "update"]:
                 # Keep it out of unattended updates if the update itself failed.
-                run(["flatpak", "mask", args[0]], check=False)
-            return res.returncode
+                subprocess.run(["flatpak", "mask", args[0]], env=ENV, check=False)
+            return rc
     return 0
 
 

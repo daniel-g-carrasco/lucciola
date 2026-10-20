@@ -7,6 +7,48 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Added (2026-10-21, Lucciola System pages)
+- **Lucciola System has pages now: Overview, Startup & Security, Login,
+  Hardware**, behind a sidebar that folds on a narrow window. Startup &
+  Security shows Secure Boot and whether Lucciola's key is registered
+  (with Register the Key at the Next Restart… and Stop Reminding Me),
+  the disk unlock by the TPM (enable, typing the current passphrase once,
+  or go back to asking it; only with Secure Boot on and the key
+  registered), the boot menu lock (set a password, or remove it) and the
+  kernel (CachyOS or Fedora's, what is followed and what is staged, with
+  the switch). Login opens the fingerprint panel of Settings, shows the
+  keyring and how it opens at login (store the password sealed to the TPM,
+  or remove it) and has the automatic login switch, with its warning.
+  Hardware takes the CPU scheduler in: what runs now and at startup, the
+  mode, a chooser that lists the schedulers only when asked (asking
+  scxctl starts the service), and the way back to the kernel's own
+  scheduler. Every page reads the real state when shown and after each
+  action; nothing is remembered. The guide's commands for TPM, GRUB,
+  kernel, keyring and autologin now have a button.
+- **One polkit action per verb for all of it**: `kernel`,
+  `tpm-unlock-status/-enable/-disable`, `grub-lock-status/-on/-off`,
+  `autologin-on/-off`, `secureboot-enroll/-never`, `scheduler`,
+  `scheduler-off` join `update`, `rollback` and `flatpak-unblock` in
+  `/usr/libexec/lucciola/admin`. The two `*-status` verbs only read and
+  need no password from an active user. Secrets never travel as
+  arguments: the window writes the disk passphrase, the boot-menu
+  password and the keyring password on the helper's standard input, and
+  they reach `systemd-cryptenroll` as a root-only key file
+  (`lucciola-tpm-unlock` learned `LUCCIOLA_UNLOCK_KEY_FILE`), `grub-lock`
+  on its stdin, `lucciola-keyring` on its stdin when not at a terminal.
+  `autologin-on` takes the user from pkexec, never from an argument.
+- **The CPU scheduler's own window and its polkit rule are gone.**
+  `49-margine-scheduler.rules` gave `auth_admin_keep` on
+  `org.freedesktop.policykit.exec` for one program, and polkit keeps such
+  a grant for the action id, not the program: after one scheduler prompt
+  the same process could run anything through pkexec for a few minutes
+  without a prompt. The scheduler has its two actions now, the launcher
+  "Lucciola CPU Scheduler" opens the Hardware page, and `ujust
+  lucciola-scheduler` goes through the same helper. The old window also
+  started `scx_loader.service` just by being opened (every poll asked
+  scxctl); the page reads `/sys/kernel/sched_ext` and the service's state
+  instead.
+
 ### Changed (2026-10-21, Lucciola System)
 - **Lucciola System speaks to people who never open a terminal.** Pending
   app updates are named by app, not by Flatpak id; the texts no longer

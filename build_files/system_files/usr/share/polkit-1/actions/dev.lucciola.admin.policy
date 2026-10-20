@@ -7,8 +7,10 @@
   (the exec.argv1 annotation), so the dialog names what is about to happen
   and each action can be allowed or refused on its own. Active local users
   authenticate as an administrator once and keep it for a few minutes
-  (auth_admin_keep); remote or inactive sessions always authenticate.
-  See /usr/libexec/lucciola/admin.
+  (auth_admin_keep); remote or inactive sessions always authenticate. The
+  *-status actions only read, and an active local user gets them without a
+  password. See /usr/libexec/lucciola/admin; tests/system-logic.test.sh
+  keeps this file and the helper's verbs in step.
 -->
 <policyconfig>
   <vendor>Lucciola</vendor>
@@ -49,5 +51,161 @@
     </defaults>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
     <annotate key="org.freedesktop.policykit.exec.argv1">flatpak-unblock</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.kernel">
+    <description>Switch between the CachyOS kernel and Fedora's kernel</description>
+    <message>Authentication is required to switch the kernel Lucciola starts with. The change applies at the next restart.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">kernel</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.tpm-unlock-status">
+    <description>Read how the disk is unlocked at startup</description>
+    <message>Authentication is required to read how the disk is unlocked at startup.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">tpm-unlock-status</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.tpm-unlock-enable">
+    <description>Let the TPM unlock the disk at startup</description>
+    <message>Authentication is required to let the TPM security chip unlock the disk at startup.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">tpm-unlock-enable</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.tpm-unlock-disable">
+    <description>Stop the TPM from unlocking the disk at startup</description>
+    <message>Authentication is required to stop the TPM from unlocking the disk; the passphrase is asked at every startup instead.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">tpm-unlock-disable</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.grub-lock-status">
+    <description>Read whether the boot menu is locked</description>
+    <message>Authentication is required to read whether the boot menu is locked.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">grub-lock-status</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.grub-lock-on">
+    <description>Lock the boot menu with a password</description>
+    <message>Authentication is required to lock the boot menu, so that changing how the system starts needs a password.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">grub-lock-on</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.grub-lock-off">
+    <description>Remove the boot menu lock</description>
+    <message>Authentication is required to remove the boot menu lock.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">grub-lock-off</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.autologin-on">
+    <description>Log this user in automatically at startup</description>
+    <message>Authentication is required to log you in automatically at startup, without a password or fingerprint.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">autologin-on</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.autologin-off">
+    <description>Ask for a login at startup again</description>
+    <message>Authentication is required to turn automatic login off.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">autologin-off</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.secureboot-enroll">
+    <description>Register Lucciola's Secure Boot key at the next restart</description>
+    <message>Authentication is required to register Lucciola's Secure Boot key; the firmware asks to confirm it at the next restart.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">secureboot-enroll</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.secureboot-never">
+    <description>Stop asking to register Lucciola's Secure Boot key</description>
+    <message>Authentication is required to stop the reminders about Lucciola's Secure Boot key.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">secureboot-never</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.scheduler">
+    <description>Use a CPU scheduler now and at every startup</description>
+    <message>Authentication is required to change the CPU scheduler.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">scheduler</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.scheduler-off">
+    <description>Go back to the kernel's own CPU scheduler</description>
+    <message>Authentication is required to go back to the kernel's own CPU scheduler.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">scheduler-off</annotate>
   </action>
 </policyconfig>

@@ -1,31 +1,35 @@
 #!/usr/bin/python3
-# Lucciola System: the graphical answer to "is my machine current and healthy?"
-# (Margine System until 2026-10-18.)
+# Lucciola System: the one place for what is Lucciola's and not the
+# desktop's. (Margine System until 2026-10-18.) Four pages behind a
+# sidebar: Overview (is my machine current and healthy?), Startup &
+# Security (Secure Boot, the disk unlock, the boot menu, the kernel),
+# Login (fingerprint, keyring, automatic login) and Hardware (the CPU
+# scheduler). Noctalia keeps the look of the desktop, GNOME Settings the
+# standard panels that work under niri; this app never duplicates them, at
+# most a row opens the right one.
 #
 # Everything here already existed as CLI (lucciola-status, ujust
-# lucciola-update, ujust lucciola-doctor, rpm-ostree rollback, ujust
-# lucciola-report). This app is not a reimplementation: it drives the same
-# scripts, so there is exactly one definition of "how the system updates"
-# and the GUI can never drift from the terminal (system-update is the shared
-# helper; the just recipe calls it too).
+# lucciola-update, -doctor, -kernel, -tpm-unlock, -grub-lock, -autologin,
+# -keyring, -secureboot, -scheduler, -report). This app is not a
+# reimplementation: it drives the same scripts, so there is exactly one
+# definition of each operation and the GUI can never drift from the
+# terminal.
 #
 # Privilege model: the app runs as the user and never asks for a password
-# on its own. Privileged actions (stage an update, roll back, take an app
-# back into automatic updates) go through /usr/libexec/lucciola/admin under
-# pkexec, which has an authentication agent in a graphical session; each
-# action has its own polkit action (dev.lucciola.admin.policy), so the
+# on its own. Privileged actions go through /usr/libexec/lucciola/admin
+# under pkexec, which has an authentication agent in a graphical session;
+# each verb has its own polkit action (dev.lucciola.admin.policy), so the
 # dialog says what is about to happen and an administrator can allow one
-# without the others. Unlike uupd's system-service context, where the same
-# call is refused silently (the bug that left brew months behind, see
-# brew-upgrade), this path always has an agent.
+# verb without the others. Read-only verbs (*-status) need no password.
+# Secrets (a disk passphrase, a boot-menu password, the keyring password)
+# travel on the helper's standard input, never as arguments.
 #
-# Read-only state comes from unprivileged sources on purpose: `rpm-ostree
-# status --json` for the local deployments (bootc status requires root),
-# skopeo for the published image of the tag this machine follows, flatpak
-# and brew for the pending app updates, and the lucciola-validate-*
-# scripts, which are all user-runnable by design. Decisions that need no
-# toolkit live in /usr/share/lucciola/system/lucciola_system.py, which the
-# tests run without a display.
+# Read-only state comes from unprivileged sources wherever one exists:
+# `rpm-ostree status --json`, skopeo for the published image, flatpak and
+# brew, /sys/kernel/sched_ext, mokutil, the helpers' own status words.
+# Decisions that need no toolkit live in
+# /usr/share/lucciola/system/lucciola_system.py, which the tests run
+# without a display.
 
 import os
 import subprocess
@@ -45,28 +49,51 @@ import lucciola_system as ls  # noqa: E402
 # The application id keeps its Margine name: it is the window's Wayland
 # app_id, which must equal the .desktop file's name for the launcher to
 # match the window, and the name a dock pin or a saved favourite refers to.
-# Renaming it would orphan those for nothing the user sees.
 APP_ID = "dev.margine.System"
 ADMIN = "/usr/libexec/lucciola/admin"
 BREW = "/home/linuxbrew/.linuxbrew/bin/brew"
 BREW_UPGRADE = "/usr/libexec/margine/brew-upgrade"
 REPORT = "/usr/libexec/margine/system-report"
 GUIDE_OPEN = "/usr/libexec/margine/guide-open"
+KEYRING = "/usr/bin/lucciola-keyring"
+AUTOLOGIN = "/usr/bin/lucciola-autologin"
+MOK_ENROLL = "/usr/libexec/margine/mok-enroll"
 BLOCKED = "/var/lib/margine/update-watchdog/blocked"
+KERNEL_FLAVOUR_FILE = "/usr/share/margine/kernel-flavor"
+KERNEL_RESERVE_FILE = "/usr/share/margine/kernel-reserve-tag"
+SCX_STATE = "/sys/kernel/sched_ext/state"
+SCX_OPS = "/sys/kernel/sched_ext/root/ops"
+SCX_CONFIG = "/etc/scx_loader/config.toml"
+SCX_SERVICE = "scx_loader.service"
 REFRESH_EVERY = 10 * 60   # seconds between unasked refreshes
 REFRESH_ON_FOCUS = 5 * 60  # refresh when the window comes back after this long
 
+PAGES = (
+    ("overview", "Overview", "computer-symbolic"),
+    ("startup", "Startup & Security", "security-high-symbolic"),
+    ("login", "Login", "avatar-default-symbolic"),
+    ("hardware", "Hardware", "preferences-system-symbolic"),
+)
 
-def run(argv, timeout=30, env=None):
+
+def run(argv, timeout=30, env=None, stdin=None):
     """Command runner that never raises: (returncode, stdout, stderr).
     -1 is a tool that could not start, -2 a timeout."""
     try:
-        res = subprocess.run(argv, text=True, capture_output=True, timeout=timeout, env=env)
+        res = subprocess.run(argv, text=True, capture_output=True, timeout=timeout, env=env, input=stdin)
         return res.returncode, res.stdout, res.stderr
     except OSError as e:
         return -1, "", str(e)
     except subprocess.TimeoutExpired:
         return -2, "", "took too long"
+
+
+def read_file(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+    except OSError:
+        return ""
 
 
 def in_thread(fn, *args):
@@ -88,12 +115,37 @@ def spinner(size):
     return s
 
 
+def info_row(group, title, icon_name, subtitle=""):
+    row = Adw.ActionRow(title=title, subtitle=subtitle)
+    row.add_prefix(icon(icon_name))
+    row.set_activatable(False)
+    row.set_subtitle_selectable(True)
+    group.add(row)
+    return row
+
+
+def button_row(group, title, icon_name, callback, css=None):
+    row = Adw.ButtonRow(title=title)
+    row.set_start_icon_name(icon_name)
+    if css:
+        row.add_css_class(css)
+    row.connect("activated", callback)
+    group.add(row)
+    return row
+
+
+def preferences_page():
+    page = Adw.PreferencesPage()
+    return page
+
+
 class SystemWindow(Adw.ApplicationWindow):
-    def __init__(self, app):
+    def __init__(self, app, start_page="overview"):
         super().__init__(application=app)
         self.set_title("Lucciola System")
-        self.set_default_size(560, 760)
-        self.set_size_request(400, -1)
+        self.set_default_size(880, 760)
+        # A window with breakpoints must say its minimum size.
+        self.set_size_request(400, 480)
 
         self._state = {}
         self._latest = None
@@ -108,9 +160,13 @@ class SystemWindow(Adw.ApplicationWindow):
         self._brew_updates = None
         self._excluded = []
         self._check_results = []
+        self._page_generation = {}
+        self._sched_mode = 0
+        self._autologin_guard = False
+        self._current_page = "overview"
 
         for name, cb in (
-            ("refresh", lambda *_: self._refresh()),
+            ("refresh", lambda *_: self._refresh_all()),
             ("help", lambda *_: self._on_help()),
             ("shortcuts", lambda *_: self._on_shortcuts()),
             ("report", lambda *_: self._on_report()),
@@ -123,11 +179,18 @@ class SystemWindow(Adw.ApplicationWindow):
 
         self._toasts = Adw.ToastOverlay()
         self.set_content(self._toasts)
-        toolbar = Adw.ToolbarView()
-        self._toasts.set_child(toolbar)
+        self._split = Adw.NavigationSplitView()
+        self._split.set_min_sidebar_width(200)
+        self._split.set_max_sidebar_width(260)
+        self._toasts.set_child(self._split)
+        breakpoint = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 620sp"))
+        breakpoint.add_setter(self._split, "collapsed", True)
+        self.add_breakpoint(breakpoint)
 
-        header = Adw.HeaderBar()
-        header.set_title_widget(Adw.WindowTitle(title="Lucciola System"))
+        # ── sidebar ──────────────────────────────────────────────────
+        side_toolbar = Adw.ToolbarView()
+        side_header = Adw.HeaderBar()
+        side_header.set_title_widget(Adw.WindowTitle(title="Lucciola System"))
         menu = Gio.Menu()
         section = Gio.Menu()
         section.append("Check Again", "win.refresh")
@@ -141,116 +204,101 @@ class SystemWindow(Adw.ApplicationWindow):
         menu_button = Gtk.MenuButton(icon_name="open-menu-symbolic", primary=True)
         menu_button.set_menu_model(menu)
         menu_button.set_tooltip_text("Main Menu")
-        header.pack_end(menu_button)
-        toolbar.add_top_bar(header)
+        side_header.pack_end(menu_button)
+        side_toolbar.add_top_bar(side_header)
+        self._sidebar = Gtk.ListBox()
+        self._sidebar.add_css_class("navigation-sidebar")
+        self._sidebar.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self._rows_by_page = {}
+        for page_id, title, icon_name in PAGES:
+            box = Gtk.Box(spacing=12)
+            box.set_margin_top(6)
+            box.set_margin_bottom(6)
+            box.append(icon(icon_name))
+            label = Gtk.Label(label=title, xalign=0)
+            box.append(label)
+            row = Gtk.ListBoxRow(child=box)
+            row.page_id = page_id
+            self._sidebar.append(row)
+            self._rows_by_page[page_id] = row
+        self._sidebar.connect("row-selected", self._on_page_selected)
+        side_toolbar.set_content(self._sidebar)
+        self._split.set_sidebar(Adw.NavigationPage.new(side_toolbar, "Lucciola System"))
 
-        page = Adw.PreferencesPage()
-        toolbar.set_content(page)
+        # ── content ──────────────────────────────────────────────────
+        content_toolbar = Adw.ToolbarView()
+        self._content_title = Adw.WindowTitle(title="Overview")
+        content_header = Adw.HeaderBar()
+        content_header.set_title_widget(self._content_title)
+        content_toolbar.add_top_bar(content_header)
+        self._stack = Gtk.Stack()
+        self._stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+        content_toolbar.set_content(self._stack)
+        self._content_page = Adw.NavigationPage.new(content_toolbar, "Overview")
+        self._split.set_content(self._content_page)
 
-        # ── the answer, up front ─────────────────────────────────────
-        # Hand-built hero instead of Adw.StatusPage: StatusPage is meant to
-        # BE a whole view, and nested in a PreferencesGroup it drew its icon
-        # while swallowing title and description entirely (first user test:
-        # "non è chiaro a colpo d'occhio se il sistema è aggiornato"). A
-        # plain box renders predictably and lets the version sit right under
-        # the verdict, which is the one thing people open this app to learn.
-        hero = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        hero.set_margin_top(12)
-        hero.set_margin_bottom(18)
+        self._stack.add_named(self._build_overview(), "overview")
+        self._stack.add_named(self._build_startup(), "startup")
+        self._stack.add_named(self._build_login(), "login")
+        self._stack.add_named(self._build_hardware(), "hardware")
 
-        self._hero_stack = Gtk.Stack()
-        self._hero_stack.set_halign(Gtk.Align.CENTER)
-        self._hero_stack.set_margin_bottom(6)
-        self._hero_icon = Gtk.Image()
-        self._hero_icon.set_pixel_size(72)
-        self._hero_stack.add_named(self._hero_icon, "icon")
-        self._hero_stack.add_named(spinner(64), "spinner")
-        hero.append(self._hero_stack)
-
-        self._hero_title = Gtk.Label()
-        self._hero_title.add_css_class("title-1")
-        self._hero_title.set_wrap(True)
-        self._hero_title.set_justify(Gtk.Justification.CENTER)
-        hero.append(self._hero_title)
-
-        self._hero_version = Gtk.Label()
-        self._hero_version.add_css_class("title-4")
-        self._hero_version.add_css_class("numeric")
-        hero.append(self._hero_version)
-
-        self._hero_body = Gtk.Label()
-        self._hero_body.add_css_class("dimmed")
-        self._hero_body.set_wrap(True)
-        self._hero_body.set_justify(Gtk.Justification.CENTER)
-        self._hero_body.set_margin_bottom(6)
-        hero.append(self._hero_body)
-
-        self._action_button = Gtk.Button()
-        self._action_button.add_css_class("pill")
-        self._action_button.set_halign(Gtk.Align.CENTER)
-        self._action_button.set_visible(False)
-        self._action_button.connect("clicked", self._on_primary_action)
-        hero.append(self._action_button)
-
-        hero_group = Adw.PreferencesGroup()
-        hero_group.add(hero)
-        page.add(hero_group)
-
-        # ── this machine ─────────────────────────────────────────────
-        sys_group = Adw.PreferencesGroup(title="This Machine")
-        page.add(sys_group)
-        self._version_row = self._info_row(sys_group, "Version", "drive-harddisk-symbolic")
-        self._kernel_row = self._info_row(sys_group, "Kernel", "computer-symbolic")
-        self._base_row = self._info_row(sys_group, "Built From", "package-x-generic-symbolic")
-        # Layered packages are the one part of the system that is NOT in
-        # the image, so "am I current?" is a fair question about them too.
-        # They are re-resolved from the repositories on every system update,
-        # so they follow the image; people cannot know that unless it is
-        # written down, nor check what they layered months ago unless it is
-        # listed.
-        self._layered_row = self._link_row(sys_group, "Extra Packages", "system-software-install-symbolic", self._on_show_layered)
-
-        # ── apps and tools ───────────────────────────────────────────
-        ch_group = Adw.PreferencesGroup(
-            title="Apps and Tools",
-            description="Apps update on their own twice a day, command-line tools once a week; nothing to do unless you want them sooner",
-        )
-        page.add(ch_group)
-        self._flatpak_row = self._link_row(ch_group, "Apps", "view-grid-symbolic", self._on_show_flatpak)
-        self._brew_row = self._link_row(ch_group, "Command-Line Tools", "utilities-terminal-symbolic", self._on_show_brew)
-
-        # ── health and recovery ──────────────────────────────────────
-        care_group = Adw.PreferencesGroup(title="Health and Recovery")
-        page.add(care_group)
-        self._rollback_row = self._info_row(care_group, "Previous Version", "edit-undo-symbolic")
-        self._check_button = Adw.ButtonRow(title="Run System Check…")
-        self._check_button.set_start_icon_name("emblem-system-symbolic")
-        self._check_button.connect("activated", self._on_run_check)
-        care_group.add(self._check_button)
-        self._rollback_button = Adw.ButtonRow(title="Roll Back…")
-        self._rollback_button.set_start_icon_name("edit-undo-symbolic")
-        self._rollback_button.add_css_class("destructive-action")
-        self._rollback_button.set_sensitive(False)
-        self._rollback_button.connect("activated", self._on_rollback)
-        care_group.add(self._rollback_button)
-
-        # Fresh state when the window comes back after a while, and every
-        # ten minutes while it stays open: the background update timers
-        # change what this window says.
         self.connect("notify::is-active", self._on_active_changed)
         GLib.timeout_add_seconds(REFRESH_EVERY, self._on_timer)
-        self._refresh()
+        self._refresh_overview()
+        self.show_page(start_page if start_page in dict((p[0], p) for p in PAGES) else "overview")
+
+    # ── pages: navigation ────────────────────────────────────────────
+
+    def show_page(self, page_id):
+        row = self._rows_by_page.get(page_id)
+        if row is not None:
+            self._sidebar.select_row(row)
+
+    def _on_page_selected(self, _listbox, row):
+        if row is None:
+            return
+        page_id = row.page_id
+        self._current_page = page_id
+        title = dict((p[0], p[1]) for p in PAGES)[page_id]
+        self._stack.set_visible_child_name(page_id)
+        self._content_title.set_title(title)
+        self._content_page.set_title(title)
+        self._split.set_show_content(True)
+        self._refresh_page(page_id)
+
+    def _refresh_page(self, page_id):
+        if page_id == "overview":
+            self._refresh_overview()
+        elif page_id == "startup":
+            self._refresh_startup()
+        elif page_id == "login":
+            self._refresh_login()
+        elif page_id == "hardware":
+            self._refresh_hardware()
+
+    def _refresh_all(self):
+        self._refresh_overview()
+        if self._current_page != "overview":
+            self._refresh_page(self._current_page)
+
+    def _on_active_changed(self, *_args):
+        if self.is_active() and time.monotonic() - self._last_refresh > REFRESH_ON_FOCUS:
+            self._refresh_all()
+
+    def _on_timer(self):
+        if not self._busy:
+            self._refresh_all()
+        return True
+
+    def _bump(self, page_id):
+        """A refresh generation per page: results from an older refresh are dropped."""
+        self._page_generation[page_id] = self._page_generation.get(page_id, 0) + 1
+        return self._page_generation[page_id]
+
+    def _current(self, page_id, gen):
+        return self._page_generation.get(page_id) == gen
 
     # ── small helpers ────────────────────────────────────────────────
-
-    def _info_row(self, group, title, icon_name):
-        row = Adw.ActionRow(title=title)
-        row.add_prefix(icon(icon_name))
-        row.set_activatable(False)
-        row.set_subtitle_selectable(True)
-        self._set_loading(row, True)
-        group.add(row)
-        return row
 
     def _link_row(self, group, title, icon_name, callback):
         row = Adw.ActionRow(title=title)
@@ -279,8 +327,23 @@ class SystemWindow(Adw.ApplicationWindow):
             toast.set_action_name(action)
         self._toasts.add_toast(toast)
 
+    def _confirm(self, heading, body, verb, on_confirm, destructive=False, extra=None):
+        dialog = Adw.AlertDialog(heading=heading, body=body)
+        if extra is not None:
+            dialog.set_extra_child(extra)
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("go", verb)
+        dialog.set_response_appearance(
+            "go", Adw.ResponseAppearance.DESTRUCTIVE if destructive else Adw.ResponseAppearance.SUGGESTED
+        )
+        dialog.set_default_response("cancel")
+        dialog.set_close_response("cancel")
+        dialog.connect("response", lambda _d, r: r == "go" and on_confirm())
+        dialog.present(self)
+        return dialog
+
     def _list_dialog(self, title, description, items, empty, icon_name="package-x-generic-symbolic", extra=None):
-        page = Adw.PreferencesPage()
+        page = preferences_page()
         group = Adw.PreferencesGroup(title=title, description=description)
         page.add(group)
         if items:
@@ -307,22 +370,81 @@ class SystemWindow(Adw.ApplicationWindow):
         dialog.present(self)
         return dialog
 
-    # ── state refresh ────────────────────────────────────────────────
+    # ═════════════════════════════ Overview ═════════════════════════
 
-    def _on_active_changed(self, *_args):
-        if self.is_active() and time.monotonic() - self._last_refresh > REFRESH_ON_FOCUS:
-            self._refresh()
+    def _build_overview(self):
+        page = preferences_page()
 
-    def _on_timer(self):
-        if not self._busy:
-            self._refresh()
-        return True
+        # Hand-built hero instead of Adw.StatusPage: StatusPage is meant to
+        # BE a whole view, and nested in a PreferencesGroup it drew its icon
+        # while swallowing title and description entirely (first user test:
+        # "non è chiaro a colpo d'occhio se il sistema è aggiornato").
+        hero = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        hero.set_margin_top(12)
+        hero.set_margin_bottom(18)
+        self._hero_stack = Gtk.Stack()
+        self._hero_stack.set_halign(Gtk.Align.CENTER)
+        self._hero_stack.set_margin_bottom(6)
+        self._hero_icon = Gtk.Image()
+        self._hero_icon.set_pixel_size(72)
+        self._hero_stack.add_named(self._hero_icon, "icon")
+        self._hero_stack.add_named(spinner(64), "spinner")
+        hero.append(self._hero_stack)
+        self._hero_title = Gtk.Label()
+        self._hero_title.add_css_class("title-1")
+        self._hero_title.set_wrap(True)
+        self._hero_title.set_justify(Gtk.Justification.CENTER)
+        hero.append(self._hero_title)
+        self._hero_version = Gtk.Label()
+        self._hero_version.add_css_class("title-4")
+        self._hero_version.add_css_class("numeric")
+        hero.append(self._hero_version)
+        self._hero_body = Gtk.Label()
+        self._hero_body.add_css_class("dimmed")
+        self._hero_body.set_wrap(True)
+        self._hero_body.set_justify(Gtk.Justification.CENTER)
+        self._hero_body.set_margin_bottom(6)
+        hero.append(self._hero_body)
+        self._action_button = Gtk.Button()
+        self._action_button.add_css_class("pill")
+        self._action_button.set_halign(Gtk.Align.CENTER)
+        self._action_button.set_visible(False)
+        self._action_button.connect("clicked", self._on_primary_action)
+        hero.append(self._action_button)
+        hero_group = Adw.PreferencesGroup()
+        hero_group.add(hero)
+        page.add(hero_group)
 
-    def _refresh(self):
-        """Everything is read again, off the main thread; results that
-        arrive from an older refresh are dropped."""
-        self._generation += 1
-        gen = self._generation
+        sys_group = Adw.PreferencesGroup(title="This Machine")
+        page.add(sys_group)
+        self._version_row = info_row(sys_group, "Version", "drive-harddisk-symbolic")
+        self._kernel_row = info_row(sys_group, "Kernel", "computer-symbolic")
+        self._base_row = info_row(sys_group, "Built From", "package-x-generic-symbolic")
+        for row in (self._version_row, self._kernel_row, self._base_row):
+            self._set_loading(row, True)
+        # Layered packages are the one part of the system that is NOT in
+        # the image, so "am I current?" is a fair question about them too.
+        self._layered_row = self._link_row(sys_group, "Extra Packages", "system-software-install-symbolic", self._on_show_layered)
+
+        ch_group = Adw.PreferencesGroup(
+            title="Apps and Tools",
+            description="Apps update on their own twice a day, command-line tools once a week; nothing to do unless you want them sooner",
+        )
+        page.add(ch_group)
+        self._flatpak_row = self._link_row(ch_group, "Apps", "view-grid-symbolic", self._on_show_flatpak)
+        self._brew_row = self._link_row(ch_group, "Command-Line Tools", "utilities-terminal-symbolic", self._on_show_brew)
+
+        care_group = Adw.PreferencesGroup(title="Health and Recovery")
+        page.add(care_group)
+        self._rollback_row = info_row(care_group, "Previous Version", "edit-undo-symbolic")
+        self._set_loading(self._rollback_row, True)
+        self._check_button = button_row(care_group, "Run System Check…", "emblem-system-symbolic", self._on_run_check)
+        self._rollback_button = button_row(care_group, "Roll Back…", "edit-undo-symbolic", self._on_rollback, "destructive-action")
+        self._rollback_button.set_sensitive(False)
+        return page
+
+    def _refresh_overview(self):
+        gen = self._bump("overview")
         self._last_refresh = time.monotonic()
         self._latest = None
         self._latest_error = None
@@ -344,7 +466,7 @@ class SystemWindow(Adw.ApplicationWindow):
                 version, digest = ls.parse_skopeo(out)
                 on_main(self._set_latest, gen, version, digest, None)
             else:
-                on_main(self._set_latest, gen, None, "", self._explain_fetch(rc, err))
+                on_main(self._set_latest, gen, None, "", self._explain_fetch(rc))
             rc, out, _ = run(["flatpak", "remote-ls", "--updates", "--columns=name,application"], 90)
             flat = ls.app_updates(out) if rc == 0 else None
             brew = None  # None = unavailable, [] = nothing outdated
@@ -353,16 +475,12 @@ class SystemWindow(Adw.ApplicationWindow):
                 rc, out, _ = run([BREW, "outdated", "--quiet"], 90, env=env)
                 if rc == 0:
                     brew = [x.strip() for x in out.splitlines() if x.strip()]
-            try:
-                with open(BLOCKED, encoding="utf-8") as fh:
-                    excluded = ls.excluded_apps(fh.read())
-            except OSError:
-                excluded = []
+            excluded = ls.excluded_apps(read_file(BLOCKED))
             on_main(self._set_counts, gen, flat, brew, excluded)
 
         in_thread(worker)
 
-    def _explain_fetch(self, rc, err):
+    def _explain_fetch(self, rc):
         if not Gio.NetworkMonitor.get_default().get_network_available():
             return "This machine is offline"
         if rc == -2:
@@ -372,7 +490,7 @@ class SystemWindow(Adw.ApplicationWindow):
         return "The image registry could not be reached"
 
     def _set_state(self, gen, state):
-        if gen != self._generation:
+        if not self._current("overview", gen):
             return
         self._state = state
         booted = state.get("booted") or "unknown"
@@ -398,7 +516,7 @@ class SystemWindow(Adw.ApplicationWindow):
         self._update_hero()
 
     def _set_latest(self, gen, latest, latest_digest, error):
-        if gen != self._generation:
+        if not self._current("overview", gen):
             return
         self._latest = latest
         self._latest_digest = latest_digest or ""
@@ -406,7 +524,7 @@ class SystemWindow(Adw.ApplicationWindow):
         self._update_hero()
 
     def _set_counts(self, gen, flat, brew, excluded):
-        if gen != self._generation:
+        if not self._current("overview", gen):
             return
         self._flatpak_updates = flat
         self._brew_updates = brew
@@ -430,30 +548,24 @@ class SystemWindow(Adw.ApplicationWindow):
         self._hero_version.set_text(staged or (booted if self._state else ""))
         self._hero_icon.remove_css_class("accent")
         self._hero_icon.remove_css_class("warning")
-
         if staged:
             self._show_hero_icon("system-reboot-symbolic", "accent")
             self._hero_title.set_text("Restart to Finish")
-            self._hero_body.set_text(
-                f"This version is downloaded and waiting. {booted} keeps running until you restart."
-            )
+            self._hero_body.set_text(f"This version is downloaded and waiting. {booted} keeps running until you restart.")
             self._set_action("Restart Now", suggested=True)
             return
-
         if not self._state or (self._latest is None and self._latest_error is None):
             self._hero_stack.set_visible_child_name("spinner")
             self._hero_title.set_text("Checking for Updates")
             self._hero_body.set_text("Asking the registry which version is published…")
             self._action_button.set_visible(False)
             return
-
         if self._latest_error:
             self._show_hero_icon("network-offline-symbolic", "warning")
             self._hero_title.set_text("Could Not Check for Updates")
             self._hero_body.set_text(f"{self._latest_error}. {booted} is what this machine runs.")
             self._set_action("Try Again", suggested=False)
             return
-
         if ls.update_available(self._state, self._latest, self._latest_digest):
             self._show_hero_icon("software-update-available-symbolic", None)
             self._hero_title.set_text("Update Available")
@@ -466,12 +578,9 @@ class SystemWindow(Adw.ApplicationWindow):
                 self._hero_body.set_text(f"This machine runs {booted}. The published version is {self._latest}.")
             self._set_action("Download Update", suggested=True)
             return
-
         self._show_hero_icon("object-select-symbolic", None)
         self._hero_title.set_text("Up to Date")
-        self._hero_body.set_text(
-            f"This machine matches the latest published version. Checked at {time.strftime('%H:%M')}."
-        )
+        self._hero_body.set_text(f"This machine matches the latest published version. Checked at {time.strftime('%H:%M')}.")
         self._set_action("Check Again", suggested=False)
 
     def _show_hero_icon(self, name, css):
@@ -488,15 +597,12 @@ class SystemWindow(Adw.ApplicationWindow):
         self._action_button.set_sensitive(not self._busy)
         self._action_button.set_visible(True)
 
-    # ── lists behind the rows ────────────────────────────────────────
-
     def _on_show_layered(self, _row):
         self._list_dialog(
             "Extra Packages",
             "Installed on top of the image, usually by the gaming feature. They are "
             "re-resolved from the repositories with every system update, so they stay current with it.",
-            self._state.get("layered") or [],
-            "No extra packages",
+            self._state.get("layered") or [], "No extra packages",
         )
 
     def _on_show_flatpak(self, _row):
@@ -504,11 +610,7 @@ class SystemWindow(Adw.ApplicationWindow):
         apps = self._flatpak_updates or []
         if apps:
             group = Adw.PreferencesGroup()
-            row = Adw.ButtonRow(title="Update Apps Now")
-            row.set_start_icon_name("software-update-available-symbolic")
-            row.add_css_class("suggested-action")
-            row.connect("activated", self._on_update_apps)
-            group.add(row)
+            button_row(group, "Update Apps Now", "software-update-available-symbolic", self._on_update_apps, "suggested-action")
             extra.append(group)
         if self._excluded:
             group = Adw.PreferencesGroup(
@@ -527,7 +629,8 @@ class SystemWindow(Adw.ApplicationWindow):
         if self._flatpak_updates is None:
             description = "Flathub could not be asked right now. Apps still update on their own at 04:30 and 16:30."
         else:
-            description = "Flatpak apps with an update waiting. They install on their own at 04:30 and 16:30 (your own apps at 17:00); Update Apps Now does it right away."
+            description = ("Flatpak apps with an update waiting. They install on their own at 04:30 and 16:30 "
+                           "(your own apps at 17:00); Update Apps Now does it right away.")
         self._apps_dialog = self._list_dialog("App Updates", description, apps, "All apps are up to date", extra=extra)
 
     def _on_show_brew(self, _row):
@@ -535,18 +638,13 @@ class SystemWindow(Adw.ApplicationWindow):
             self._list_dialog(
                 "Command-Line Tools",
                 "Homebrew is not installed on this machine. It comes with the developer tools feature, "
-                "together with VS Code and a compiler.",
-                [], "Nothing to update",
+                "together with VS Code and a compiler.", [], "Nothing to update",
             )
             return
         extra = []
         if self._brew_updates:
             group = Adw.PreferencesGroup()
-            row = Adw.ButtonRow(title="Update Command-Line Tools")
-            row.set_start_icon_name("software-update-available-symbolic")
-            row.add_css_class("suggested-action")
-            row.connect("activated", self._on_brew_update)
-            group.add(row)
+            button_row(group, "Update Command-Line Tools", "software-update-available-symbolic", self._on_brew_update, "suggested-action")
             extra.append(group)
         self._brew_dialog = self._list_dialog(
             "Command-Line Tools",
@@ -555,43 +653,39 @@ class SystemWindow(Adw.ApplicationWindow):
             self._brew_updates or [], "All tools are up to date", extra=extra,
         )
 
-    # ── actions ──────────────────────────────────────────────────────
-
     def _on_primary_action(self, _button):
         if self._state.get("staged"):
             self._reboot()
         elif self._latest_error:
-            self._refresh()
+            self._refresh_overview()
         elif ls.update_available(self._state, self._latest, self._latest_digest):
             self._run_operation(
-                ["pkexec", ADMIN, "update"],
-                title="Downloading Update",
+                ["pkexec", ADMIN, "update"], title="Downloading Update",
                 working="Downloading the next version. The machine keeps working meanwhile.",
                 done="Update downloaded: restart to finish it",
             )
         else:
-            self._refresh()
+            self._refresh_overview()
+
+    def _close_dialog(self, name):
+        dialog = getattr(self, name, None)
+        if dialog is not None:
+            dialog.close()
+            setattr(self, name, None)
 
     def _on_update_apps(self, _row):
         # No pkexec: flatpak asks polkit itself for the system installation,
         # and an active user may update without a password.
-        dialog = getattr(self, "_apps_dialog", None)
-        if dialog is not None:
-            dialog.close()
+        self._close_dialog("_apps_dialog")
         self._run_operation(
-            ["flatpak", "update", "-y", "--noninteractive"],
-            title="Updating Apps",
-            working="Updating the apps with a newer version on Flathub.",
-            done="Apps updated",
+            ["flatpak", "update", "-y", "--noninteractive"], title="Updating Apps",
+            working="Updating the apps with a newer version on Flathub.", done="Apps updated",
         )
 
     def _on_unblock(self, _button, app_id):
-        dialog = getattr(self, "_apps_dialog", None)
-        if dialog is not None:
-            dialog.close()
+        self._close_dialog("_apps_dialog")
         self._run_operation(
-            ["pkexec", ADMIN, "flatpak-unblock", app_id],
-            title=f"Updating {app_id}",
+            ["pkexec", ADMIN, "flatpak-unblock", app_id], title=f"Updating {app_id}",
             working=f"Updating {app_id} and taking it back into automatic updates.",
             done=f"{app_id} updated and back in automatic updates",
         )
@@ -599,52 +693,32 @@ class SystemWindow(Adw.ApplicationWindow):
     def _on_brew_update(self, _row):
         # No pkexec here on purpose: brew's prefix belongs to the user and
         # brew refuses to run as root.
-        dialog = getattr(self, "_brew_dialog", None)
-        if dialog is not None:
-            dialog.close()
+        self._close_dialog("_brew_dialog")
         self._run_operation(
-            [BREW_UPGRADE],
-            title="Updating Command-Line Tools",
-            working="Upgrading the Homebrew packages with a newer version.",
-            done="Command-line tools updated",
+            [BREW_UPGRADE], title="Updating Command-Line Tools",
+            working="Upgrading the Homebrew packages with a newer version.", done="Command-line tools updated",
         )
 
     def _reboot(self):
-        dialog = Adw.AlertDialog(
-            heading="Restart Now?",
-            body="Open apps will be closed. The update is applied while restarting.",
+        self._confirm(
+            "Restart Now?", "Open apps will be closed. The update is applied while restarting.",
+            "Restart", lambda: subprocess.Popen(["systemctl", "reboot"]),
         )
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("restart", "Restart")
-        dialog.set_response_appearance("restart", Adw.ResponseAppearance.SUGGESTED)
-        dialog.set_default_response("cancel")
-        dialog.connect("response", lambda _d, r: r == "restart" and subprocess.Popen(["systemctl", "reboot"]))
-        dialog.present(self)
 
     def _on_rollback(self, _row):
         target = self._state.get("rollback") or "the previous version"
-        dialog = Adw.AlertDialog(
-            heading="Roll Back?",
-            body=(
-                f"The next restart will boot {target} instead of the current version. "
-                "Your files and settings are not touched, and you can roll forward again "
-                "by updating."
-            ),
-        )
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("rollback", "Roll Back")
-        dialog.set_response_appearance("rollback", Adw.ResponseAppearance.DESTRUCTIVE)
-        dialog.set_default_response("cancel")
-        dialog.connect(
-            "response",
-            lambda _d, r: r == "rollback" and self._run_operation(
-                ["pkexec", ADMIN, "rollback"],
-                title="Rolling Back",
+        self._confirm(
+            "Roll Back?",
+            f"The next restart will boot {target} instead of the current version. "
+            "Your files and settings are not touched, and you can roll forward again by updating.",
+            "Roll Back",
+            lambda: self._run_operation(
+                ["pkexec", ADMIN, "rollback"], title="Rolling Back",
                 working=f"Making {target} the version that starts next.",
                 done="Rolled back: restart to boot the previous version",
             ),
+            destructive=True,
         )
-        dialog.present(self)
 
     def _on_run_check(self, _row):
         self._check_button.set_sensitive(False)
@@ -671,7 +745,7 @@ class SystemWindow(Adw.ApplicationWindow):
         if not results:
             self._toast("No checks are installed on this system")
             return
-        page = Adw.PreferencesPage()
+        page = preferences_page()
         group = Adw.PreferencesGroup(title="System Check", description=ls.check_summary(results))
         page.add(group)
         for name, ok, detail in results:
@@ -682,10 +756,7 @@ class SystemWindow(Adw.ApplicationWindow):
                 row.set_subtitle_lines(3)
             group.add(row)
         actions = Adw.PreferencesGroup()
-        copy_row = Adw.ButtonRow(title="Copy Results")
-        copy_row.set_start_icon_name("edit-copy-symbolic")
-        copy_row.connect("activated", self._on_copy_results)
-        actions.add(copy_row)
+        button_row(actions, "Copy Results", "edit-copy-symbolic", self._on_copy_results)
         page.add(actions)
         toolbar = Adw.ToolbarView()
         toolbar.add_top_bar(Adw.HeaderBar())
@@ -698,13 +769,557 @@ class SystemWindow(Adw.ApplicationWindow):
         dialog.present(self)
 
     def _on_copy_results(self, _row):
-        text = "\n\n".join(
-            f"== {name}: {'OK' if ok else 'FAIL'} ==\n{detail}".rstrip() for name, ok, detail in self._check_results
-        )
+        text = "\n\n".join(f"== {name}: {'OK' if ok else 'FAIL'} ==\n{detail}".rstrip() for name, ok, detail in self._check_results)
         Gdk.Display.get_default().get_clipboard().set(text)
         self._toast("Results copied")
 
-    # ── help, report, about ──────────────────────────────────────────
+    # ══════════════════════ Startup & Security ══════════════════════
+
+    def _build_startup(self):
+        page = preferences_page()
+
+        sb_group = Adw.PreferencesGroup(
+            title="Secure Boot",
+            description="With Secure Boot on, the firmware starts only systems whose key it knows. Lucciola's kernels are signed with its own key, which has to be registered once.",
+        )
+        page.add(sb_group)
+        self._sb_row = info_row(sb_group, "Secure Boot", "security-high-symbolic")
+        self._mok_row = info_row(sb_group, "Lucciola's Key", "dialog-password-symbolic")
+        self._mok_enroll_button = button_row(sb_group, "Register the Key at the Next Restart…", "dialog-password-symbolic", self._on_mok_enroll, "suggested-action")
+        self._mok_never_button = button_row(sb_group, "Stop Reminding Me", "window-close-symbolic", self._on_mok_never)
+
+        disk_group = Adw.PreferencesGroup(
+            title="Disk Unlock",
+            description="An encrypted disk normally asks its passphrase at every startup. The TPM security chip can unlock it instead, as long as the system that starts is the one it knows: Secure Boot on, Lucciola's key registered.",
+        )
+        page.add(disk_group)
+        self._tpm_row = info_row(disk_group, "Disk Unlock at Startup", "drive-harddisk-symbolic")
+        self._tpm_enable_button = button_row(disk_group, "Let the TPM Unlock the Disk…", "drive-harddisk-symbolic", self._on_tpm_enable, "suggested-action")
+        self._tpm_disable_button = button_row(disk_group, "Ask the Passphrase at Startup Again…", "drive-harddisk-symbolic", self._on_tpm_disable, "destructive-action")
+
+        boot_group = Adw.PreferencesGroup(
+            title="Boot Menu",
+            description="The boot menu can change how the system starts. Locked, editing it needs a password; normal starts and going back to a previous version never do.",
+        )
+        page.add(boot_group)
+        self._grub_row = info_row(boot_group, "Boot Menu Lock", "system-lock-screen-symbolic")
+        self._grub_on_button = button_row(boot_group, "Lock the Boot Menu…", "system-lock-screen-symbolic", self._on_grub_on, "suggested-action")
+        self._grub_off_button = button_row(boot_group, "Remove the Lock…", "system-lock-screen-symbolic", self._on_grub_off, "destructive-action")
+        info_row(boot_group, "Large Boot Menu on HiDPI Screens", "video-display-symbolic", "Applied on its own at every start")
+
+        kernel_group = Adw.PreferencesGroup(
+            title="Kernel",
+            description="Lucciola runs the CachyOS kernel. A second version, the same in everything else, runs Fedora's own kernel: it starts on processors without x86-64-v3, and it is the way out if a CachyOS kernel update misbehaves on this machine.",
+        )
+        page.add(kernel_group)
+        self._kernel_running_row = info_row(kernel_group, "Running Now", "computer-symbolic")
+        self._kernel_follows_row = info_row(kernel_group, "Follows", "package-x-generic-symbolic")
+        self._kernel_switch_button = button_row(kernel_group, "Switch to Fedora's Kernel…", "system-reboot-symbolic", self._on_kernel_switch)
+        return page
+
+    def _refresh_startup(self):
+        gen = self._bump("startup")
+        for row in (self._sb_row, self._mok_row, self._tpm_row, self._grub_row, self._kernel_running_row, self._kernel_follows_row):
+            self._set_loading(row, True)
+        for b in (self._mok_enroll_button, self._mok_never_button, self._tpm_enable_button, self._tpm_disable_button,
+                  self._grub_on_button, self._grub_off_button, self._kernel_switch_button):
+            b.set_sensitive(False)
+
+        def worker():
+            _, sb_out, _ = run(["mokutil", "--sb-state"])
+            _, mok_out, _ = run([MOK_ENROLL, "status"])
+            sb = ls.secureboot_state(sb_out, mok_out)
+            on_main(self._set_secureboot, gen, sb)
+            # Read-only verbs: their polkit action lets an active user in without a password.
+            rc, out, err = run(["pkexec", ADMIN, "tpm-unlock-status"], timeout=60)
+            tpm = ls.parse_tpm_status(out + err)
+            on_main(self._set_tpm, gen, tpm, rc, sb)
+            rc, out, err = run(["pkexec", ADMIN, "grub-lock-status"], timeout=60)
+            on_main(self._set_grub, gen, ls.parse_grub_lock(out + err), rc)
+            rc, out, _ = run(["rpm-ostree", "status", "--json"])
+            state = ls.parse_deployments(out if rc == 0 else "")
+            kernel = ls.kernel_state(state, read_file(KERNEL_FLAVOUR_FILE), read_file(KERNEL_RESERVE_FILE))
+            on_main(self._set_kernel, gen, kernel)
+
+        in_thread(worker)
+
+    def _set_secureboot(self, gen, sb):
+        if not self._current("startup", gen):
+            return
+        self._sb_state = sb
+        self._set_loading(self._sb_row, False)
+        self._set_loading(self._mok_row, False)
+        on = sb["secure_boot"]
+        self._sb_row.set_subtitle(
+            "On: the firmware starts only signed systems" if on else
+            "Off: any system can start on this machine" if on is False else
+            "Unknown: the firmware did not say"
+        )
+        key = sb["key"]
+        self._mok_row.set_subtitle({
+            "enrolled": "Registered: Lucciola's kernels start with Secure Boot on",
+            "pending": "Registration waits for the next restart: a blue screen asks to confirm it (the password is margine)",
+            "absent": "Not registered: Secure Boot must stay off until it is",
+            "unsupported": "Not applicable on this machine",
+        }[key])
+        self._mok_enroll_button.set_sensitive(key == "absent" and not self._busy)
+        self._mok_enroll_button.set_visible(key == "absent")
+        self._mok_never_button.set_sensitive(key == "absent" and not self._busy)
+        self._mok_never_button.set_visible(key == "absent")
+
+    def _set_tpm(self, gen, tpm, rc, sb):
+        if not self._current("startup", gen):
+            return
+        self._tpm = tpm
+        self._set_loading(self._tpm_row, False)
+        if rc in (126, 127):
+            state, text = "unknown", "Not allowed to read how the disk is unlocked"
+        else:
+            state, text = ls.tpm_summary(tpm)
+        self._tpm_state = state
+        self._tpm_row.set_subtitle(text)
+        can_enable = state in ("off", "half") and sb["secure_boot"] and sb["key"] == "enrolled"
+        self._tpm_enable_button.set_visible(state in ("off", "half", "unknown"))
+        self._tpm_enable_button.set_sensitive(bool(can_enable) and not self._busy)
+        if state in ("off", "half") and not can_enable:
+            self._tpm_row.set_subtitle(text + ". Secure Boot on and the key registered come first")
+        self._tpm_disable_button.set_visible(state in ("on", "half"))
+        self._tpm_disable_button.set_sensitive(state in ("on", "half") and not self._busy)
+
+    def _set_grub(self, gen, lock, rc):
+        if not self._current("startup", gen):
+            return
+        self._set_loading(self._grub_row, False)
+        if rc in (126, 127):
+            lock = None
+        self._grub_row.set_subtitle({
+            "on": "Locked: editing the boot menu needs the password (user root)",
+            "off": "Open: anyone at the keyboard can change how the system starts",
+            "unavailable": "Not available: this boot menu does not read a lock",
+            None: "Could not read the lock",
+        }[lock])
+        self._grub_on_button.set_visible(lock in ("off", None))
+        self._grub_on_button.set_sensitive(lock == "off" and not self._busy)
+        self._grub_off_button.set_visible(lock == "on")
+        self._grub_off_button.set_sensitive(lock == "on" and not self._busy)
+
+    def _set_kernel(self, gen, kernel):
+        if not self._current("startup", gen):
+            return
+        self._kernel = kernel
+        self._set_loading(self._kernel_running_row, False)
+        self._set_loading(self._kernel_follows_row, False)
+        names = {"cachyos": "the CachyOS kernel", "fedora": "Fedora's kernel", None: "a kernel this app does not recognise"}
+        self._kernel_running_row.set_subtitle(f"{names[kernel['running']].capitalize()}, {os.uname().release}")
+        follows = kernel["follows"]
+        if follows:
+            text = f"{follows}: {names[kernel['follows_flavour']]}"
+            if kernel["staged"]:
+                text += f". Staged for the next restart: {kernel['staged']} ({names[kernel['staged_flavour'] or kernel['follows_flavour']]})"
+            self._kernel_follows_row.set_subtitle(text)
+        else:
+            self._kernel_follows_row.set_subtitle("A digest pin or another image: the kernel cannot be switched from here")
+        target = "cachyos" if kernel["follows_flavour"] == "fedora" else "fedora"
+        self._kernel_switch_button.set_title("Switch to the CachyOS Kernel…" if target == "cachyos" else "Switch to Fedora's Kernel…")
+        self._kernel_switch_button.set_sensitive(bool(follows) and not kernel["staged"] and not self._busy)
+
+    def _on_mok_enroll(self, _row):
+        self._confirm(
+            "Register Lucciola's Key?",
+            "At the next restart the firmware shows a blue screen for a few seconds: choose Enroll MOK, "
+            "Continue, Yes, and type the password margine. After that, Secure Boot can be turned on in the firmware settings.",
+            "Register at the Next Restart",
+            lambda: self._run_operation(["pkexec", ADMIN, "secureboot-enroll"], title="Registering the Key",
+                                        working="Staging the key for the firmware.", done="The key is staged: the next restart asks to confirm it"),
+        )
+
+    def _on_mok_never(self, _row):
+        self._confirm(
+            "Stop the Reminders?",
+            "Lucciola stops asking to register its key. Secure Boot must then stay off on this machine.",
+            "Stop Reminding Me",
+            lambda: self._run_operation(["pkexec", ADMIN, "secureboot-never"], title="Stopping the Reminders",
+                                        working="Recording the choice.", done="No more reminders about the key"),
+            destructive=True,
+        )
+
+    def _on_tpm_enable(self, _row):
+        entry = Adw.PasswordEntryRow(title="Current disk passphrase")
+        group = Adw.PreferencesGroup()
+        group.add(entry)
+        dialog = self._confirm(
+            "Let the TPM Unlock the Disk?",
+            "The disk passphrase keeps working. From the next startup the TPM unlocks the disk when the system "
+            "is the one it knows; after a kernel switch or a firmware change it asks the passphrase once, and this "
+            "page lets the TPM in again.",
+            "Enable", lambda: self._run_operation(
+                ["pkexec", ADMIN, "tpm-unlock-enable"], title="Enrolling the TPM",
+                working="Enrolling the TPM on the encrypted disk and wiring the startup.",
+                done="The TPM unlocks the disk from the next startup", stdin_text=entry.get_text() + "\n",
+            ),
+            extra=group,
+        )
+        dialog.set_response_enabled("go", False)
+        entry.connect("changed", lambda e: dialog.set_response_enabled("go", bool(e.get_text())))
+
+    def _on_tpm_disable(self, _row):
+        self._confirm(
+            "Ask the Passphrase at Every Startup?",
+            "The TPM key is removed from the disk. Your passphrase is untouched and unlocks it at every startup.",
+            "Disable",
+            lambda: self._run_operation(["pkexec", ADMIN, "tpm-unlock-disable"], title="Removing the TPM Key",
+                                        working="Removing the TPM key from the disk.", done="The passphrase is asked at every startup again"),
+            destructive=True,
+        )
+
+    def _on_grub_on(self, _row):
+        first = Adw.PasswordEntryRow(title="Boot menu password")
+        second = Adw.PasswordEntryRow(title="Again")
+        hint = Gtk.Label(label="Letters and digits only, at least eight. The boot menu reads the keyboard as a US layout; the user name is root.", xalign=0)
+        hint.add_css_class("dimmed")
+        hint.set_wrap(True)
+        group = Adw.PreferencesGroup()
+        group.add(first)
+        group.add(second)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        box.append(group)
+        box.append(hint)
+        dialog = self._confirm(
+            "Lock the Boot Menu?",
+            "Changing how the system starts will need this password. Normal starts, and choosing a previous version, never ask for it.",
+            "Lock", lambda: self._run_operation(
+                ["pkexec", ADMIN, "grub-lock-on"], title="Locking the Boot Menu",
+                working="Writing the boot menu password.", done="The boot menu is locked", stdin_text=first.get_text() + "\n",
+            ),
+            extra=box,
+        )
+        dialog.set_response_enabled("go", False)
+
+        def validate(*_a):
+            ok = ls.grub_password_ok(first.get_text()) and first.get_text() == second.get_text()
+            dialog.set_response_enabled("go", ok)
+        first.connect("changed", validate)
+        second.connect("changed", validate)
+
+    def _on_grub_off(self, _row):
+        self._confirm(
+            "Remove the Boot Menu Lock?", "Anyone at the keyboard will be able to change how the system starts.",
+            "Remove the Lock",
+            lambda: self._run_operation(["pkexec", ADMIN, "grub-lock-off"], title="Removing the Lock",
+                                        working="Removing the boot menu password.", done="The boot menu is open"),
+            destructive=True,
+        )
+
+    def _on_kernel_switch(self, _row):
+        kernel = getattr(self, "_kernel", {})
+        target = "cachyos" if kernel.get("follows_flavour") == "fedora" else "fedora"
+        name = "the CachyOS kernel" if target == "cachyos" else "Fedora's kernel"
+        body = (f"The version with {name} is downloaded now and starts at the next restart. Files, settings and apps stay. "
+                "If the TPM unlocks the disk, the first start asks the passphrase once; then let the TPM in again from this page.")
+        if target == "cachyos":
+            body += " The CachyOS kernel needs a processor with x86-64-v3 and, with Secure Boot on, Lucciola's key registered."
+        self._confirm(
+            f"Switch to {name.capitalize() if target == 'fedora' else name}?", body, "Switch",
+            lambda: self._run_operation(["pkexec", ADMIN, "kernel", target], title="Switching the Kernel",
+                                        working=f"Downloading the version with {name}. This takes a few minutes.",
+                                        done="Switched: restart to use the other kernel"),
+        )
+
+    # ═════════════════════════════ Login ═════════════════════════════
+
+    def _build_login(self):
+        page = preferences_page()
+        who = Adw.PreferencesGroup(
+            title="Who Logs In",
+            description="The login screen takes a fingerprint or the password. The keyring, where apps keep their passwords, opens with the login password or, with the setting below, with the TPM.",
+        )
+        page.add(who)
+        fp = Adw.ActionRow(title="Fingerprint", subtitle="Register or remove fingerprints in Settings, under Users")
+        fp.add_prefix(icon("auth-fingerprint-symbolic"))
+        fp.add_suffix(icon("go-next-symbolic"))
+        fp.set_activatable(True)
+        fp.connect("activated", self._on_fingerprint)
+        who.add(fp)
+
+        keyring = Adw.PreferencesGroup(title="Keyring")
+        page.add(keyring)
+        self._keyring_row = info_row(keyring, "Keyring", "dialog-password-symbolic")
+        self._keyring_login_row = info_row(keyring, "At Login", "dialog-password-symbolic")
+        self._keyring_tpm_button = button_row(keyring, "Open the Keyring at Login with the TPM…", "dialog-password-symbolic", self._on_keyring_tpm, "suggested-action")
+        self._keyring_tpm_off_button = button_row(keyring, "Ask the Keyring Password at Login Again…", "dialog-password-symbolic", self._on_keyring_tpm_off, "destructive-action")
+
+        auto = Adw.PreferencesGroup(title="Automatic Login")
+        page.add(auto)
+        self._autologin_switch = Adw.SwitchRow(title="Log In Automatically", subtitle="Checking…")
+        self._autologin_switch.connect("notify::active", self._on_autologin_toggled)
+        auto.add(self._autologin_switch)
+        return page
+
+    def _refresh_login(self):
+        gen = self._bump("login")
+        for row in (self._keyring_row, self._keyring_login_row):
+            self._set_loading(row, True)
+        self._keyring_tpm_button.set_sensitive(False)
+        self._keyring_tpm_off_button.set_sensitive(False)
+
+        def worker():
+            _, out, err = run([AUTOLOGIN, "status"])
+            enabled, user = ls.parse_autologin(out + err)
+            on_main(self._set_autologin, gen, enabled, user)
+            _, out, err = run([KEYRING, "status"], timeout=30)
+            on_main(self._set_keyring, gen, ls.parse_keyring_status(out + err))
+
+        in_thread(worker)
+
+    def _set_autologin(self, gen, enabled, user):
+        if not self._current("login", gen):
+            return
+        self._autologin_guard = True
+        self._autologin_switch.set_active(bool(enabled))
+        self._autologin_guard = False
+        if enabled is None:
+            self._autologin_switch.set_subtitle("Could not read the login screen's setting")
+            self._autologin_switch.set_sensitive(False)
+            return
+        self._autologin_switch.set_sensitive(not self._busy)
+        self._autologin_switch.set_subtitle(
+            f"{user} is logged in at startup without a password or fingerprint" if enabled
+            else "The login screen asks for a fingerprint or the password at startup"
+        )
+
+    def _set_keyring(self, gen, st):
+        if not self._current("login", gen):
+            return
+        self._keyring_state = st
+        self._set_loading(self._keyring_row, False)
+        self._set_loading(self._keyring_login_row, False)
+        self._keyring_row.set_subtitle(
+            "Unlocked: apps reach their saved passwords" if st["unlocked"] else
+            "Locked: apps ask for its password" if st["unlocked"] is False else
+            "The keyring service did not answer"
+        )
+        at = st["at_login"]
+        self._keyring_login_row.set_subtitle({
+            "tpm-used": "Opened by the TPM at this login, no password asked",
+            "tpm-present": "A TPM credential is stored; this login used the password instead",
+            "tpm-wrong": "The stored TPM credential holds a wrong password: set it again",
+            "tpm-next": "A TPM credential is stored and applies from the next login",
+            "password": "Opened with the login password; a fingerprint login leaves it locked",
+            None: "Unknown",
+        }[at])
+        has_cred = at in ("tpm-used", "tpm-present", "tpm-wrong", "tpm-next")
+        self._keyring_tpm_button.set_title("Set the TPM Credential Again…" if at == "tpm-wrong" else "Open the Keyring at Login with the TPM…")
+        self._keyring_tpm_button.set_visible(at in ("password", "tpm-wrong", None))
+        self._keyring_tpm_button.set_sensitive(not self._busy)
+        self._keyring_tpm_off_button.set_visible(has_cred)
+        self._keyring_tpm_off_button.set_sensitive(not self._busy)
+
+    def _on_fingerprint(self, _row):
+        try:
+            Gio.Subprocess.new(["gnome-control-center", "user-accounts"], Gio.SubprocessFlags.NONE)
+        except GLib.Error as e:
+            self._toast(f"Could not open Settings: {e.message}")
+
+    def _on_keyring_tpm(self, _row):
+        entry = Adw.PasswordEntryRow(title="Keyring password")
+        hint = Gtk.Label(label="Normally the login password. It is sealed to this machine's TPM and used only to open the keyring at login.", xalign=0)
+        hint.add_css_class("dimmed")
+        hint.set_wrap(True)
+        group = Adw.PreferencesGroup()
+        group.add(entry)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        box.append(group)
+        box.append(hint)
+        dialog = self._confirm(
+            "Open the Keyring with the TPM?",
+            "From the next login the keyring opens without asking, also after a fingerprint login. "
+            "The password is stored sealed to the TPM, in your own account.",
+            "Store", lambda: self._run_operation(
+                [KEYRING, "tpm"], title="Storing the Keyring Password",
+                working="Sealing the password to the TPM.", done="Stored: the keyring opens on its own from the next login",
+                stdin_text=entry.get_text() + "\n",
+            ),
+            extra=box,
+        )
+        dialog.set_response_enabled("go", False)
+        entry.connect("changed", lambda e: dialog.set_response_enabled("go", bool(e.get_text())))
+
+    def _on_keyring_tpm_off(self, _row):
+        self._confirm(
+            "Ask the Keyring Password at Login?", "The sealed credential is removed. After a fingerprint login the keyring stays locked until an app asks for its password.",
+            "Remove",
+            lambda: self._run_operation([KEYRING, "tpm-off"], title="Removing the Credential",
+                                        working="Removing the sealed keyring password.", done="The keyring asks its password again"),
+            destructive=True,
+        )
+
+    def _on_autologin_toggled(self, switch, _pspec):
+        if self._autologin_guard:
+            return
+        wanted = switch.get_active()
+        # Put the switch back until the helper has done it; the refresh sets the real state.
+        self._autologin_guard = True
+        switch.set_active(not wanted)
+        self._autologin_guard = False
+        if wanted:
+            self._confirm(
+                "Log In Automatically?",
+                "Whoever turns this machine on gets into your session, without a password or fingerprint. "
+                "The keyring stays locked until an app asks for its password, unless the TPM opens it (see above).",
+                "Log In Automatically",
+                lambda: self._run_operation(["pkexec", ADMIN, "autologin-on"], title="Turning Automatic Login On",
+                                            working="Writing the login screen's setting.", done="Automatic login from the next startup"),
+                destructive=True,
+            )
+        else:
+            self._run_operation(["pkexec", ADMIN, "autologin-off"], title="Turning Automatic Login Off",
+                                working="Writing the login screen's setting.", done="The login screen asks again from the next startup")
+
+    # ═══════════════════════════ Hardware ═══════════════════════════
+
+    def _build_hardware(self):
+        page = preferences_page()
+        sched = Adw.PreferencesGroup(
+            title="CPU Scheduler",
+            description="The kernel's own scheduler suits most work. A sched_ext scheduler can favour games, audio or battery life; it applies at once and at every start, and the kernel's own is one click away.",
+        )
+        page.add(sched)
+        self._sched_running_row = info_row(sched, "Running Now", "preferences-system-symbolic")
+        self._sched_boot_row = info_row(sched, "At Startup", "system-reboot-symbolic")
+        self._sched_mode_row = Adw.ComboRow(title="Mode", subtitle="Auto adapts; the others force a profile")
+        self._sched_mode_row.set_model(Gtk.StringList.new([ls.SCHED_MODE_LABELS[m] for m, _ in ls.SCHED_MODES]))
+        self._sched_mode_row.connect("notify::selected", lambda r, _p: setattr(self, "_sched_mode", r.get_selected()))
+        sched.add(self._sched_mode_row)
+        self._sched_choose_button = button_row(sched, "Choose a Scheduler…", "preferences-system-symbolic", self._on_choose_scheduler, "suggested-action")
+        self._sched_off_button = button_row(sched, "Use the Kernel's Own Scheduler", "edit-undo-symbolic", self._on_scheduler_off)
+
+        tools = Adw.PreferencesGroup(title="More Tools")
+        page.add(tools)
+        cam = Adw.ActionRow(title="Phone Camera", subtitle="Use an Android phone as a webcam")
+        cam.add_prefix(icon("camera-web-symbolic"))
+        cam.add_suffix(icon("go-next-symbolic"))
+        cam.set_activatable(True)
+        cam.connect("activated", lambda *_: self._launch_desktop("dev.margine.PhoneCam.desktop"))
+        tools.add(cam)
+        return page
+
+    def _refresh_hardware(self):
+        gen = self._bump("hardware")
+        for row in (self._sched_running_row, self._sched_boot_row):
+            self._set_loading(row, True)
+
+        def worker():
+            # Never scxctl here: asking it starts the scheduler service.
+            _, enabled, _ = run(["systemctl", "is-enabled", SCX_SERVICE])
+            _, active, _ = run(["systemctl", "is-active", SCX_SERVICE])
+            st = ls.scheduler_state(read_file(SCX_STATE), read_file(SCX_OPS), read_file(SCX_CONFIG), enabled, active)
+            on_main(self._set_scheduler, gen, st)
+
+        in_thread(worker)
+
+    def _set_scheduler(self, gen, st):
+        if not self._current("hardware", gen):
+            return
+        self._sched = st
+        self._set_loading(self._sched_running_row, False)
+        self._set_loading(self._sched_boot_row, False)
+        if st["running"]:
+            self._sched_running_row.set_subtitle(f"scx_{st['running']}")
+        else:
+            self._sched_running_row.set_subtitle("The kernel's own scheduler")
+        if st["default_sched"]:
+            label = ls.SCHED_MODE_LABELS.get(st["default_mode"] or "Auto", st["default_mode"] or "Auto")
+            self._sched_boot_row.set_subtitle(f"scx_{st['default_sched']}, {label} mode")
+            idx = [m for m, _ in ls.SCHED_MODES].index(st["default_mode"]) if st["default_mode"] in dict(ls.SCHED_MODES) else 0
+            self._sched_mode_row.set_selected(idx)
+        elif st["config_present"]:
+            self._sched_boot_row.set_subtitle("The kernel's own scheduler (a choice is saved but the service is off)")
+        else:
+            self._sched_boot_row.set_subtitle("The kernel's own scheduler")
+        self._sched_off_button.set_sensitive((st["running"] or st["config_present"] or st["enabled"]) and not self._busy)
+        self._sched_choose_button.set_sensitive(not self._busy)
+
+    def _on_choose_scheduler(self, _row):
+        self._sched_choose_button.set_sensitive(False)
+
+        def worker():
+            rc, out, err = run(["scxctl", "list"], timeout=30)
+            names = []
+            if rc == 0:
+                import re
+                names = re.findall(r'"([^"]+)"', out)
+            on_main(self._show_schedulers, names, rc, err)
+
+        in_thread(worker)
+
+    def _show_schedulers(self, names, rc, err):
+        self._sched_choose_button.set_sensitive(True)
+        if rc != 0 or not names:
+            self._toast("No scheduler is available on this machine" if rc == 0 else "Could not list the schedulers")
+            return
+        blurbs = {
+            "lavd": "Latency-aware; the usual choice for games and desktops",
+            "bpfland": "Interactive work and games; keeps the desktop smooth",
+            "flash": "Audio and real-time work",
+            "rusty": "Balanced multi-core",
+            "cosmos": "General purpose, lightweight",
+            "p2dq": "Simple and predictable",
+            "tickless": "Fewer timer interrupts; battery and servers",
+            "rustland": "Testing ground; not for daily use",
+        }
+        preferred = ["lavd", "bpfland", "flash", "rusty", "cosmos", "p2dq", "tickless", "rustland"]
+        ordered = [n for n in preferred if n in names] + [n for n in names if n not in preferred]
+        mode = ls.SCHED_MODES[self._sched_mode][0]
+        page = preferences_page()
+        group = Adw.PreferencesGroup(
+            title="Schedulers",
+            description=f"Each applies at once and at every start, in {ls.SCHED_MODE_LABELS[mode]} mode. The kernel's own scheduler is one click away afterwards.",
+        )
+        page.add(group)
+        running = getattr(self, "_sched", {}).get("running")
+        for name in ordered:
+            row = Adw.ActionRow(title=f"scx_{name}", subtitle=blurbs.get(name, ""))
+            row.add_prefix(icon("object-select-symbolic" if name == running else "preferences-system-symbolic"))
+            button = Gtk.Button(label="Use", valign=Gtk.Align.CENTER)
+            button.set_sensitive(name != running)
+            button.connect("clicked", self._on_use_scheduler, name, mode)
+            row.add_suffix(button)
+            group.add(row)
+        toolbar = Adw.ToolbarView()
+        toolbar.add_top_bar(Adw.HeaderBar())
+        toolbar.set_content(page)
+        self._sched_dialog = Adw.Dialog()
+        self._sched_dialog.set_title("Choose a Scheduler")
+        self._sched_dialog.set_content_width(520)
+        self._sched_dialog.set_content_height(600)
+        self._sched_dialog.set_child(toolbar)
+        self._sched_dialog.present(self)
+
+    def _on_use_scheduler(self, _button, name, mode):
+        self._close_dialog("_sched_dialog")
+        self._run_operation(
+            ["pkexec", ADMIN, "scheduler", name, mode], title=f"Using scx_{name}",
+            working=f"Starting scx_{name} in {ls.SCHED_MODE_LABELS[mode]} mode and making it the choice at startup.",
+            done=f"scx_{name} is running and starts at every boot",
+        )
+
+    def _on_scheduler_off(self, _row):
+        self._run_operation(
+            ["pkexec", ADMIN, "scheduler-off"], title="Back to the Kernel's Scheduler",
+            working="Stopping the sched_ext scheduler and its service.", done="The kernel's own scheduler is back",
+        )
+
+    def _launch_desktop(self, desktop_id):
+        info = Gio.DesktopAppInfo.new(desktop_id)
+        if info is None:
+            self._toast("That app is not installed")
+            return
+        try:
+            info.launch([], None)
+        except GLib.Error as e:
+            self._toast(f"Could not start it: {e.message}")
+
+    # ══════════════════════ help, report, about ═════════════════════
 
     def _on_help(self):
         try:
@@ -739,10 +1354,8 @@ class SystemWindow(Adw.ApplicationWindow):
             return
         dialog = Adw.AlertDialog(
             heading="Report Written",
-            body=(
-                f"A summary of this system is in {path}: image and versions, hardware, "
-                "Secure Boot, apps and this start's error lines. Attach it to the issue, or paste it in the Logs field."
-            ),
+            body=(f"A summary of this system is in {path}: image and versions, hardware, Secure Boot, apps and "
+                  "this start's error lines. Attach it to the issue, or paste it in the Logs field."),
         )
         dialog.add_response("close", "Close")
         dialog.add_response("show", "Show in Files")
@@ -762,13 +1375,9 @@ class SystemWindow(Adw.ApplicationWindow):
 
     def _on_about(self):
         about = Adw.AboutDialog(
-            application_name="Lucciola System",
-            application_icon=APP_ID,
-            developer_name="Daniel Grasso",
-            version=self._state.get("booted") or "",
-            website="https://github.com/daniel-g-carrasco/lucciola",
-            issue_url="https://github.com/daniel-g-carrasco/lucciola/issues",
-            license_type=Gtk.License.GPL_3_0,
+            application_name="Lucciola System", application_icon=APP_ID, developer_name="Daniel Grasso",
+            version=self._state.get("booted") or "", website="https://github.com/daniel-g-carrasco/lucciola",
+            issue_url="https://github.com/daniel-g-carrasco/lucciola/issues", license_type=Gtk.License.GPL_3_0,
         )
         about.present(self)
 
@@ -783,13 +1392,14 @@ class SystemWindow(Adw.ApplicationWindow):
         about.set_debug_info(text)
         about.set_debug_info_filename("lucciola-status.txt")
 
-    # ── runner for long operations, privileged or not ────────────────
+    # ═════════════ runner for long operations, privileged or not ═════════════
 
-    def _run_operation(self, argv, title, working, done):
+    def _run_operation(self, argv, title, working, done, stdin_text=None):
         """Runs argv and shows a progress dialog: a spinner and a sentence,
         the command's output under Details. The dialog can be closed while
         the work goes on; a toast tells the end, with the log a click away
-        when it failed."""
+        when it failed. stdin_text, when given, is written to the command
+        and forgotten: that is how secrets travel."""
         if self._busy:
             self._toast("Another operation is still running")
             return
@@ -800,10 +1410,8 @@ class SystemWindow(Adw.ApplicationWindow):
         self._last_log_title = title
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        box.set_margin_top(18)
-        box.set_margin_bottom(18)
-        box.set_margin_start(18)
-        box.set_margin_end(18)
+        for side in ("top", "bottom", "start", "end"):
+            getattr(box, f"set_margin_{side}")(18)
         indicator = Gtk.Stack()
         indicator.set_halign(Gtk.Align.CENTER)
         indicator.add_named(spinner(48), "spinner")
@@ -838,17 +1446,27 @@ class SystemWindow(Adw.ApplicationWindow):
         dialog.connect("closed", lambda _d: self._on_operation_dialog_closed(state))
         dialog.present(self)
 
+        flags = Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_MERGE
+        if stdin_text is not None:
+            flags |= Gio.SubprocessFlags.STDIN_PIPE
         try:
-            proc = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_MERGE)
+            proc = Gio.Subprocess.new(argv, flags)
         except GLib.Error as e:
-            self._finish_operation(False)
+            self._finish_operation()
             dialog.close()
             self._toast(f"Could not start: {e.message}")
             return
-
+        if stdin_text is not None:
+            pipe = proc.get_stdin_pipe()
+            try:
+                pipe.write_all(stdin_text.encode("utf-8"), None)
+            except GLib.Error:
+                pass
+            pipe.close(None)
+            stdin_text = None
         stream = Gio.DataInputStream.new(proc.get_stdout_pipe())
         self._read_line(stream, buffer, view)
-        proc.wait_async(None, self._on_operation_done, (dialog, state, indicator, status, expander, done, working))
+        proc.wait_async(None, self._on_operation_done, (dialog, state, indicator, status, expander, done))
 
     def _on_operation_dialog_closed(self, state):
         state["open"] = False
@@ -871,14 +1489,14 @@ class SystemWindow(Adw.ApplicationWindow):
         stream.read_line_async(GLib.PRIORITY_DEFAULT, None, on_line)
 
     def _on_operation_done(self, proc, result, payload):
-        dialog, state, indicator, status, expander, done_message, _working = payload
+        dialog, state, indicator, status, expander, done_message = payload
         state["done"] = True
         try:
             proc.wait_finish(result)
             code = proc.get_exit_status() if proc.get_if_exited() else -1
         except GLib.Error:
             code = -1
-        self._finish_operation(code == 0)
+        self._finish_operation()
         if code == 0:
             if state["open"]:
                 dialog.close()
@@ -896,9 +1514,9 @@ class SystemWindow(Adw.ApplicationWindow):
                 expander.set_expanded(True)
             else:
                 self._toast("The operation did not complete", "Details", "win.show-log")
-        self._refresh()
+        self._refresh_all()
 
-    def _finish_operation(self, _ok):
+    def _finish_operation(self):
         self._busy = False
         self._action_button.set_sensitive(True)
         self._rollback_button.set_sensitive(bool(self._state.get("rollback")))
@@ -920,8 +1538,9 @@ class SystemWindow(Adw.ApplicationWindow):
 
 
 class SystemApp(Adw.Application):
-    def __init__(self):
+    def __init__(self, start_page):
         super().__init__(application_id=APP_ID)
+        self._start_page = start_page
         quit_action = Gio.SimpleAction.new("quit", None)
         quit_action.connect("activate", lambda *_: self.quit())
         self.add_action(quit_action)
@@ -932,16 +1551,26 @@ class SystemApp(Adw.Application):
         self.set_accels_for_action("win.shortcuts", ["<Control>question"])
 
     def do_activate(self):
-        if not self.get_active_window():
-            SystemWindow(self)
-        self.get_active_window().present()
+        window = self.get_active_window()
+        if not window:
+            window = SystemWindow(self, self._start_page)
+        elif self._start_page:
+            window.show_page(self._start_page)
+        window.present()
 
 
 def main():
+    # `--page NAME` opens a page straight away (the CPU Scheduler launcher
+    # uses it). Parsed here so GApplication never sees it.
+    args = sys.argv[1:]
+    page = "overview"
+    if len(args) >= 2 and args[0] == "--page":
+        page = args[1]
+        args = args[2:]
     rc, _, _ = run(["rpm-ostree", "--version"])
     if rc == -1:
         print("lucciola-system: this is not an rpm-ostree/bootc system", flush=True)
-    return SystemApp().run(None)
+    return SystemApp(page).run([sys.argv[0]] + args)
 
 
 if __name__ == "__main__":

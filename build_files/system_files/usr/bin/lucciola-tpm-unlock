@@ -614,16 +614,23 @@ to wire crypttab blind. Nothing changed."
   # half-state. We NEVER use --wipe-slot=all and NEVER wipe a password/
   # recovery slot — only --wipe-slot=tpm2.
   info "Enrolling TPM2 (PCRs ${pcrs}) — you may be prompted for the current LUKS passphrase…"
+  # Lucciola System has no terminal to answer that prompt: it hands the
+  # passphrase in a root-only file (never an argument), and
+  # systemd-cryptenroll unlocks with it. The caller removes the file.
+  local -a unlock=()
+  if [ -n "${LUCCIOLA_UNLOCK_KEY_FILE:-}" ]; then
+    unlock=(--unlock-key-file="$LUCCIOLA_UNLOCK_KEY_FILE")
+  fi
   if has_tpm2_token; then
     info "A tpm2 slot already exists — re-enrolling it atomically (passphrase/recovery slots untouched)…"
-    if ! systemd-cryptenroll --wipe-slot=tpm2 \
+    if ! systemd-cryptenroll "${unlock[@]}" --wipe-slot=tpm2 \
            --tpm2-device=auto --tpm2-pcrs="$pcrs" "$LUKS_DEV"; then
       err "Re-enroll failed. systemd applies the wipe and enroll as ONE"
       err "operation, so your PREVIOUS tpm2 enrollment is left intact and"
       die "your LUKS passphrase still unlocks the disk. Nothing was lost."
     fi
   else
-    if ! systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs="$pcrs" "$LUKS_DEV"; then
+    if ! systemd-cryptenroll "${unlock[@]}" --tpm2-device=auto --tpm2-pcrs="$pcrs" "$LUKS_DEV"; then
       err "systemd-cryptenroll failed. No tpm2 enrollment was added."
       die "Your LUKS passphrase is unaffected and still unlocks the disk."
     fi

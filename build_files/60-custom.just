@@ -343,7 +343,7 @@ lucciola-gaming-native-remove:
 # Switch the CPU scheduler at runtime (sched_ext / BPF schedulers).
 # Available on every Margine flavour. scx-scheds ships in the base
 # image, scx_loader stays disabled by default, and users opt in here
-# or through Activities -> "Margine CPU Scheduler".
+# or through Activities -> "Lucciola CPU Scheduler".
 #
 #   ujust lucciola-scheduler          # show current state
 #   ujust lucciola-scheduler lavd     # start/switch to a shipped scheduler
@@ -392,12 +392,12 @@ lucciola-scheduler $MODE="status":
     # + apply live) is done by the shared helper, so this recipe and the GTK
     # picker behave identically and the config format lives in one place.
     ensure_loader() {
-      sudo /usr/libexec/margine/scheduler-apply "$MODE" Auto auto \
+      sudo /usr/libexec/lucciola/admin scheduler "$MODE" Auto \
         || { echo "FAILED to apply scx_$MODE."; exit 1; }
     }
 
     stop_loader() {
-      sudo /usr/libexec/margine/scheduler-apply off \
+      sudo /usr/libexec/lucciola/admin scheduler-off \
         || { echo "FAILED to disable $SERVICE."; exit 1; }
     }
 

@@ -106,8 +106,15 @@ Enter the password of your login keyring: the password you log in with
 your user on this machine, and oo7 opens the keyring with it at every login.
 INFO
   local pw1 pw2
-  pw1="$(systemd-ask-password --timeout=0 "Keyring password:")"
-  pw2="$(systemd-ask-password --timeout=0 "Again:")"
+  if [[ -t 0 ]]; then
+    pw1="$(systemd-ask-password --timeout=0 "Keyring password:")"
+    pw2="$(systemd-ask-password --timeout=0 "Again:")"
+  else
+    # Not a terminal (Lucciola System): the password comes on stdin, one
+    # line, confirmed by the window before it is sent. Never an argument.
+    IFS= read -r pw1 || pw1=""
+    pw2="$pw1"
+  fi
   [[ -n "$pw1" ]] || { echo "empty password: nothing stored"; exit 1; }
   [[ "$pw1" == "$pw2" ]] || { echo "the two passwords differ: nothing stored"; exit 1; }
   mkdir -p "$(dirname "$CRED")"

@@ -99,6 +99,70 @@ check("os-release without a version", ls.os_release_version("NAME=x\n") == "")
 for text in (ls.layered_phrase(["a"]), ls.waiting_phrase(["x"], "apps"), ls.check_summary([]), ls.check_summary([("A", False, "")])):
     check(f"no long dash or command in: {text[:40]}", "—" not in text and "ujust" not in text and "rpm-ostree" not in text)
 
+# ── the pages' parsers ────────────────────────────────────────────────
+tpm_root = """  TPM2 LUKS auto-unlock: status
+  TPM2 device                ✓ present (2.0)
+  LUKS device backing root   /dev/nvme0n1p3
+  Active mapping             luks-abc
+  Fallback keyslot           ✓ present  (passphrase/recovery — your fallback)
+  TPM2 token                 ✓ enrolled
+  Boot path (crypttab)       ✓ tpm2-device=auto  (wired; verify with a real reboot)
+  GRUB menu                  ✓ locked  (editing the boot menu needs a password)
+"""
+st = ls.parse_tpm_status(tpm_root)
+check("tpm status: all four flags", st["device"] and st["token"] and st["wired"] and st["fallback"] and st["luks"] == "/dev/nvme0n1p3")
+check("tpm summary: on", ls.tpm_summary(st)[0] == "on")
+st = ls.parse_tpm_status(tpm_root.replace("✓ enrolled", "— not enrolled").replace("✓ tpm2-device=auto  (wired; verify with a real reboot)", "— not wired  (no tpm2-device=auto)"))
+check("tpm status: not enrolled", st["token"] is False and st["wired"] is False and ls.tpm_summary(st)[0] == "off")
+st = ls.parse_tpm_status(tpm_root.replace("✓ tpm2-device=auto  (wired; verify with a real reboot)", "— not wired  (no tpm2-device=auto)"))
+check("tpm summary: enrolled but not wired", ls.tpm_summary(st)[0] == "half")
+st = ls.parse_tpm_status("Could not auto-detect a LUKS device backing root\nLUKS root detection failed (see above)")
+check("tpm status: no LUKS root", st["error"] and ls.tpm_summary(st)[0] == "unencrypted")
+check("tpm status: no chip", ls.tpm_summary(ls.parse_tpm_status("  TPM2 device                ✗ not found / not 2.0\n"))[0] == "no-tpm")
+check("tpm status: unknown on empty", ls.tpm_summary(ls.parse_tpm_status(""))[0] == "unknown")
+
+check("grub lock: ON", ls.parse_grub_lock("GRUB menu lock: ON (user: root).\nmore\n") == "on")
+check("grub lock: off", ls.parse_grub_lock("GRUB menu lock: off. The boot menu can be edited by anyone.") == "off")
+check("grub lock: not available", ls.parse_grub_lock("GRUB menu lock: not available (/boot/grub2/grub.cfg does not read user.cfg)") == "unavailable")
+check("grub lock: unknown", ls.parse_grub_lock("error: must run as root") is None)
+check("grub password rule", ls.grub_password_ok("abcd1234") and not ls.grub_password_ok("abc") and not ls.grub_password_ok("abcd 1234") and not ls.grub_password_ok("pässword1"))
+check("pcrs rule", ls.pcrs_ok("7") and ls.pcrs_ok("7+14") and not ls.pcrs_ok("7;8") and not ls.pcrs_ok(""))
+
+check("autologin enabled", ls.parse_autologin('autologin: ENABLED for user "daniel" (login screen: GDM)') == (True, "daniel"))
+check("autologin disabled", ls.parse_autologin("autologin: disabled\nlucciola-autologin: note: …") == (False, None))
+check("autologin unknown", ls.parse_autologin("") == (None, None))
+
+kr = "== lucciola-keyring status ==\n  login keyring: unlocked [OK]\n  unlock at login: TPM credential, used at this login [OK]\n"
+check("keyring: unlocked, tpm used", ls.parse_keyring_status(kr) == {"unlocked": True, "at_login": "tpm-used"})
+check("keyring: locked, password only", ls.parse_keyring_status("  login keyring: LOCKED (apps will ask for its password)\n  unlock at login: password login only (no credential; ujust lucciola-keyring tpm)\n") == {"unlocked": False, "at_login": "password"})
+check("keyring: credential present, password used", ls.parse_keyring_status("  unlock at login: TPM credential present; this login used the login password\n")["at_login"] == "tpm-present")
+check("keyring: wrong password stored", ls.parse_keyring_status("  unlock at login: credential present, but it holds a WRONG password\n")["at_login"] == "tpm-wrong")
+check("keyring: stored for the next login", ls.parse_keyring_status("  unlock at login: TPM credential present (~/.config/credstore.encrypted/x)\n")["at_login"] == "tpm-next")
+check("keyring: daemon silent", ls.parse_keyring_status("  login keyring: the Secret Service (oo7-daemon) did not answer\n")["unlocked"] is None)
+
+check("secure boot on, key enrolled", ls.secureboot_state("SecureBoot enabled\n", "enrolled\n") == {"secure_boot": True, "key": "enrolled"})
+check("secure boot off, key pending", ls.secureboot_state("SecureBoot disabled", "pending") == {"secure_boot": False, "key": "pending"})
+check("secure boot unknown, key sentence", ls.secureboot_state("", "no /usr/share/cert/MOK.der in this image, nothing to enroll") == {"secure_boot": None, "key": "unsupported"})
+
+st = ls.parse_deployments(json.dumps({"deployments": [
+    {"staged": True, "version": "fedora-kernel.20261020", "container-image-reference": f"ostree-image-signed:docker://{ls.REPO}:fedora-kernel"},
+    {"booted": True, "version": "candidate.20261019", "container-image-reference": f"ostree-image-signed:docker://{ls.REPO}:candidate"},
+]}))
+ks = ls.kernel_state(st, "cachyos\n", "fedora-kernel\n# comment\n")
+check("kernel: running cachyos, follows candidate, fedora staged", ks["running"] == "cachyos" and ks["follows"] == "candidate" and ks["follows_flavour"] == "cachyos" and ks["staged"] == "fedora-kernel" and ks["staged_flavour"] == "fedora")
+ks = ls.kernel_state({"booted_ref": f"ostree-unverified-registry:{ls.REPO}:fedora-kernel.20261020", "staged_ref": ""}, "fedora", "fedora-kernel")
+check("kernel: dated reserve tag is fedora", ks["follows_flavour"] == "fedora" and ks["staged"] is None)
+ks = ls.kernel_state({"booted_ref": f"ostree-unverified-registry:{ls.REPO}:candidate@sha256:abc", "staged_ref": ""}, "", "")
+check("kernel: digest pin and no files give nothing", ks["follows"] is None and ks["running"] is None and ks["follows_flavour"] is None)
+check("ref_tag of another image", ls.ref_tag("ostree-unverified-registry:ghcr.io/x/y:z") is None)
+
+sc = ls.scheduler_state("enabled\n", "scx_lavd\n", 'default_sched = "scx_lavd"\ndefault_mode = "Gaming"\n', "enabled\n", "active\n")
+check("scheduler: running lavd, boot default lavd Gaming", sc == {"running": "lavd", "default_sched": "lavd", "default_mode": "Gaming", "config_present": True, "enabled": True, "active": True})
+sc = ls.scheduler_state("disabled", "", 'default_sched = "scx_lavd"\n', "disabled", "inactive")
+check("scheduler: config without the service counts as no boot default", sc["running"] is None and sc["default_sched"] is None and sc["config_present"])
+check("scheduler: enabled state without ops reads unknown", ls.scheduler_state("enabled", "", "", "", "")["running"] == "unknown")
+check("scheduler modes table", [m for m, _ in ls.SCHED_MODES] == ["Auto", "Gaming", "LowLatency", "PowerSave", "Server"])
+
 if fails:
     print(f"system-logic: {fails} failed")
     sys.exit(1)
