@@ -7,6 +7,36 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-20, build)
+- **The pinned Noctalia build could leave the repositories and stop every
+  image build.** `NOCTALIA_VR` pins noctalia to 5.3.0-1, which Fedora 45
+  offers only in updates-testing (FEDORA-2026-04f44a27d9) while it is a
+  pre-release: at the release (27 October) that repository goes away, and
+  a newer Noctalia obsoleting the update before then would have had the
+  same effect; from that day every build of the image, security updates
+  included, failed on the install, at the worst possible time. Fedora
+  keeps every build in Koji, with a copy signed by the release key. The
+  install now asks the repositories for the exact build first and, when
+  they no longer have it, fetches that copy, checks it with `rpmkeys`
+  against the Fedora release key in the image (dnf does not check a local
+  file) and installs it in the same transaction as niri,
+  xwayland-satellite and ddcutil, weak dependencies off as before; the
+  build then checks that the installed noctalia is the pinned one. The log
+  says which path was taken; a bad signature, a signature by another key,
+  or a build Koji does not have fail the build at once, naming the URL.
+  The kernel reserve's kernel-devel install, which already did this for
+  Fedora's kernel, uses the same helpers (`fetch_signed_rpm`,
+  `verify_fedora_signature`, `dnf_install_pinned` in
+  build_files/00-common.sh): it now also insists that the signer is the
+  release key and not any key the rpmdb holds, and a 404 from Koji fails
+  at once instead of after five retries. Tested with fake dnf5, curl and
+  rpmkeys (tests/pinned-fedora-build.test.sh, run by lint); the real
+  signed copy of noctalia-5.3.0-1.fc45 was fetched and verified with the
+  same helpers in a Fedora 45 container. The Lucciola step now sources the
+  shared helpers, so its installs carry `SOURCE_DATE_EPOCH` like every
+  other step. Bumping `NOCTALIA_VR` when upstream moves stays a reviewed
+  change with a test boot (release checklist).
+
 ### Fixed (2026-10-20, docs)
 - **The install instructions named images that do not exist yet.** The
   README, the website (home page and guide), `lucciola/README.md` and

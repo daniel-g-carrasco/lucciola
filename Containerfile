@@ -151,6 +151,8 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
 # on the finished Margine tree, so it stays after every Margine step.
 # Bump only together with a test boot: see the comment in lucciola/build.sh.
 # Version and release only: build.sh adds the base's Fedora tag (.fc44, .fc45).
+# The build does not depend on the repositories still having that build:
+# when they drop it, build.sh installs Koji's signed copy of it (2026-10-20).
 ARG NOCTALIA_VR=5.3.0-1
 # The greeter RPM comes from the greeter-rpm stage; build.sh installs exactly
 # the version that stage built (the ARG at the top).
@@ -159,7 +161,10 @@ COPY lucciola/system_files/ /
 # The website's single page carries the guide; a copy ships so the Lucciola
 # Guide launcher opens it without a network (/usr/libexec/margine/guide-open).
 COPY site/index.html /usr/share/lucciola/guide/index.html
+# 00-common.sh alone from ctx, for the shared helpers build.sh sources: the
+# whole ctx would tie this layer's cache to every build_files edit.
 RUN --mount=type=bind,from=lucciola-ctx,source=/build.sh,target=/ctx/lucciola/build.sh \
+    --mount=type=bind,from=ctx,source=/00-common.sh,target=/ctx/00-common.sh \
     --mount=type=bind,from=greeter-rpm,source=/out,target=/ctx/greeter-rpm \
     --mount=type=cache,dst=/var/cache \
     --mount=type=cache,dst=/var/log \
