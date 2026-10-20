@@ -16,6 +16,13 @@ stable release is cut.
   if the second swap fails the first is put back, and the error says that
   nothing was changed. The file that removes the password is always
   swapped last.
+- **No login screen after moving from Kinoite with SDDM selected.** A
+  display manager link changed on the old system survives the update; the
+  login migration left any link other than GDM's alone, so one to SDDM
+  (or LightDM, or any display manager Lucciola does not have) pointed at
+  nothing and no login screen started. It now keeps such a link only when
+  that display manager is installed; otherwise it switches to greetd,
+  starts it at once and says so in the journal.
 
 ### Changed (terminal)
 - **A new terminal opens in the home folder.** Ptyxis no longer restores the
