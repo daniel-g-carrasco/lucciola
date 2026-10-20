@@ -169,6 +169,14 @@ jobs:
         # pins) and that it warns about TPM unlock first, is tested.
         run: bash tests/kernel-switch.test.sh
 
+      - name: Pinned Fedora build (the repositories, then Koji)
+        # Noctalia and the kernel reserve's kernel-devel are pinned to a
+        # build the repositories drop. From where each is installed, that
+        # Koji's copy is checked against the release key before dnf sees
+        # it, and what refuses (bad signature, another key, a 404) is
+        # tested with fake dnf5, curl and rpmkeys.
+        run: bash tests/pinned-fedora-build.test.sh
+
       - name: Flatpak repair gate (flatpak-preinstall.service)
         # Relabel and repair run on a first boot, after a failed run or on a
         # broken repo, once per boot at most, and never on a settled boot.
