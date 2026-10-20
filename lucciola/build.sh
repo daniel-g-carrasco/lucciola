@@ -374,6 +374,18 @@ grep -qx 'OnFailure=gdm.service' /usr/lib/systemd/system/greetd.service.d/50-luc
 grep -q '^After=.*plymouth-quit-wait\.service' /usr/lib/systemd/system/greetd.service \
   || { echo "ERROR: greetd.service no longer waits for Plymouth to quit" >&2; exit 1; }
 
+# An SSH agent in every session: GNOME's gcr-ssh-agent, socket-activated
+# for all users. It offers the keys in ~/.ssh, asks a passphrase in a dialog
+# the first time a key is used and can keep it in the keyring (oo7, open
+# since the login). The socket unit sets SSH_AUTH_SOCK in the user manager,
+# so niri (a user service) and everything it starts see it. Without an agent
+# a passphrase is asked at every connection, and keys stay unprotected on
+# disk (2026-10-20).
+systemctl --global enable gcr-ssh-agent.socket
+[[ -L /etc/systemd/user/sockets.target.wants/gcr-ssh-agent.socket ]] \
+  || { echo "ERROR: gcr-ssh-agent.socket is not enabled for users" >&2; exit 1; }
+log "ssh agent: gcr-ssh-agent.socket enabled for every user ($(rpm -q --qf '%{NAME}-%{VERSION}' gcr))"
+
 # 5f. /var/lib/greetd and /var/lib/noctalia-greeter come from tmpfiles.d at
 #     boot, on fresh installs and updated systems alike (lucciola-greeter.conf
 #     says why), so the image carries no copy of them.

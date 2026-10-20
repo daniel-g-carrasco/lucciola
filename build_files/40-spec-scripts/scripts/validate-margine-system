@@ -589,6 +589,20 @@ PY
 fi
 
 # ---------------------------------------------------------------------------
+hdr "6c. SSH agent for every session (Lucciola)"
+# ---------------------------------------------------------------------------
+# gcr-ssh-agent.socket is enabled for all users by lucciola/build.sh: it
+# offers the keys in ~/.ssh and asks their passphrases in a dialog, keeping
+# them in the keyring; its socket unit sets SSH_AUTH_SOCK for niri. Without
+# it a passphrase is asked at every connection and keys stay unprotected.
+if [[ -L /etc/systemd/user/sockets.target.wants/gcr-ssh-agent.socket ]]; then
+  ok "gcr-ssh-agent.socket enabled for every user"
+else
+  bad "gcr-ssh-agent.socket is not enabled for users (/etc/systemd/user/sockets.target.wants)"
+fi
+[[ -x /usr/libexec/gcr-ssh-agent ]] && ok "gcr-ssh-agent present" || bad "/usr/libexec/gcr-ssh-agent missing (gcr)"
+
+# ---------------------------------------------------------------------------
 hdr "7. Launchers"
 # ---------------------------------------------------------------------------
 # Margine-branded replacements for the Bluefin app-menu entries we

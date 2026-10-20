@@ -67,6 +67,10 @@ This layer adds:
   durations and a scheduler; the launcher answers "awake", "sveglio", "2h",
   "18:30". From a terminal: `lucciola-keep-awake on [UNTIL] | tomorrow |
   schedule START [UNTIL] | off | cancel | status [--json]`;
+- an SSH agent in every session: GNOME's `gcr-ssh-agent`, enabled for all
+  users. It offers the keys in `~/.ssh`, asks a passphrase in a dialog the
+  first time a key is used and can keep it in the keyring, which the login
+  opens; `SSH_AUTH_SOCK` is set for niri and everything it starts;
 - `ddcutil`, so Noctalia's brightness slider also drives external monitors
   over DDC/CI (the package's udev rule opens the i2c devices to the
   logged-in user, its modules-load entry loads i2c-dev);
