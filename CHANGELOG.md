@@ -7,6 +7,18 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-20, checks)
+- **The security scan and the SBOM describe the image that is published.**
+  Both read the image as built, before chunking; the chunker then rebuilds
+  the image from its files (it prunes `/run` and `/sysroot`), and that is
+  what is pushed and signed. A scan of the published image of 2026-10-20
+  differed from the baseline the build had called clean. They now run on
+  the chunked image, loaded once and checked against the config its
+  manifest names, and the push refuses a registry manifest with another
+  config, so the digest the signature covers is the image that was scanned.
+  The residue baseline is empty (what it held lived in `/run`). Same for
+  the kernel reserve. `tests/scan-what-ships.test.sh`.
+
 ### Security (2026-10-20, scrcpy updates)
 - **A scrcpy update is pinned only if upstream signed it.** Renovate
   proposes new scrcpy releases and merges them by itself; the companion

@@ -585,118 +585,20 @@ jobs:
             *) echo "::error::the developer layer does not resolve against this image: ujust lucciola-devmode, and updates of machines that have it, would fail"; exit 1 ;;
           esac
 
-      # Security scan (2026-10-07). The image is compared with the reviewed
-      # baseline in .github/security-baseline/: setuid/caps, world-writable
-      # files, build residue, enabled units and security-relevant configs.
-      # Secrets (private keys, tokens, ssh host keys, a set machine-id) fail
-      # on every event: they must never ship (a root adb key did, until
-      # 2026-10-04). Baseline drift fails a PR, so a change to any of the
-      # above is reviewed as a diff; on main it is a base-image change we
-      # must not hold security updates for, so it opens an issue instead
-      # (security_drift job). See .github/scripts/scan-image-security.py.
-      - name: Security scan of the image (secrets, privileges, units, configs)
-        id: secscan
+      # The kernel version, for the dev.margine.kernel and ostree.linux labels
+      # the chunker writes (the image ships exactly one /usr/lib/modules/<kver>/).
+      # Read here since the SBOM step, which used to read it in passing, now
+      # runs on the chunked image (review N3).
+      - name: Kernel version for the labels
+        id: kver
         env:
-          IMG: localhost/${{ env.IMAGE_NAME }}:${{ steps.metadata.outputs.version }}
-          EVENT: ${{ github.event_name }}
+          SRC: localhost/${{ env.IMAGE_NAME }}:${{ steps.metadata.outputs.version }}
         run: |
           set -euo pipefail
-          sudo podman run --rm --entrypoint /usr/bin/rpm "$IMG" -qa --qf '[%{FILENAMES}\n]' | cat > owned.txt
-          sudo podman container create --replace --name secscan --entrypoint /bin/true "$IMG" >/dev/null
-          ROOTFS="$(sudo podman mount secscan)"
-          rc=0
-          sudo python3 .github/scripts/scan-image-security.py --rootfs "$ROOTFS" --owned owned.txt \
-            --baseline .github/security-baseline --write-baseline proposed-baseline \
-            --report security-report.md || rc=$?
-          sudo podman unmount secscan >/dev/null; sudo podman rm secscan >/dev/null
-          sudo chown -R "$(id -u):$(id -g)" proposed-baseline security-report.md
-          cp .github/security-baseline/secrets-allow.txt proposed-baseline/
-          { echo "### Image security scan (exit $rc)"; cat security-report.md; } >> "$GITHUB_STEP_SUMMARY"
-          echo "drift=$([ "$rc" = 1 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-          if [ "$rc" = 2 ]; then
-            echo "::error::secrets found in the image (see the step summary): never shipped, whatever the event"
-            exit 1
-          elif [ "$rc" = 1 ] && [ "$EVENT" = pull_request ]; then
-            echo "::error::security baseline drift: review the diff in the step summary; if intended, commit the 'security-baseline-proposed' artifact to .github/security-baseline/"
-            exit 1
-          elif [ "$rc" = 1 ]; then
-            echo "::warning::security baseline drift on $EVENT (base image change?): an issue will be opened"
-          elif [ "$rc" != 0 ]; then
-            echo "::error::security scan failed to run (exit $rc)"; exit 1
-          fi
-
-      - name: Upload the proposed security baseline
-        if: always() && steps.secscan.outcome != 'skipped'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: security-baseline-proposed
-          path: |
-            proposed-baseline/
-            security-report.md
-          retention-days: 30
-          if-no-files-found: ignore
-
-      - name: Install syft (SBOM generator)
-        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c  # v0.24.3
-
-      - name: Generate SBOM (Bluefin pattern — podman export + tar + syft dir)
-        id: sbom
-        # syft's `podman:` / `containers-storage:` providers still pull all
-        # layers and expand the in-memory layer tree past the runner's 16 GB
-        # RAM — verified in PRs #58/#60/#65.
-        # Bluefin's documented workaround (https://github.com/anchore/syft/
-        # issues/3800, ublue-os/bluefin Justfile gen-sbom recipe) is to
-        # `podman export` the container's filesystem to a flat tar, expand
-        # it on disk, then point syft at the directory. syft `dir:` provider
-        # walks files instead of reconstructing the layer model — peak RAM
-        # ~1 GB instead of OOM.
-        run: |
-          set -euo pipefail
-          # Create (don't start) a container off the image — `podman export`
-          # only needs the filesystem, not a running process. Idempotent
-          # name via --replace.
-          sudo podman container create --replace --name sbom-export \
-            --entrypoint /bin/true \
-            "localhost/${{ env.IMAGE_NAME }}:${{ steps.metadata.outputs.version }}"
-          # Mount, don't export: `podman export | tar -x` wrote a second
-          # full copy of the ~19 GB rootfs and ran the runner out of disk
-          # on 26.04, whose cleanup frees less than the old one did.
-          # syft and the checks only read, so mounted layers are enough.
-          ROOTFS="$(sudo podman mount sbom-export)"
-          [ -n "$ROOTFS" ] || { echo "::error::could not mount the image for SBOM"; exit 1; }
-          # syft as user against the on-disk dir. --source-name puts the
-          # original image ref in the SBOM metadata so the consumer can
-          # tell which image it describes.
-          sudo "$(which syft)" --source-name "${{ env.IMAGE_NAME }}:${{ steps.metadata.outputs.version }}" \
-            "$ROOTFS" -o spdx-json=sbom.spdx.json
-          sudo chown "$(id -u):$(id -g)" sbom.spdx.json
-          ls -la sbom.spdx.json
-          echo "SBOM package count: $(jq '.packages | length' sbom.spdx.json)"
-          # Piggyback: capture the image's kernel version for the
-          # dev.margine.kernel OCI label (rechunk step below). This is the
-          # only place the built rootfs is already expanded on disk, and the
-          # image ships exactly one /usr/lib/modules/<kver>/ directory.
-          # Historically the status page read a place.the-empty.margine.kernel
-          # label that NOTHING ever produced (and pre-rechunk labels are
-          # dropped by rechunk anyway), so /status relied on a manually
-          # curated carry-over. This closes that loop.
-          KVER="$(sudo ls "$ROOTFS/usr/lib/modules" | head -1)"
+          KVER="$(sudo podman run --rm --entrypoint /usr/bin/ls "$SRC" /usr/lib/modules | head -n1)"
           [ -n "$KVER" ] || { echo "::error::no kernel dir under /usr/lib/modules in the built image"; exit 1; }
           echo "kver=$KVER" >> "$GITHUB_OUTPUT"
           echo "Kernel in image: $KVER"
-          # Reclaim the ~14 GB used by the expanded rootfs before rechunk
-          # runs — rechunk needs disk for its own staging.
-          # Nothing to reclaim: the rootfs was mounted, not copied.
-          sudo podman unmount sbom-export >/dev/null || true
-          sudo podman container rm sbom-export >/dev/null || true
-
-      - name: Upload SBOM as workflow artifact (handoff to sign job)
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
-        with:
-          name: sbom-${{ env.IMAGE_NAME }}-${{ github.run_id }}
-          path: sbom.spdx.json
-          retention-days: 1
-          if-no-files-found: error
 
       - name: Chunk the image (chunkah; rpm-ostree kept as the way back)
         id: rechunk
@@ -729,7 +631,7 @@ jobs:
           # the layer plan, and with it the size of the next update for every
           # user (see .github/renovate.json5). v0.7.0 since 2026-10-03.
           CHUNKAH_REF: quay.io/coreos/chunkah:v0.7.1@sha256:71e593421c5de7dcc7c8c5c50e98d3bac572055a76f399f61a491d123c20a523
-          KVER: ${{ steps.sbom.outputs.kver }}
+          KVER: ${{ steps.kver.outputs.kver }}
           VERSION: ${{ steps.base.outputs.publish_tag }}.${{ steps.date.outputs.ymd }}
           REVISION: ${{ github.sha }}
           IMAGE_DESC: ${{ env.IMAGE_DESC }}
@@ -876,11 +778,39 @@ jobs:
           sudo du -sh "${OUT_DIR}/image"
           echo "ref=oci:${OUT_DIR}/image" >> "$GITHUB_OUTPUT"
 
-          # ~19 GB of source image nobody reads again: the validators and the
-          # SBOM both ran before this step, everything after works off the
-          # chunked output. Reclaimed before the push needs the room.
+          # ~19 GB of source image nobody reads again: the validators ran
+          # before this step, everything after (kernel signature, security
+          # scan, SBOM, push) works off the chunked output. Reclaimed before
+          # loading the chunked image needs the room.
           sudo podman rmi -f "$SRC" >/dev/null 2>&1 || true
           df -h / | tail -1
+
+      # What is pushed and signed is the chunker's OCI layout, not the image
+      # built above (review N3, 2026-10-20). It is loaded into storage once,
+      # and its image ID must be the config digest its manifest names: the
+      # config lists every layer's uncompressed digest, which storage checks
+      # on import, so the image the checks below read is that manifest's
+      # content. The push step then refuses a registry manifest with another
+      # config. Kernel signature, security scan and SBOM all read this image.
+      - name: Load the chunked image (the one pushed and signed)
+        id: chunked
+        env:
+          REF: ${{ steps.rechunk.outputs.ref }}
+          IMG: localhost/${{ env.IMAGE_NAME }}:chunked
+        run: |
+          set -euo pipefail
+          LAYOUT="${REF#oci:}"
+          [ "$(sudo jq '.manifests | length' "$LAYOUT/index.json")" = 1 ] \
+            || { echo "::error::the chunked layout must hold exactly one image"; exit 1; }
+          MANIFEST="$(sudo jq -r '.manifests[0].digest' "$LAYOUT/index.json")"
+          CONFIG="$(sudo jq -r '.config.digest' "$LAYOUT/blobs/sha256/${MANIFEST#sha256:}")"
+          [[ "$CONFIG" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no config digest in $MANIFEST"; exit 1; }
+          sudo skopeo copy --quiet "oci:${LAYOUT}" "containers-storage:${IMG}"
+          ID="sha256:$(sudo podman image inspect --format '{{.Id}}' "$IMG")"
+          [ "$ID" = "$CONFIG" ] || { echo "::error::loaded image $ID is not the chunked config $CONFIG"; exit 1; }
+          echo "image=$IMG" >> "$GITHUB_OUTPUT"
+          echo "config=$CONFIG" >> "$GITHUB_OUTPUT"
+          echo "Chunked image: manifest $MANIFEST, config $CONFIG"
 
       # WHY THE LABEL LIST ABOVE IS THE WHOLE TRUTH: chunking rewrites the
       # image from the rootfs up, so every label stamped during the build is
@@ -896,7 +826,7 @@ jobs:
 
       - name: Verify the shipped kernel is still MOK-signed
         # Bluefin runs a secureboot check on the built image; we only
-        # verified inside custom-kernel, BEFORE rechunk. That is the
+        # verified inside the build (finalize.sh), BEFORE rechunk. That is the
         # wrong side of the one step that has already eaten our labels
         # twice: a rechunk that mangled vmlinuz would ship an unsigned
         # kernel and Secure Boot users would find out at boot. Check the
@@ -906,7 +836,7 @@ jobs:
           # The rechunked image, not the pre-rechunk one: rechunk is the
           # step that could plausibly mangle vmlinuz, so verifying its
           # input would prove nothing.
-          CID="$(sudo podman create "${{ steps.rechunk.outputs.ref }}" true)"
+          CID="$(sudo podman create "${{ steps.chunked.outputs.image }}" true)"
           trap 'sudo podman rm -f "$CID" >/dev/null 2>&1 || true' EXIT
           MNT="$(sudo podman mount "$CID")"
           KVER="$(sudo ls "$MNT/usr/lib/modules" | head -1)"
@@ -922,6 +852,111 @@ jobs:
           fi
           sudo podman unmount "$CID" >/dev/null
 
+      # Security scan (2026-10-07). The image is compared with the reviewed
+      # baseline in .github/security-baseline/: setuid/caps, world-writable
+      # files, build residue, enabled units and security-relevant configs.
+      # Secrets (private keys, tokens, ssh host keys, a set machine-id) fail
+      # on every event: they must never ship (a root adb key did, until
+      # 2026-10-04). Baseline drift fails a PR, so a change to any of the
+      # above is reviewed as a diff; on main it is a base-image change we
+      # must not hold security updates for, so it opens an issue instead
+      # (security_drift job). See .github/scripts/scan-image-security.py.
+      # On the chunked image since 2026-10-20 (review N3): the chunker
+      # rebuilds the image from the rootfs and prunes /run and /sysroot, so
+      # the image built above is not what gets pushed and signed. The image
+      # scanned here is the one whose config digest the push step checks.
+      - name: Security scan of the image (secrets, privileges, units, configs)
+        id: secscan
+        env:
+          IMG: ${{ steps.chunked.outputs.image }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          sudo podman run --rm --entrypoint /usr/bin/rpm "$IMG" -qa --qf '[%{FILENAMES}\n]' | cat > owned.txt
+          sudo podman container create --replace --name secscan --entrypoint /bin/true "$IMG" >/dev/null
+          ROOTFS="$(sudo podman mount secscan)"
+          rc=0
+          sudo python3 .github/scripts/scan-image-security.py --rootfs "$ROOTFS" --owned owned.txt \
+            --baseline .github/security-baseline --write-baseline proposed-baseline \
+            --report security-report.md || rc=$?
+          sudo podman unmount secscan >/dev/null; sudo podman rm secscan >/dev/null
+          sudo chown -R "$(id -u):$(id -g)" proposed-baseline security-report.md
+          cp .github/security-baseline/secrets-allow.txt proposed-baseline/
+          { echo "### Image security scan (exit $rc)"; cat security-report.md; } >> "$GITHUB_STEP_SUMMARY"
+          echo "drift=$([ "$rc" = 1 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          if [ "$rc" = 2 ]; then
+            echo "::error::secrets found in the image (see the step summary): never shipped, whatever the event"
+            exit 1
+          elif [ "$rc" = 1 ] && [ "$EVENT" = pull_request ]; then
+            echo "::error::security baseline drift: review the diff in the step summary; if intended, commit the 'security-baseline-proposed' artifact to .github/security-baseline/"
+            exit 1
+          elif [ "$rc" = 1 ]; then
+            echo "::warning::security baseline drift on $EVENT (base image change?): an issue will be opened"
+          elif [ "$rc" != 0 ]; then
+            echo "::error::security scan failed to run (exit $rc)"; exit 1
+          fi
+
+      - name: Upload the proposed security baseline
+        if: always() && steps.secscan.outcome != 'skipped'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: security-baseline-proposed
+          path: |
+            proposed-baseline/
+            security-report.md
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Install syft (SBOM generator)
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c  # v0.24.3
+
+      - name: Generate SBOM (Bluefin pattern — podman export + tar + syft dir)
+        id: sbom
+        # Of the chunked image, the one pushed and signed (review N3).
+        # syft's `podman:` / `containers-storage:` providers still pull all
+        # layers and expand the in-memory layer tree past the runner's 16 GB
+        # RAM — verified in PRs #58/#60/#65.
+        # Bluefin's documented workaround (https://github.com/anchore/syft/
+        # issues/3800, ublue-os/bluefin Justfile gen-sbom recipe) is to
+        # `podman export` the container's filesystem to a flat tar, expand
+        # it on disk, then point syft at the directory. syft `dir:` provider
+        # walks files instead of reconstructing the layer model — peak RAM
+        # ~1 GB instead of OOM.
+        run: |
+          set -euo pipefail
+          # Create (don't start) a container off the image — `podman export`
+          # only needs the filesystem, not a running process. Idempotent
+          # name via --replace.
+          sudo podman container create --replace --name sbom-export \
+            --entrypoint /bin/true \
+            "${{ steps.chunked.outputs.image }}"
+          # Mount, don't export: `podman export | tar -x` wrote a second
+          # full copy of the ~19 GB rootfs and ran the runner out of disk
+          # on 26.04, whose cleanup frees less than the old one did.
+          # syft and the checks only read, so mounted layers are enough.
+          ROOTFS="$(sudo podman mount sbom-export)"
+          [ -n "$ROOTFS" ] || { echo "::error::could not mount the image for SBOM"; exit 1; }
+          # syft as user against the on-disk dir. --source-name puts the
+          # original image ref in the SBOM metadata so the consumer can
+          # tell which image it describes.
+          sudo "$(which syft)" --source-name "${{ env.IMAGE_NAME }}:${{ steps.metadata.outputs.version }}" \
+            "$ROOTFS" -o spdx-json=sbom.spdx.json
+          sudo chown "$(id -u):$(id -g)" sbom.spdx.json
+          ls -la sbom.spdx.json
+          echo "SBOM package count: $(jq '.packages | length' sbom.spdx.json)"
+          # (The kernel version for the labels is read before chunking, in
+          # the "Kernel version for the labels" step.)
+          sudo podman unmount sbom-export >/dev/null || true
+          sudo podman container rm sbom-export >/dev/null || true
+
+      - name: Upload SBOM as workflow artifact (handoff to sign job)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: sbom-${{ env.IMAGE_NAME }}-${{ github.run_id }}
+          path: sbom.spdx.json
+          retention-days: 1
+          if-no-files-found: error
+
       - name: Login to GHCR
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | sudo skopeo login \
@@ -932,6 +967,7 @@ jobs:
         env:
           IMAGE_REGISTRY: ${{ env.IMAGE_REGISTRY }}
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          SCANNED_CONFIG: ${{ steps.chunked.outputs.config }}
         run: |
           set -euo pipefail
           IMG_FULL="${IMAGE_REGISTRY,,}/${IMAGE_NAME,,}"
@@ -966,6 +1002,13 @@ jobs:
               exit 1
             fi
           done
+          # The digest the sign job signs must be the image the scan and the
+          # SBOM read (review N3): same config, so the same layers.
+          CONFIG="$(sudo skopeo inspect --retry-times 3 --raw --creds "$CREDS" "docker://${IMG_FULL}@${DIGEST}" | jq -r '.config.digest')"
+          if [[ "$CONFIG" != "$SCANNED_CONFIG" ]]; then
+            echo "::error::pushed ${DIGEST} has config ${CONFIG}, the scanned image ${SCANNED_CONFIG}"
+            exit 1
+          fi
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "image_ref=${IMG_FULL}@${DIGEST}" >> "$GITHUB_OUTPUT"
           echo "Pushed manifest: ${IMG_FULL}@${DIGEST}"
