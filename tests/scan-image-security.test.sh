@@ -41,6 +41,21 @@ fresh; mkdir -p "$R/etc/containers"; echo '{"default":[{"type":"reject"}]}' > "$
        echo '{"default":[{"type":"insecureAcceptAnything"}]}' > "$R/etc/containers/policy.json"; run
                                                                         expect "container policy relaxed: drift with a diff" 1
 grep -q 'insecureAcceptAnything' "$T/report" && echo "ok   the diff shows the new policy" || { echo "FAIL config diff"; fails=$((fails+1)); }
+fresh; mkdir -p "$R/etc/pam.d" "$R/fixture/pam"
+printf 'auth required pam_deny.so\n' > "$R/fixture/pam/system-auth"
+ln -s /fixture/pam/system-auth "$R/etc/pam.d/system-auth"
+ln -s ../../fixture/pam/system-auth "$R/etc/pam.d/password-auth"
+run "--write-baseline $B"; run
+expect "absolute and relative PAM links resolve inside the image" 0
+printf 'auth sufficient pam_permit.so\n' > "$R/fixture/pam/system-auth"
+run; expect "changed PAM stack behind absolute symlink: drift" 1
+if grep -q 'config etc/pam.d/system-auth' "$T/report" && grep -q 'config etc/pam.d/password-auth' "$T/report"; then
+  echo "ok   both PAM aliases report the image target's change"
+else
+  echo "FAIL missing PAM symlink diff"; fails=$((fails+1))
+fi
+ln -s loop "$R/etc/pam.d/loop"
+run; expect "looping symlink cannot hang the scanner" 1
 fresh; run "--write-baseline $B"; mkdir -p "$R/run/build"; touch "$R/run/build/lock"; run
                                                                         expect "build residue in /run: drift" 1
 fresh; run "--write-baseline $B"; mkdir -p "$R/etc/w"; chmod 0777 "$R/etc/w"; run
@@ -52,6 +67,20 @@ fresh; mkdir -p "$R/etc/aws"; printf 'aws_access_key_id = AKIAIOSFODNN7EXAMPLE\n
                                                                         expect "AWS documented example key: not a secret" 0
 fresh; mkdir -p "$R/etc/aws"; printf 'aws_access_key_id = AKIA2E0A8F3B244C9986\n' > "$R/etc/aws/creds"; run "--write-baseline $B"; run
                                                                         expect "real-looking AWS key in etc: secret" 2
+fresh; mkdir -p "$R/etc/sudoers.d"
+# Synthetic token: never show its bytes, even when this test fails.
+token="ghp_$(printf 'A%.0s' {1..36})"
+printf '# fixture %s\n' "$token" > "$R/etc/sudoers.d/fixture"
+run "--write-baseline $B"
+expect "token in security config: fatal" 2
+if grep -qF "$token" "$T/report" || grep -rqF "$token" "$B"; then
+  echo "FAIL secret bytes leaked into report or baseline artifact"; fails=$((fails+1))
+else
+  echo "ok   secret bytes absent from report and baseline artifact"
+fi
+grep -q 'etc/sudoers.d/fixture: access token' "$T/report" \
+  && echo "ok   redacted report keeps the path and category" \
+  || { echo "FAIL missing redacted diagnostic"; fails=$((fails+1)); }
 fresh; mkdir -p "$R/sysroot/ostree/repo/objects/05"; key "$R/sysroot/ostree/repo/objects/05/abc.file"; chmod 4755 "$R/sysroot/ostree/repo/objects/05/abc.file"
        run "--write-baseline $B"; run;                                  expect "sysroot/ostree object store (pruned before publishing): ignored" 0
 grep -q sysroot "$B/privileged.txt" && { echo "FAIL sysroot object listed as privileged"; fails=$((fails+1)); } || echo "ok   sysroot not in the privileged list"
