@@ -53,6 +53,15 @@ stable release is cut.
   fix and its test, the ones whose pull request is not in main yet marked
   "pending merge"; the monthly review issue lists those until they are
   verified. `tests/check-claims.test.sh`.
+- **The upgrade test runs every Sunday from every documented start.**
+  `upgrade-smoke.yml` keeps its manual run and gains a schedule (08:00
+  UTC, after the weekly build): from `margine:lucciola` with `cowsay`
+  layered, from stock Silverblue 45, Kinoite 45 and Bluefin, all to
+  `:candidate`, one VM at a time, a failed cell notifying ntfy by name
+  without cancelling the others; `steam` layered on `margine:lucciola`
+  joins once `:stable` is promoted (before Fedora 45's release it cannot
+  resolve, a known state). `.github/scripts/upgrade-matrix.py`,
+  `tests/upgrade-matrix.test.sh`.
 
 ### Removed (2026-10-20, developer tools)
 - **Margine's ISO tooling is archived.** `live-env/` (the Titanoboa live

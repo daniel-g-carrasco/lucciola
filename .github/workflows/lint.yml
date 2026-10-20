@@ -321,6 +321,13 @@ jobs:
         # is run by lint.yml or mutation.yml. See .github/scripts/check-claims.py.
         run: python3 .github/scripts/check-claims.py
 
+      - name: The weekly upgrade matrix
+        # The cells upgrade-matrix.py prints (dispatch inputs, the weekly
+        # starting points, steam only once :stable is promoted) and the
+        # workflow's wiring: one VM at a time, logs per cell, ntfy with the
+        # cell's name. See tests/upgrade-matrix.test.sh.
+        run: bash tests/upgrade-matrix.test.sh
+
       - name: The secret-scope checker (fixtures)
         # A secret on the wrong stage or without --network=none, a job off
         # the allowlist, an action between staging and the build, a late
