@@ -7,6 +7,19 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-20, build)
+- **The base an image records is the base it was built on.** The build
+  looked up the digest of `silverblue-main:45` only for the
+  `org.opencontainers.image.base.digest` label, and if the lookup failed
+  the label stayed empty; buildah then pulled the tag again. Had the tag
+  moved in between, the label named a base the image was not built on, and
+  the kernel reserve, which builds on the labelled digest, would have used
+  a different base from the image it stands in for. The base is now
+  resolved once (`.github/scripts/resolve-base.sh`): the build is FROM that
+  digest, both labels come from the same lookup (`base.name` now follows a
+  trial base too), and a build whose base cannot be resolved stops.
+  `tests/resolve-base.test.sh`.
+
 ### Fixed (2026-10-20, checks)
 - **Some checks passed when the command they ran had failed.** The upgrade
   test sent `rpm-ostree rebase`, the layering of a package and the

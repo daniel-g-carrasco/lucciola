@@ -160,6 +160,14 @@ jobs:
           python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml
           bash tests/pipeline-status.test.sh
 
+      - name: The base the image is built on is the base its labels name
+        # build.yml resolves the base to a digest once and builds FROM it;
+        # the base.digest label, base-watch and the kernel reserve read that
+        # digest. See tests/resolve-base.test.sh.
+        run: |
+          python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml
+          bash tests/resolve-base.test.sh
+
       - name: Welcome window texts
         # The window draws content.json as it finds it: a missing field, an
         # unknown button action or a long dash is caught here, in words.
