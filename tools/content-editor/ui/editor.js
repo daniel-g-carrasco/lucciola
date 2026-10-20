@@ -1,7 +1,18 @@
 // The editor around the two targets: the website (in a frame, edited in
 // place by frame.js) and the welcome window (a form with a live preview).
 (() => {
-  const TOKEN = document.querySelector('meta[name=editor-token]').content;
+  // The run's key comes in the address the editor opened (#k=...), never from
+  // the server; kept for this tab so a reload still works, and taken out of
+  // the address bar.
+  const TOKEN = (() => {
+    const m = location.hash.match(/[#&]k=([\w-]+)/);
+    let t = m ? m[1] : '';
+    try {
+      if (t) sessionStorage.setItem('editor-key', t); else t = sessionStorage.getItem('editor-key') || '';
+    } catch (e) { /* no storage: the key lives as long as the page */ }
+    if (m) history.replaceState(null, '', location.pathname + location.search + location.hash.replace(/&?k=[\w-]+/, '').replace(/^#$/, ''));
+    return t;
+  })();
   const DASH = '\u2014';
   const $ = (s) => document.querySelector(s);
   const frame = $('#frame');
@@ -24,7 +35,7 @@
   }
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   async function api(path, body) {
-    const r = await fetch(path, body === undefined ? {} : {
+    const r = await fetch(path, body === undefined ? { headers: { 'X-Editor-Token': TOKEN } } : {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Editor-Token': TOKEN }, body: JSON.stringify(body),
     });
     const data = await r.json().catch(() => ({ error: `The editor's server answered ${r.status}.` }));

@@ -5,9 +5,9 @@ secrets/*.pem
 *.iso
 *.qcow2
 *.raw
-# Local dev ISO build (live-env/build-iso-local.sh): output dir + Titanoboa clone cache
+# Local disk image builds (just build-qcow2 / build-raw) write to output/
 /output/
 /.cache/
-# Python bytecode (tools/iso-builder)
+# Python bytecode
 __pycache__/
 *.pyc

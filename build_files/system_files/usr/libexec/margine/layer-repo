@@ -6,18 +6,28 @@
 #
 #   layer-repo NAME REPO_URL KEY_URL FINGERPRINT
 #
-# The key is fetched, its primary fingerprint compared with the one the
-# recipe carries, and only then saved under /etc/pki/rpm-gpg; the repo
-# file is rewritten to point at that saved key, and rpm-ostree imports it
-# from there when it layers the packages. Not `rpm --import`: on an
-# ostree system the rpm database lives in the read-only /usr, so the
-# import fails ("can't create transaction lock on /usr/share/rpm/.rpm.lock")
-# and, until 2026-10-12, took the whole helper down with it before the
-# repo file was written. The repo file stays: rpm-ostree needs it for
-# every later update of the layered packages.
+# The key and the repository file are fetched and handed to rpm-trust
+# (next to this script, shared with the image build), which refuses a key
+# file holding any primary key besides the pinned one and a repository
+# file that turns signature checking off in any section. Only what it
+# writes is installed: the pinned certificate alone under /etc/pki/rpm-gpg,
+# and the repository with gpgcheck=1 and gpgkey pointing at that file in
+# every section; rpm-ostree imports the key from there when it layers the
+# packages. Until 2026-10-20 the whole downloaded key file was saved
+# (rpm imports every key in it) and the repository file kept everything
+# but its gpgkey= lines (review R2).
+# Not `rpm --import`: on an ostree system the rpm database lives in the
+# read-only /usr, so the import fails ("can't create transaction lock on
+# /usr/share/rpm/.rpm.lock") and, until 2026-10-12, took the whole helper
+# down with it before the repo file was written. The repo file stays:
+# rpm-ostree needs it for every later update of the layered packages.
+# MARGINE_REPO_DIR and MARGINE_KEY_DIR exist for tests/rpm-trust.test.sh.
 set -euo pipefail
 name="${1:?name}" repo_url="${2:?repo url}" key_url="${3:?key url}" expected="${4:?fingerprint}"
-[[ $EUID -eq 0 ]] || { echo "layer-repo: run as root" >&2; exit 1; }
+REPO_DIR="${MARGINE_REPO_DIR:-/etc/yum.repos.d}"
+KEY_DIR="${MARGINE_KEY_DIR:-/etc/pki/rpm-gpg}"
+TRUST="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/rpm-trust"
+[[ -w "$REPO_DIR" ]] || { echo "layer-repo: run as root" >&2; exit 1; }
 [[ "$name" =~ ^[a-z0-9-]+$ ]] || { echo "layer-repo: bad name '$name'" >&2; exit 1; }
 
 tmp="$(mktemp -d)"
@@ -25,17 +35,12 @@ trap 'rm -rf "$tmp"' EXIT
 curl -fsSL --retry 3 -o "$tmp/key" "$key_url"
 curl -fsSL --retry 3 -o "$tmp/repo" "$repo_url"
 
-mkdir -p "$tmp/gnupg" && chmod 700 "$tmp/gnupg"
-actual="$(GNUPGHOME="$tmp/gnupg" gpg --batch --no-options --show-keys --with-colons "$tmp/key" 2>/dev/null \
-  | awk -F: '$1 == "fpr" { print $10; exit }')"
-if [[ "$actual" != "$expected" ]]; then
-  echo "layer-repo: $name signing key fingerprint mismatch, refusing" >&2
-  echo "  expected: $expected" >&2
-  echo "  fetched:  ${actual:-<unreadable>}" >&2
-  exit 1
-fi
+keyfile="$KEY_DIR/RPM-GPG-KEY-$name"
+python3 "$TRUST" key "$tmp/key" "$tmp/key.pinned" "$expected" \
+  || { echo "layer-repo: $name signing key refused, refusing" >&2; exit 1; }
+python3 "$TRUST" repo "$tmp/repo" "$tmp/repo.local" "$keyfile" \
+  || { echo "layer-repo: $name repository file refused, refusing" >&2; exit 1; }
 
-install -Dm0644 "$tmp/key" "/etc/pki/rpm-gpg/RPM-GPG-KEY-$name"
-sed -E "s|^gpgkey=.*|gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-$name|" "$tmp/repo" > "$tmp/repo.local"
-install -m0644 "$tmp/repo.local" "/etc/yum.repos.d/$name.repo"
-echo "layer-repo: $name added (/etc/yum.repos.d/$name.repo), key $expected"
+install -Dm0644 "$tmp/key.pinned" "$keyfile"
+install -m0644 "$tmp/repo.local" "$REPO_DIR/$name.repo"
+echo "layer-repo: $name added ($REPO_DIR/$name.repo), key $expected"

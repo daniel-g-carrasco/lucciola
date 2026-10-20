@@ -20,6 +20,11 @@
 # Run via `ujust lucciola-autologin ...`. 'status' is read-only and needs no
 # privilege; 'on'/'off' mutate /etc and re-exec themselves under sudo.
 #
+# The two files change together or not at all: both are written in full to
+# temporary files next to them first, and only when both are ready do they
+# replace the originals (a rename each). If the second rename fails the first
+# is put back, so a failed command leaves the machine as it was and says so.
+#
 # The paths can be pointed elsewhere for tests (tests/lucciola-autologin.test.sh):
 # MARGINE_AUTOLOGIN_GREETD_CONF, MARGINE_AUTOLOGIN_GDM_CONF, and
 # MARGINE_AUTOLOGIN_DM (the display manager unit, normally read from
@@ -116,8 +121,8 @@ resolve_user() {
 }
 
 # Restore the SELinux label on a file. Run UNCONDITIONALLY after every write:
-# editing in place keeps whatever context the inode already had, which is
-# wrong if the file arrived mislabelled (e.g. restored from a backup disk and
+# a renamed temporary file keeps the context it was created with, which is
+# wrong if the directory, or a file it replaced, arrived mislabelled (e.g. restored from a backup disk and
 # carrying user_home_t). greetd and GDM both run as xdm_t and read xdm_etc_t
 # (the policy default for /etc/greetd and /etc/gdm/custom.conf), so a stale
 # label can make the login screen silently ignore the change, or break
@@ -136,7 +141,7 @@ backup() {
   [ -f "$1" ] || return 0
   local bak
   bak="${1}.margine.bak.$(date +%Y%m%d-%H%M%S-%N)"
-  cp -a -- "$1" "$bak"
+  cp -a -- "$1" "$bak" || return 1
   relabel "$bak"
   printf '%s: backed up %s -> %s\n' "$SELF" "$1" "$bak"
 }
@@ -145,9 +150,11 @@ backup() {
 # next section) and, for `on`, append a fresh one with USER. Every other line
 # stays byte for byte. The result must parse as TOML (greetd's own parser
 # reads the same subset) and say what was asked, or nothing is written.
-# Args: on USER | off
+# The new config goes to OUT (a staged file, see stage), never to the original.
+# Args: OUT on USER | OUT off
 set_initial_session() {
-  CONF="$GREETD_CONF" CMD="$AUTOLOGIN_CMD" python3 - "$@" <<'PY'
+  local out="$1"; shift
+  CONF="$GREETD_CONF" CMD="$AUTOLOGIN_CMD" OUT="$out" python3 - "$@" <<'PY'
 import json, os, re, sys, tomllib
 
 conf, cmd = os.environ["CONF"], os.environ["CMD"]
@@ -185,8 +192,10 @@ if "default_session" not in parsed:
 got = parsed.get("initial_session", {}).get("user")
 if (action == "on" and got != user) or (action == "off" and got is not None):
     sys.exit(f"internal error: the rewritten {conf} would not say what was asked")
-with open(conf, "w", encoding="utf-8") as fh:
+with open(os.environ["OUT"], "w", encoding="utf-8") as fh:
     fh.write(text)
+    fh.flush()
+    os.fsync(fh.fileno())
 PY
 }
 
@@ -205,10 +214,11 @@ PY
 # Line-aware INI editor for GDM's custom.conf. Sets keys ONLY inside
 # [daemon], creating the section (and the file) if absent, updating existing
 # keys in place, and leaving every other section/key/comment byte-for-byte.
-# Re-runs never duplicate a key.
-# Args: KEY1 VAL1 [KEY2 VAL2 …]   (each key set under [daemon]).
+# Re-runs never duplicate a key. The result goes to OUT, as above.
+# Args: OUT KEY1 VAL1 [KEY2 VAL2 …]   (each key set under [daemon]).
 set_daemon_keys() {
-  CONF="$GDM_CONF" python3 - "$@" <<'PY'
+  local out="$1"; shift
+  CONF="$GDM_CONF" OUT="$out" python3 - "$@" <<'PY'
 import os, sys
 
 conf = os.environ["CONF"]
@@ -293,8 +303,10 @@ if not daemon_found:
     for k, v in wanted.items():
         out.append("%s=%s" % (k, v))
 
-with open(conf, "w", encoding="utf-8") as fh:
+with open(os.environ["OUT"], "w", encoding="utf-8") as fh:
     fh.write("\n".join(out) + "\n")
+    fh.flush()
+    os.fsync(fh.fileno())
 PY
 }
 
@@ -331,16 +343,80 @@ print("%s %s" % (enabled, user))
 PY
 }
 
-# The GDM side of on/off: the whole job on a GDM system, a mirror otherwise.
+# The GDM side of on/off is the whole job on a GDM system, a mirror otherwise.
 # On a greetd system a missing /etc/gdm is left alone (nothing to mirror).
-gdm_write() {
-  local dm="$1"; shift
-  if [ "$dm" != gdm ] && [ ! -d "$(dirname "$GDM_CONF")" ]; then
-    return 0
+gdm_mirrored() {
+  [ "$DM" = gdm ] || [ -d "$(dirname "$GDM_CONF")" ]
+}
+
+# --- The transaction --------------------------------------------------------
+# stage DEST: an empty temporary file in DEST's directory (so the final rename
+# stays on one filesystem and is atomic), with DEST's owner and mode, or 0644
+# for a new file. Its path goes to $STAGED_FILE (not printed: a command
+# substitution would lose the cleanup list). Staged files and the rollback
+# links below are removed on exit, whatever happens.
+STAGED=()
+cleanup() {
+  local f
+  for f in "${STAGED[@]}"; do rm -f -- "$f"; done
+}
+trap cleanup EXIT
+stage() {
+  local dest="$1" tmp
+  STAGED_FILE=""
+  tmp="$(mktemp -- "$(dirname "$dest")/.$(basename "$dest").lucciola.XXXXXX")" || return 1
+  STAGED+=("$tmp")
+  if [ -e "$dest" ]; then
+    { chmod --reference="$dest" -- "$tmp" && chown --reference="$dest" -- "$tmp"; } || return 1
+  else
+    chmod 0644 -- "$tmp" || return 1
   fi
-  backup "$GDM_CONF"
-  set_daemon_keys "$@"
-  relabel "$GDM_CONF"
+  STAGED_FILE="$tmp"
+}
+
+# commit TMP DEST [TMP DEST]: rename each staged file over its destination, in
+# the order given. Before the first rename every existing destination gets a
+# hard link next to it (the old file, same inode, same label); if a rename
+# fails, the destinations already replaced get their old file back (or are
+# removed if there was none), and commit fails. Callers pass the file that
+# removes a password LAST, so that even a power cut between the two renames
+# never leaves the active login screen less protected than asked.
+commit() {
+  local -a tmps=() dests=() keeps=()
+  local i n dest keep
+  while (( $# >= 2 )); do tmps+=("$1"); dests+=("$2"); shift 2; done
+  n=${#dests[@]}
+  for (( i = 0; i < n; i++ )); do
+    dest="${dests[i]}" keep=""
+    if [ -e "$dest" ]; then
+      keep="$(dirname "$dest")/.$(basename "$dest").lucciola-rollback"
+      STAGED+=("$keep")
+      ln -f -- "$dest" "$keep" || return 1
+    fi
+    keeps+=("$keep")
+  done
+  for (( i = 0; i < n; i++ )); do
+    if ! mv -f -T -- "${tmps[i]}" "${dests[i]}"; then
+      local j ok=1
+      for (( j = i - 1; j >= 0; j-- )); do
+        if [ -n "${keeps[j]}" ]; then
+          mv -f -T -- "${keeps[j]}" "${dests[j]}" || ok=0
+        else
+          rm -f -- "${dests[j]}" || ok=0
+        fi
+      done
+      if (( ok )); then
+        printf '%s: could not replace %s: nothing was changed.\n' "$SELF" "${dests[i]}" >&2
+      else
+        printf '%s: could not replace %s, and could not put back %s: the two login screens disagree now. Run the same command again, or restore the backups printed above.\n' \
+          "$SELF" "${dests[i]}" "${dests[*]:0:i}" >&2
+      fi
+      return 1
+    fi
+    relabel "${dests[i]}"
+  done
+  # Make the renames durable before reporting success.
+  for (( i = 0; i < n; i++ )); do sync -- "$(dirname "${dests[i]}")" 2>/dev/null || true; done
 }
 
 ACTION="${1:-status}"
@@ -382,15 +458,23 @@ case "$ACTION" in
     # system-account / nobody autologin hole. Nothing is written until this
     # passes, so a bogus target never reaches the configuration.
     validate_real_user "$target"
-    if [ "$DM" != gdm ]; then
-      backup "$GREETD_CONF"
-      set_initial_session on "$target" || die "could not update $GREETD_CONF (left as it was)"
-      # Relabel on EVERY write: in-place edits keep the inode's existing
-      # context, so a file that arrived mislabelled would never get corrected
-      # otherwise, and greetd (xdm_t) could then fail to read this very change.
-      relabel "$GREETD_CONF"
+    # Stage everything first: any failure here changes nothing.
+    pending=()
+    if gdm_mirrored; then
+      { stage "$GDM_CONF" && g="$STAGED_FILE" && set_daemon_keys "$g" AutomaticLoginEnable True AutomaticLogin "$target"; } \
+        || die "could not prepare $GDM_CONF: nothing was changed"
+      pending+=("$g" "$GDM_CONF")
     fi
-    gdm_write "$DM" AutomaticLoginEnable True AutomaticLogin "$target"
+    if [ "$DM" != gdm ]; then
+      { stage "$GREETD_CONF" && t="$STAGED_FILE" && set_initial_session "$t" on "$target"; } \
+        || die "could not prepare $GREETD_CONF: nothing was changed"
+      # greetd last: it is the login screen that will skip the password.
+      pending+=("$t" "$GREETD_CONF")
+    fi
+    for (( k = 1; k < ${#pending[@]}; k += 2 )); do
+      backup "${pending[k]}" || die "could not back up ${pending[k]}: nothing was changed"
+    done
+    commit "${pending[@]}" || exit 1
     printf '%s: autologin ENABLED for "%s".\n' "$SELF" "$target"
     printf '%s: SECURITY: this machine will boot straight to "%s"'\''s desktop with NO password.\n' "$SELF" "$target"
     if [ "$DM" != gdm ]; then
@@ -401,23 +485,31 @@ case "$ACTION" in
 
   off)
     require_root
+    pending=()
     if [ "$DM" != gdm ]; then
       if [ -f "$GREETD_CONF" ]; then
-        backup "$GREETD_CONF"
-        set_initial_session off || die "could not update $GREETD_CONF (left as it was)"
-        relabel "$GREETD_CONF"
+        { stage "$GREETD_CONF" && t="$STAGED_FILE" && set_initial_session "$t" off; } \
+          || die "could not prepare $GREETD_CONF: nothing was changed"
+        # greetd first: it is the login screen that would skip the password.
+        pending+=("$t" "$GREETD_CONF")
       else
         printf '%s: %s does not exist: nothing to disable there.\n' "$SELF" "$GREETD_CONF"
       fi
     fi
-    if [ -f "$GDM_CONF" ]; then
+    if [ -f "$GDM_CONF" ] && gdm_mirrored; then
       # Keep it minimal + reversible: flip the enable flag to False and leave
       # the remembered AutomaticLogin user in place. Other sections/keys are
       # untouched.
-      gdm_write "$DM" AutomaticLoginEnable False
+      { stage "$GDM_CONF" && g="$STAGED_FILE" && set_daemon_keys "$g" AutomaticLoginEnable False; } \
+        || die "could not prepare $GDM_CONF: nothing was changed"
+      pending+=("$g" "$GDM_CONF")
     elif [ "$DM" = gdm ]; then
       printf '%s: %s does not exist: autologin already disabled.\n' "$SELF" "$GDM_CONF"
     fi
+    for (( k = 1; k < ${#pending[@]}; k += 2 )); do
+      backup "${pending[k]}" || die "could not back up ${pending[k]}: nothing was changed"
+    done
+    (( ${#pending[@]} == 0 )) || commit "${pending[@]}" || exit 1
     printf '%s: autologin disabled.\n' "$SELF"
     printf '%s: takes effect at the next reboot.\n' "$SELF"
     ;;

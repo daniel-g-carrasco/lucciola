@@ -169,7 +169,7 @@ _rootful_load_image $target_image=image_name $tag=default_tag:
 # Parameters:
 #   target_image: The name of the image to build (ex. localhost/fedora)
 #   tag: The tag of the image to build (ex. latest)
-#   type: The type of image to build (ex. qcow2, raw, iso)
+#   type: The type of image to build (ex. qcow2, raw)
 #   config: The configuration file to use for the build (default: disk_config/disk.toml)
 
 # Example: just _rebuild-bib localhost/fedora latest qcow2 disk_config/disk.toml
@@ -206,7 +206,7 @@ _build-bib $target_image $tag $type $config: (_rootful_load_image target_image t
 # Parameters:
 #   target_image: The name of the image to build (ex. localhost/fedora)
 #   tag: The tag of the image to build (ex. latest)
-#   type: The type of image to build (ex. qcow2, raw, iso)
+#   type: The type of image to build (ex. qcow2, raw)
 #   config: The configuration file to use for the build (deafult: disk_config/disk.toml)
 
 # Example: just _rebuild-bib localhost/fedora latest qcow2 disk_config/disk.toml
@@ -219,86 +219,6 @@ build-qcow2 $target_image=("localhost/" + image_name) $tag=default_tag: && (_bui
 # Build a RAW virtual machine image
 [group('Build Virtal Machine Image')]
 build-raw $target_image=("localhost/" + image_name) $tag=default_tag: && (_build-bib target_image tag "raw" "disk_config/disk.toml")
-
-# Local Margine live-ISO build (DEV ONLY — not shipped in the distro).
-# Mirrors the CI job build_iso_titanoboa: same live-env + the SAME pinned
-# Titanoboa ref (kept in sync inside live-env/build-iso-local.sh). Runs in
-# rootful podman; output lands in ./output/. Lets install-time / ISO bugs
-# (the Flatpak bake, console kargs, livesys UX) be iterated locally instead
-# of waiting on the ~40 min CI build + an 8.5 GB artifact download. The old
-# BIB anaconda-iso path was retired 2026-06-12; these use Titanoboa locally.
-
-# Build the live ISO from the published base, zstd-19 (CI-identical).
-[group('Build Live ISO (local dev)')]
-build-iso tag="stable":
-    live-env/build-iso-local.sh {{tag}} 19
-
-# Fast throwaway TEST ISO: zstd-1 squashfs (quick) for iterating on ISO bugs.
-[group('Build Live ISO (local dev)')]
-build-iso-fast tag="stable":
-    live-env/build-iso-local.sh {{tag}} 1
-
-# Delegates to the shipped `ujust lucciola-test-vm` (SPICE so host<->guest
-# CLIPBOARD works, + Secure Boot + enrolled MS keys + emulated TPM 2.0) — the
-# proven full-featured path, not a bare qemu window.
-# Boot the newest locally-built ISO in a full virt-manager test VM.
-[group('Build Live ISO (local dev)')]
-test-install-vm:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    ISO="$(ls -t output/*.iso 2>/dev/null | head -1)"
-    [[ -n "$ISO" ]] || { echo "No ISO in output/ — run 'just build-iso-fast' first." >&2; exit 1; }
-    command -v ujust >/dev/null \
-      || { echo "ujust not found (run on a Margine host)." >&2; exit 1; }
-    ISO_ABS="$(realpath "$ISO")"
-    echo "Launching a virt-manager test VM (SPICE/clipboard + Secure Boot + TPM2) from:"
-    echo "  $ISO_ABS"
-    echo "Install with the DEFAULT partitioning; the INSTALLED system's first boot"
-    echo "prompts MokManager for Secure Boot (passphrase: margine)."
-    # Recycle here too, so a re-run never dead-ends on "a VM named X already
-    # exists". The shipped `ujust lucciola-test-vm` only learns to recycle after a
-    # base update (PR #239); this dev recipe (what `iso-test-vm` / the GUI button
-    # call) must self-heal NOW. Derive the same name the base recipe does and tear
-    # down any stale same-named session VM (domain + disk + nvram) first.
-    NAME="margine-test-$(basename "$ISO_ABS" .iso)"
-    NAME="$(printf '%s' "$NAME" | tr -c 'a-zA-Z0-9._-' '-')"
-    CONN="qemu:///session"
-    if virsh -c "$CONN" dominfo "$NAME" >/dev/null 2>&1; then
-      echo "Recreating throwaway VM '$NAME' (removing the previous domain + disk)…"
-      # Only the writable disks — never cdrom media: '--remove-all-storage'
-      # deleted the freshly built ISO this very recipe was about to boot
-      # (2026-07-07; output/ is a session storage pool, so the ISO resolved
-      # as a managed volume).
-      vols="$(virsh -c "$CONN" domblklist "$NAME" --details 2>/dev/null | awk '$1=="file" && $2=="disk" && $NF!="-" {print $NF}')"
-      virsh -c "$CONN" destroy "$NAME" >/dev/null 2>&1 || true
-      virsh -c "$CONN" undefine "$NAME" --nvram >/dev/null 2>&1 \
-        || virsh -c "$CONN" undefine "$NAME" >/dev/null 2>&1 || true
-      for v in $vols; do
-        virsh -c "$CONN" vol-delete "$v" >/dev/null 2>&1 || rm -f -- "$v"
-      done
-    fi
-    exec ujust lucciola-test-vm "$ISO_ABS"
-
-# Launch the GTK4 GUI that drives the local ISO builds (dev tool, not shipped).
-[group('Build Live ISO (local dev)')]
-iso-gui:
-    # system python3 has pygobject/GTK4/Adw (a venv/brew python on PATH may not)
-    /usr/bin/python3 tools/iso-builder/margine-iso-builder.py
-
-# Install a GNOME launcher for the GUI into ~/.local/share/applications.
-[group('Build Live ISO (local dev)')]
-install-desktop:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    apps="$HOME/.local/share/applications"
-    mkdir -p "$apps"
-    dst="$apps/dev.margine.IsoBuilder.desktop"
-    sed "s|@GUI@|{{justfile_directory()}}/tools/iso-builder/margine-iso-builder.py|" \
-      "{{justfile_directory()}}/tools/iso-builder/dev.margine.IsoBuilder.desktop.in" > "$dst"
-    chmod 0644 "$dst"
-    update-desktop-database "$apps" 2>/dev/null || true
-    echo "Installed launcher: $dst"
-    echo "Search 'Margine ISO Builder' in Activities (icon: margine-logo)."
 
 # Rebuild a QCOW2 virtual machine image
 [group('Build Virtal Machine Image')]
@@ -315,9 +235,6 @@ _run-vm $target_image $tag $type $config:
 
     # Determine the image file based on the type
     image_file="output/${type}/disk.${type}"
-    if [[ $type == iso ]]; then
-        image_file="output/bootiso/install.iso"
-    fi
 
     # Build the image if it does not exist
     if [[ ! -f "${image_file}" ]]; then
@@ -384,7 +301,7 @@ spawn-vm rebuild="0" type="qcow2" ram="6G":
 
 # Shellcheck every OUR bash script: tracked *.sh plus the extensionless
 # bash shipped under build_files/system_files (shebang-discovered).
-# Excludes live-env/references/ (vendored third-party). Mirrors what CI
+# Excludes docs/history/ (archived, not maintained). Mirrors what CI
 # runs in lint.yml — keep the two in sync.
 lint:
     #!/usr/bin/env bash
@@ -393,7 +310,7 @@ lint:
         echo "shellcheck could not be found. Please install it."
         exit 1
     fi
-    mapfile -t SH < <(git ls-files '*.sh' | grep -v '^live-env/references/')
+    mapfile -t SH < <(git ls-files '*.sh' | grep -v '^docs/history/')
     mapfile -t BIN < <(git grep -lE '^#!.*\b(ba)?sh\b' -- build_files/system_files | grep -v '\.sh$' || true)
     printf 'linting %d scripts\n' "$(( ${#SH[@]} + ${#BIN[@]} ))"
     shellcheck -S warning "${SH[@]}" "${BIN[@]}"
@@ -406,7 +323,7 @@ format:
         echo "shfmt could not be found. Please install it."
         exit 1
     fi
-    mapfile -t SH < <(git ls-files '*.sh' | grep -v '^live-env/references/')
+    mapfile -t SH < <(git ls-files '*.sh' | grep -v '^docs/history/')
     shfmt --write "${SH[@]}"
 
 # Edit the website and welcome window texts in the browser (tools/content-editor)

@@ -126,8 +126,9 @@ developer_check() {
   fi
   rpm-ostree status >/dev/null 2>&1 || { out "MARGINE-DEVELOPER-LAYER: SKIP (rpm-ostreed not ready)"; return; }
   if ! "$dev" repo >/tmp/developer-repo.out 2>&1; then
-    if grep -q "fingerprint mismatch" /tmp/developer-repo.out; then
-      out "MARGINE-DEVELOPER-LAYER: FAIL the VS Code repository key was refused: $(tail -n 2 /tmp/developer-repo.out | tr '\n' ' ')"
+    # layer-repo says "refusing" for any refused key or repository file.
+    if grep -q "refusing" /tmp/developer-repo.out; then
+      out "MARGINE-DEVELOPER-LAYER: FAIL the VS Code repository key or file was refused: $(tail -n 2 /tmp/developer-repo.out | tr '\n' ' ')"
     else
       out "MARGINE-DEVELOPER-LAYER: SKIP (VS Code repository not reachable: $(tail -n 1 /tmp/developer-repo.out))"
     fi

@@ -13,6 +13,8 @@ and [`docs/BRANDING.md`](../../BRANDING.md).
 - [`CHANGELOG.md`](CHANGELOG.md): Margine's changelog, up to the move to Lucciola.
 - [`spec/`](spec/README.md): the handbook, the ADRs, audits and lessons learned.
 - [`notes/`](notes/): incident and engineering notes.
+- [`live-env/`](live-env/) and [`tools/`](tools/README.md): Margine's live ISO
+  image, the window that built it locally, and its benchmark scripts.
 - [`iso-titanoboa-migration-plan.md`](iso-titanoboa-migration-plan.md),
   [`plan-b-bluefin-dx-deprecation.md`](plan-b-bluefin-dx-deprecation.md),
   [`build-sh-decomposition.md`](build-sh-decomposition.md),

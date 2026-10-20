@@ -7,7 +7,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HELPER="$ROOT/build_files/system_files/usr/bin/lucciola-autologin"
 TEMPLATE="$ROOT/lucciola/system_files/usr/share/lucciola/greetd/config.toml"
-T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+T="$(mktemp -d)"; trap 'chmod -R u+w "$T"; rm -rf "$T"' EXIT
 fails=0
 
 mkdir -p "$T/bin"
@@ -33,7 +33,15 @@ cat > "$T/bin/getent" <<'STUB'
 if [ -n "$2" ]; then awk -F: -v u="$2" '$1 == u { print; found = 1 } END { exit !found }' "$FAKE_PASSWD"
 else cat "$FAKE_PASSWD"; fi
 STUB
-chmod +x "$T/bin/id" "$T/bin/getent"
+# mv that refuses to rename onto $FAIL_MV (and only that): a rename that fails
+# after the other file has already been replaced.
+cat > "$T/bin/mv" <<'STUB'
+#!/bin/sh
+for last; do :; done
+[ -n "$FAIL_MV" ] && [ "$last" = "$FAIL_MV" ] && { echo "mv: injected failure on $last" >&2; exit 1; }
+exec /usr/bin/mv "$@"
+STUB
+chmod +x "$T/bin/id" "$T/bin/getent" "$T/bin/mv"
 
 fresh() {  # a greetd config as the image ships it, and GDM's stock custom.conf
   cp "$TEMPLATE" "$T/config.toml"
@@ -43,8 +51,9 @@ fresh() {  # a greetd config as the image ships it, and GDM's stock custom.conf
 run() {  # run <args...> ; sets RC and OUT. DM (default greetd.service), SUDO_USER from the caller.
   RC=0
   OUT="$(env -i PATH="$T/bin:/usr/bin:/bin" FAKE_PASSWD="$T/passwd" \
-    MARGINE_AUTOLOGIN_GREETD_CONF="$T/config.toml" MARGINE_AUTOLOGIN_GDM_CONF="$T/custom.conf" \
+    MARGINE_AUTOLOGIN_GREETD_CONF="$T/config.toml" MARGINE_AUTOLOGIN_GDM_CONF="${GDM:-$T/custom.conf}" \
     MARGINE_AUTOLOGIN_DM="${DM:-greetd.service}" ${SUDO_USER:+SUDO_USER="$SUDO_USER"} \
+    ${FAIL_MV:+FAIL_MV="$FAIL_MV"} \
     bash "$HELPER" "$@" 2>&1)" || RC=$?
 }
 check() {  # check <name> <condition...>
@@ -103,6 +112,39 @@ DM=gdm.service run on alice; check "GDM as the login screen: on edits custom.con
 check "GDM as the login screen: greetd's config untouched"                       unchanged
 DM=gdm.service run status; check "GDM as the login screen: status reads GDM"      says 'ENABLED for user "alice" (login screen: GDM)'
 DM=gdm.service run off; check "GDM as the login screen: off"                      gdm_has 'AutomaticLoginEnable=False'
+
+# All or nothing: the two files change together, or neither does, and a
+# failure says so. Before 2026-10-20 greetd's file was written first, in place,
+# and a failure on GDM's left passwordless greetd login on behind an error.
+no_leftovers() { ! compgen -G "$T/.*.lucciola*" >/dev/null && ! compgen -G "$T/gdm/.*.lucciola*" >/dev/null; }
+fresh; cp "$T/custom.conf" "$T/custom.conf.before"
+FAIL_MV="$T/config.toml" run on alice
+check "greetd's rename fails: exit 1"                                            rc_is 1
+check "greetd's rename fails: says nothing was changed"                          says "nothing was changed"
+check "greetd's rename fails: greetd untouched"                                  unchanged
+check "greetd's rename fails: GDM's mirror put back"                             cmp -s "$T/custom.conf.before" "$T/custom.conf"
+check "greetd's rename fails: no temporary files left"                           no_leftovers
+run on alice; cp "$T/config.toml" "$T/config.toml.on"; cp "$T/custom.conf" "$T/custom.conf.on"
+FAIL_MV="$T/custom.conf" run off
+check "GDM's rename fails on off: exit 1"                                        rc_is 1
+check "GDM's rename fails on off: greetd put back as it was"                     cmp -s "$T/config.toml.on" "$T/config.toml"
+check "GDM's rename fails on off: GDM untouched"                                 cmp -s "$T/custom.conf.on" "$T/custom.conf"
+check "GDM's rename fails on off: no temporary files left"                       no_leftovers
+fresh; chmod 0640 "$T/custom.conf"
+run on alice
+check "a successful on: no temporary files left"                                 no_leftovers
+check "a successful on: GDM's file keeps its mode"                               test "$(stat -c %a "$T/custom.conf")" = 640
+if [ "$(id -u)" != 0 ]; then
+  # GDM's directory is not writable (a permission or label problem): nothing
+  # can be staged there, so nothing changes anywhere.
+  fresh; mkdir -p "$T/gdm"; chmod 0555 "$T/gdm"
+  GDM="$T/gdm/custom.conf" run on alice
+  check "GDM's directory not writable: exit 1"                                   rc_is 1
+  check "GDM's directory not writable: greetd untouched"                         unchanged
+  check "GDM's directory not writable: says nothing was changed"                 says "nothing was changed"
+  check "GDM's directory not writable: no temporary files left"                  no_leftovers
+  chmod 0755 "$T/gdm"
+fi
 
 echo
 if (( fails )); then echo "$fails test(s) FAILED"; exit 1; fi

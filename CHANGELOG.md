@@ -17,6 +17,104 @@ stable release is cut.
   Flatpak remotes a Silverblue or Kinoite install leaves behind are removed
   before the first preinstall, unless apps were installed from them.
 
+### Fixed (2026-10-20, second review)
+- **`ujust lucciola-autologin` changes both login screens or neither.** It
+  writes greetd's config and mirrors the choice into GDM's, and wrote them
+  one after the other in place: if the GDM file could not be written, the
+  command failed with greetd's passwordless login already on. Both files
+  are now prepared next to the originals first and only then swapped in;
+  if the second swap fails the first is put back, and the error says that
+  nothing was changed. The file that removes the password is always
+  swapped last.
+- **No login screen after moving from Kinoite with SDDM selected.** A
+  display manager link changed on the old system survives the update; the
+  login migration left any link other than GDM's alone, so one to SDDM
+  (or LightDM, or any display manager Lucciola does not have) pointed at
+  nothing and no login screen started. It now keeps such a link only when
+  that display manager is installed; otherwise it switches to greetd,
+  starts it at once and says so in the journal.
+- **The content editor (`just edit`) answers only the page it opened.**
+  Its key was written into the page the server handed to anyone who asked,
+  so another program on the computer (a Flatpak app with network access
+  reaches 127.0.0.1 too) could read it and save, commit, push and open a
+  pull request with your GitHub login while the editor ran. The key now
+  travels only in the address the editor opens (`#k=...`, which the browser
+  never sends back), every `/api/` request needs it, and a request from a
+  foreign page is refused. If the tab gets closed, open the address
+  printed in the terminal again.
+- **Login screen on two monitors: the password typed on one is sent from
+  the other.** The login conversation follows the screen the pointer is
+  on, but the text typed in the password field stayed in the first
+  screen's field: Enter on the second found it empty and started the
+  fingerprint over instead of logging in, and unplugging the first screen
+  lost the text. The typed password now moves with the conversation and
+  the old field is emptied (greeter patch 0005, release 6).
+- **The guide's way back works for every starting system.** "Going back"
+  gave only Fedora Silverblue 44's address, wrong for Kinoite and Bluefin
+  and a step backwards from Fedora 45. "Before you start" now saves the
+  name of the system you have (`~/lucciola-came-from.txt`), "going back"
+  switches to it, lists the addresses for Silverblue, Kinoite and Bluefin
+  on the release Lucciola is built on, and says what stays: files,
+  settings and Flatpak apps, and that going back a version does not undo
+  app changes. A new "fingerprint" section turns on fingerprint login
+  (`authselect enable-feature with-fingerprint`, which the image does not
+  enable) and registers a finger with `fprintd-enroll`.
+
+### Removed (2026-10-20, developer tools)
+- **Margine's ISO tooling is archived.** `live-env/` (the Titanoboa live
+  image), `tools/iso-builder/` (the window that built it) and
+  `tools/bench/` moved to `docs/history/margine/`, with a README. They
+  built and tested Margine, not Lucciola, and the window dispatched a
+  workflow this repository does not have. Gone with them: the `just
+  build-iso`, `build-iso-fast`, `test-install-vm`, `iso-gui` and
+  `install-desktop` recipes, the lint step that compared the ISO's Flatpak
+  list with the image's, and the static checks of the ISO's kickstarts
+  (the Flatpak preinstall check stays). Lucciola moves installs by rebase
+  first; the ISO comes later, ported from the archive.
+  `installer/flatpaks-base`, which the image build reads, stays.
+  `tests/retired-iso-tooling.test.sh`.
+
+### Fixed (2026-10-20, build)
+- **The base an image records is the base it was built on.** The build
+  looked up the digest of `silverblue-main:45` only for the
+  `org.opencontainers.image.base.digest` label, and if the lookup failed
+  the label stayed empty; buildah then pulled the tag again. Had the tag
+  moved in between, the label named a base the image was not built on, and
+  the kernel reserve, which builds on the labelled digest, would have used
+  a different base from the image it stands in for. The base is now
+  resolved once (`.github/scripts/resolve-base.sh`): the build is FROM that
+  digest, both labels come from the same lookup (`base.name` now follows a
+  trial base too), and a build whose base cannot be resolved stops.
+  `tests/resolve-base.test.sh`.
+
+### Fixed (2026-10-20, checks)
+- **Some checks passed when the command they ran had failed.** The upgrade
+  test sent `rpm-ostree rebase`, the layering of a package and the
+  gaming-native dry run to the test machine as `command | tail`, in a shell
+  without `pipefail`, so the status it read was `tail`'s, always a success;
+  a missing gaming package list counted as a pass. The same held for the
+  dependency check in `validate-baseline-packages`, which also reported
+  every package found when its container stopped before checking any. Each
+  now keeps the command's own exit status, prints only the end of its
+  output, and fails on a missing list. `tests/pipeline-status.test.sh`.
+
+### Security (2026-10-20, third-party repositories)
+- **A pinned signing key now means that key alone.** The build and the
+  `ujust lucciola-docker`, `lucciola-tailscale`, `lucciola-vscode` and
+  `lucciola-devmode` recipes checked only the first fingerprint in a
+  downloaded key file and then handed rpm the whole file, and rpm imports
+  every key in it: a file with the right key first and another one after it
+  passed, and packages signed by the second key would have installed. The
+  repository file was kept as downloaded apart from its `gpgkey=` lines, so
+  `gpgcheck=0` in any section survived too. Both now go through one helper,
+  `/usr/libexec/margine/rpm-trust`: a key file with any other primary key is
+  refused and only the pinned certificate (with its own subkeys) is saved or
+  imported; a repository file that turns signature checking off in any
+  section is refused, and every section gets `gpgcheck=1` and the local,
+  verified key in place of whatever `gpgkey` it named. The same applies to
+  the RPM Fusion and negativo17 repository files the build reads.
+  Checked against the live Docker CE, Tailscale, VS Code, COPR, RPM Fusion
+  and negativo17 keys and repositories. `tests/rpm-trust.test.sh`.
 ### Fixed (2026-10-20, docs)
 - **The install instructions named images that do not exist yet.** The
   README, the website (home page and guide), `lucciola/README.md` and
