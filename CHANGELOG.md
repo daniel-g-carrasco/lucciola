@@ -7,6 +7,18 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-20, lint)
+- **The MOK signer test runs whole on the lint runner.** The runner has no
+  `systemd-sbsign` and keeps its kernel image root-only, so the test put
+  no `vmlinuz` in its tree; `finalize.sh` then refused the list ("no
+  vmlinuz checksum") and the three refusal checks passed for that reason
+  instead of their own. The lint job now installs `systemd-sbsign` and
+  signs systemd-boot's EFI binary in place of the kernel, and
+  `MOK_TEST_REQUIRE_PE` makes a skip a failure there. Without the tool the
+  test stands a stub in for `vmlinuz` and still exercises the install
+  step, and every refusal is checked by its reason. Changes under
+  `tests/` alone no longer rebuild the image.
+
 ### Fixed (2026-10-20, SBOM)
 - **scrcpy is in the SBOM.** It is installed from its release tarball, not
   an RPM, so the published SBOM listed its files and no scrcpy package: no

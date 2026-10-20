@@ -209,8 +209,16 @@ jobs:
         # Module signatures as the kernel reads them, vmlinuz via
         # systemd-sbsign, refused paths (links to the key included), and
         # finalize.sh refusing files that changed after signing.
-        # See tests/mok-sign.test.sh.
-        run: bash tests/mok-sign.test.sh
+        # The runner ships no systemd-sbsign and keeps its kernel image
+        # root-only, so the tool comes from systemd-repart and systemd-boot's
+        # EFI binary stands in for vmlinuz; MOK_TEST_REQUIRE_PE turns the
+        # test's skip into a failure, so the vmlinuz path is always run here
+        # (the first run after review N1 skipped it and failed on the
+        # install step instead, 2026-10-20). See tests/mok-sign.test.sh.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends systemd-repart systemd-boot-efi sbsigntool
+          TEST_PE=/usr/lib/systemd/boot/efi/systemd-bootx64.efi MOK_TEST_REQUIRE_PE=1 bash tests/mok-sign.test.sh
 
       - name: scrcpy pin from upstream's signed checksums
         # SCRCPY_SHA256 comes from SHA256SUMS.txt signed by the maintainer's
