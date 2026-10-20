@@ -197,6 +197,33 @@ jobs:
           PINS
           echo "synced=$synced" >> "$GITHUB_OUTPUT"
           echo "pins synced: $synced"
+      - name: The scrcpy pin is what upstream signed
+        # Review N2 (2026-10-20): a bumped SCRCPY_SHA256 must be the one in
+        # the release's SHA256SUMS.txt, signed by the scrcpy maintainer's
+        # key pinned in .github/keys, whoever wrote it on the branch. Run
+        # with the base's verifier and key, not the PR's. A failure makes
+        # this job red, which holds Renovate's automerge and the image
+        # build (build_push skips on a failed pins job).
+        if: steps.check.outputs.synced == 'true'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          f=build_files/70-phone-cam/install.sh
+          pin() { grep -oP "^SCRCPY_$2=\\K[0-9a-f.]+" <(git show "$1:$f") | head -n1 || true; }
+          if [ "$(pin "$BASE" SHA256)" = "$(pin HEAD SHA256)" ] && [ "$(pin "$BASE" VERSION)" = "$(pin HEAD VERSION)" ]; then
+            echo "scrcpy pin unchanged"; exit 0
+          fi
+          ver="$(pin HEAD VERSION)"; sha="$(pin HEAD SHA256)"
+          mkdir -p "$RUNNER_TEMP/verify/scripts" "$RUNNER_TEMP/verify/keys"
+          git show "$BASE:.github/scripts/scrcpy-signed-sha.sh" > "$RUNNER_TEMP/verify/scripts/scrcpy-signed-sha.sh"
+          git show "$BASE:.github/keys/scrcpy-release-rom1v.asc" > "$RUNNER_TEMP/verify/keys/scrcpy-release-rom1v.asc"
+          signed="$(bash "$RUNNER_TEMP/verify/scripts/scrcpy-signed-sha.sh" "$ver")" || {
+            echo "::error::scrcpy v${ver}: no checksum signed by the pinned upstream key"; exit 1; }
+          if [ "$signed" != "$sha" ]; then
+            echo "::error::SCRCPY_SHA256 for v${ver} is ${sha}, upstream signed ${signed}"; exit 1
+          fi
+          echo "scrcpy v${ver}: SCRCPY_SHA256 matches upstream's signed SHA256SUMS.txt"
 
   build_push:
     name: Build + rechunk + push
@@ -204,9 +231,12 @@ jobs:
     # All other PRs (docs, CI tweaks, etc.) skip the 30-min image build.
     # needs.pins is skipped outside Renovate PRs (output empty, so this
     # holds); !cancelled() keeps a skipped `pins` from skipping the build.
+    # A FAILED pins job (a scrcpy pin upstream did not sign, review N2)
+    # stops it: the image build would run the unverified binary.
     needs: pins
     if: >-
       !cancelled()
+      && needs.pins.result != 'failure'
       && needs.pins.outputs.synced != 'false'
       && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'vm-test'))
     runs-on: ubuntu-26.04

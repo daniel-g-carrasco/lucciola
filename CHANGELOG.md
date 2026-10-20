@@ -7,6 +7,20 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Security (2026-10-20, scrcpy updates)
+- **A scrcpy update is pinned only if upstream signed it.** Renovate
+  proposes new scrcpy releases and merges them by itself; the companion
+  workflow pinned whatever sha256 the release download had, so the pin
+  proved nothing about who published the bytes, and a release made with a
+  stolen GitHub account would have been built (as root, in the image
+  build) and shipped by automation alone. The pin now comes from the
+  release's `SHA256SUMS.txt`, after its OpenPGP signature checks out
+  against the scrcpy maintainer's key pinned in `.github/keys`
+  (`.github/scripts/scrcpy-signed-sha.sh`); the Renovate PR is checked
+  again with main's copy of the script, and a release without signed
+  checksums or signed by another key leaves the PR red, unmerged and
+  unbuilt until someone looks. `tests/scrcpy-signed-sha.test.sh`.
+
 ### Security (2026-10-20, kernel signing)
 - **The MOK private key no longer shares a build step with anything
   else.** The key that signs the kernel and its modules was mounted in the
