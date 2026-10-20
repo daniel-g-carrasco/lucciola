@@ -677,6 +677,8 @@ case "$CONTEXT" in
         [[ -z "$app" ]] && continue
         if echo "$INSTALLED" | grep -qxF "$app"; then
           ok "BAKE app installed: $app"
+        elif (( ${PREINSTALL_PENDING:-0} )); then
+          warn "BAKE app not installed yet: $app (preinstall still running)"
         else
           bad "BAKE app NOT installed: $app — kickstart %post bake silently failed AND preinstall fallback hasn't caught it yet"
         fi

@@ -13,6 +13,9 @@ stable release is cut.
   run in those minutes reports an app the run has not reached yet as a
   warning, not as a missing app; once the run has passed, a missing app is
   a failure as before.
+- **Stock Fedora starting points.** The "fedora" and "fedora-testing"
+  Flatpak remotes a Silverblue or Kinoite install leaves behind are removed
+  before the first preinstall, unless apps were installed from them.
 
 ### Fixed (2026-10-20, docs)
 - **The install instructions named images that do not exist yet.** The
