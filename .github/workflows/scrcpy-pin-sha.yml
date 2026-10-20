@@ -7,6 +7,15 @@ name: Fix scrcpy sha pin
 # would fail its `sha256sum -c`. This recomputes SCRCPY_SHA256 on the
 # Renovate branch right after the version bump, so the PR is mergeable as-is.
 #
+# The hash is upstream's, not ours (review N2, 2026-10-20): it is read from
+# the release's SHA256SUMS.txt after its OpenPGP signature checks out
+# against the scrcpy maintainer's key pinned in .github/keys
+# (.github/scripts/scrcpy-signed-sha.sh, main's copy, not the branch's).
+# Until then this job hashed whatever the release URL served, so the pin
+# proved nothing about who published the bytes, and Renovate automerged it.
+# No signed checksums, a different key or a mismatch: nothing is committed
+# and the job fails, so the PR stays red and waits for a human.
+#
 # Margine ran the same pattern for o-tiling and WSF. Runs only on Renovate
 # branches that touch 70-phone-cam/install.sh. The hash is committed back via
 # the GraphQL API (createCommitOnBranch) so the commit is VERIFIED / GitHub-signed: main
@@ -41,7 +50,7 @@ jobs:
         with:
           ref: ${{ github.ref_name }}
 
-      - name: Recompute SCRCPY_SHA256 to match SCRCPY_VERSION
+      - name: Set SCRCPY_SHA256 from upstream's signed checksums
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -50,10 +59,21 @@ jobs:
           ver="$(grep -oP '^SCRCPY_VERSION=\K[0-9.]+' "$f")"
           cur="$(grep -oP '^SCRCPY_SHA256=\K[0-9a-f]+' "$f")"
           [ -n "$ver" ] || { echo "::error::could not read SCRCPY_VERSION"; exit 1; }
+          # The verifier and the pinned key as main has them: a branch
+          # cannot bring its own.
+          git fetch --quiet --depth=1 origin main
+          mkdir -p "$RUNNER_TEMP/verify/scripts" "$RUNNER_TEMP/verify/keys"
+          git show origin/main:.github/scripts/scrcpy-signed-sha.sh > "$RUNNER_TEMP/verify/scripts/scrcpy-signed-sha.sh"
+          git show origin/main:.github/keys/scrcpy-release-rom1v.asc > "$RUNNER_TEMP/verify/keys/scrcpy-release-rom1v.asc"
+          new="$(bash "$RUNNER_TEMP/verify/scripts/scrcpy-signed-sha.sh" "$ver")" || {
+            echo "::error::scrcpy v${ver}: no checksum signed by the pinned upstream key; not pinning it (review by hand)"
+            exit 1
+          }
+          # The asset itself must match what upstream signed, or the build
+          # would fail its sha256sum -c anyway.
           url="https://github.com/Genymobile/scrcpy/releases/download/v${ver}/scrcpy-linux-x86_64-v${ver}.tar.gz"
-          echo "Hashing $url"
-          new="$(curl -fsSL --retry 3 "$url" | sha256sum | cut -d' ' -f1)"
-          [ -n "$new" ] || { echo "::error::failed to hash scrcpy tarball"; exit 1; }
+          got="$(curl -fsSL --retry 3 "$url" -o "$RUNNER_TEMP/scrcpy.tar.gz" && sha256sum "$RUNNER_TEMP/scrcpy.tar.gz" | cut -d' ' -f1)"
+          [ "$got" = "$new" ] || { echo "::error::scrcpy v${ver}: the release asset (${got}) is not what the signed SHA256SUMS.txt lists (${new})"; exit 1; }
           if [ "$new" = "$cur" ]; then
             echo "SCRCPY_SHA256 already correct for ${ver} — nothing to do."
             exit 0
@@ -77,4 +97,4 @@ jobs:
             -f path="$f" \
             -f contents="$(base64 -w0 "$f")" \
             -f oid="$(git rev-parse HEAD)"
-          echo "Committed SCRCPY_SHA256 -> ${new} for ${ver} (verified API commit)"
+          echo "Committed SCRCPY_SHA256 -> ${new} for ${ver} (upstream-signed; verified API commit)"
