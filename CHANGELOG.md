@@ -7,6 +7,20 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Removed (2026-10-20, developer tools)
+- **Margine's ISO tooling is archived.** `live-env/` (the Titanoboa live
+  image), `tools/iso-builder/` (the window that built it) and
+  `tools/bench/` moved to `docs/history/margine/`, with a README. They
+  built and tested Margine, not Lucciola, and the window dispatched a
+  workflow this repository does not have. Gone with them: the `just
+  build-iso`, `build-iso-fast`, `test-install-vm`, `iso-gui` and
+  `install-desktop` recipes, the lint step that compared the ISO's Flatpak
+  list with the image's, and the static checks of the ISO's kickstarts
+  (the Flatpak preinstall check stays). Lucciola moves installs by rebase
+  first; the ISO comes later, ported from the archive.
+  `installer/flatpaks-base`, which the image build reads, stays.
+  `tests/retired-iso-tooling.test.sh`.
+
 ### Fixed (2026-10-20, build)
 - **The base an image records is the base it was built on.** The build
   looked up the digest of `silverblue-main:45` only for the

@@ -46,7 +46,7 @@ install -Dm0644 "$A/icons/lucciola-mark-256.png" /usr/share/icons/hicolor/256x25
 install -Dm0644 "$A/icons/lucciola-mark-256.png" /usr/share/lucciola/avatar/lucciola.png
 install -Dm0644 "$A/icons/lucciola-logo-256.png" /usr/share/pixmaps/lucciola-logo.png
 # margine-logo: the old name, now carrying the Lucciola tile. The live
-# ISO's installer icon (live-env/src/build.sh), a notification sent by an
+# ISO's installer icon (docs/history/margine/live-env/src/build.sh), a notification sent by an
 # older helper or a launcher a user copied may still name it.
 install -Dm0644 "$A/lucciola-logo.svg" /usr/share/icons/hicolor/scalable/apps/margine-logo.svg
 install -Dm0644 "$A/icons/lucciola-logo-256.png" /usr/share/pixmaps/margine-logo.png

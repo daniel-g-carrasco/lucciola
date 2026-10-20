@@ -56,10 +56,10 @@ jobs:
           dockerfile: Containerfile
           config: .hadolint.yaml
 
-      - name: Flatpak-bake + console fix invariants (regression guard)
-        # Static guard for the 2026-06 fresh-install Flatpak-bake fixes and
-        # the phantom-UART console fix (forum 12247) — install-time-only
-        # behaviours no boot-test exercises. Fails if any is silently undone.
+      - name: Flatpak fix invariants (regression guard)
+        # Static guard for the 2026-06 Flatpak fixes (forum 12247) that no
+        # boot test exercises. The live ISO's checks left with the ISO
+        # tooling (docs/history/margine/live-env, 2026-10-20).
         run: .github/scripts/check-flatpak-fixes.sh
 
       - name: GUI icon names must exist
@@ -74,7 +74,7 @@ jobs:
         # not exist at lint time, structurally unfixable here.
         run: |
           set -euo pipefail
-          mapfile -t SH < <(git ls-files '*.sh' | grep -v '^live-env/references/')
+          mapfile -t SH < <(git ls-files '*.sh' | grep -v '^docs/history/')
           mapfile -t BIN < <(git grep -lE '^#!.*\b(ba)?sh\b' -- build_files/system_files lucciola/system_files | grep -v '\.sh$' || true)
           printf 'shellcheck over %d scripts\n' "$(( ${#SH[@]} + ${#BIN[@]} ))"
           shellcheck -S warning "${SH[@]}" "${BIN[@]}"
@@ -168,6 +168,12 @@ jobs:
           python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml
           bash tests/resolve-base.test.sh
 
+      - name: Margine's ISO tooling stays archived
+        # live-env/, tools/iso-builder and tools/bench built and tested
+        # Margine; they live in docs/history/margine/ and nothing that runs
+        # may point at them. See tests/retired-iso-tooling.test.sh.
+        run: bash tests/retired-iso-tooling.test.sh
+
       - name: Welcome window texts
         # The window draws content.json as it finds it: a missing field, an
         # unknown button action or a long dash is caught here, in words.
@@ -202,21 +208,8 @@ jobs:
         # ruff.toml; the pin keeps the runner reproducible too.
         run: |
           set -euo pipefail
-          mapfile -t PY < <(git ls-files '*.py')
+          mapfile -t PY < <(git ls-files '*.py' | grep -v '^docs/history/')
           pipx run ruff==0.16.0 check "${PY[@]}"
-
-      - name: BAKE flatpak lists must not drift
-        # installer/flatpaks-base (OCI image manifest) and
-        # live-env/src/flatpaks (live ISO bake) are content-identical by
-        # contract but only by discipline — this asserts it (review P3.4).
-        run: |
-          set -euo pipefail
-          norm() { grep -vE '^[[:space:]]*#|^[[:space:]]*$' "$1" | sed -E 's/[[:space:]]*#.*$//; s/^[[:space:]]+//; s/[[:space:]]+$//' | grep -v '^$' | sort; }
-          if ! diff <(norm installer/flatpaks-base) <(norm live-env/src/flatpaks); then
-            echo "::error::installer/flatpaks-base and live-env/src/flatpaks have drifted — edit both together"
-            exit 1
-          fi
-          echo "BAKE lists in sync"
 
       - name: just syntax (60-custom.just + Justfile parse)
         # rust-just on PyPI ships the `just` binary; pipx is

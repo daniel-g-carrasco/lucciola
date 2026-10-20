@@ -89,7 +89,8 @@ NEGATIVO17_FPR="0C5D0F470484AE2FC40A9B6597F3008993E8909B"
 # existed (the unit below ships world-readable in the image anyway) and
 # inviting a pointless "rotation" that would only break the docs.
 # Keep it a simple constant; if it ever changes, update the live-ISO
-# dialog (live-env/src/build.sh) and the install docs together.
+# dialog (docs/history/margine/live-env/src/build.sh, archived until Lucciola
+# has an ISO) and the install docs together.
 # LETTERS ONLY, no hyphen, no symbols (2026-08-20, issue #353).
 # MokManager runs in the firmware, before any keyboard layout exists, so
 # it assumes US. On an Italian keyboard the key printed "-" sends "/";

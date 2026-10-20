@@ -11,7 +11,7 @@
 # for the live session's favourites. Bluefin DX, today's base, ships none
 # of that.
 #
-# Margine builds its ISO differently: live-env/src/build.sh layers
+# Margine built its ISO differently: docs/history/margine/live-env/src/build.sh layers
 # dracut-live, livesys-scripts, anaconda-live and anaconda-webui on top
 # of the finished image at ISO time, with Margine's own Anaconda profile.
 # An installed Margine has never carried an installer, and the spec
