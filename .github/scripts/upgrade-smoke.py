@@ -221,8 +221,14 @@ def main():
     if a.layer:
         say(f"layering {a.layer} on the old image")
         # rpm-ostree fetches the metadata of every enabled repository first,
-        # and a mirror down for a minute (Cisco's openh264 one, 2026-10-20)
-        # fails the whole transaction: three attempts, a pause between them.
+        # and fails the whole transaction on one whose mirror is down, which
+        # Cisco's openh264 one was for hours on 2026-10-20. That mirror is
+        # not what this test is about: older images keep the repo file under
+        # /etc/yum.repos.d (writable), so it is turned off there; the image
+        # under test ships it disabled (99-cleanup.sh), and the rebase, which
+        # resolves the layer again against the new image's repositories, no
+        # longer depends on it. Three attempts for everything else.
+        capture(sudo + "sed -i 's/^enabled=1$/enabled=0/' /etc/yum.repos.d/fedora-cisco-openh264.repo 2>/dev/null; true", 60)
         rc, out = None, None
         for attempt in range(1, 4):
             rc, out = capture(keep_status(sudo + f"rpm-ostree install -y --idempotent {a.layer}", 5), 1200)
