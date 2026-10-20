@@ -321,6 +321,19 @@ jobs:
         # is run by lint.yml or mutation.yml. See .github/scripts/check-claims.py.
         run: python3 .github/scripts/check-claims.py
 
+      - name: The strict-mode lint (fixtures)
+        # Which `set` forms count, which do not, and the allowlist's own
+        # rules (a reason, an existing file, a script still not strict).
+        # See tests/strict-mode.test.sh.
+        run: bash tests/strict-mode.test.sh
+
+      - name: Shell scripts run in strict mode, or say why not
+        # set -euo pipefail in the first 30 lines of every shell script under
+        # build_files, lucciola, .github/scripts, .github/smoke and tests, or
+        # an entry with a reason in tests/policy/strict-mode-allowlist.txt.
+        # See .github/scripts/check-strict-mode.py.
+        run: python3 .github/scripts/check-strict-mode.py
+
       - name: The package-removal guard (fixtures and wiring)
         # An unexpected removal fails a main build, an expected one is dated
         # and expires, additions are reported; build.yml runs it on the built

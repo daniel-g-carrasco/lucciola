@@ -72,6 +72,17 @@ stable release is cut.
   requests and a registry without `:candidate` are skipped; a trial build
   reports only. `.github/scripts/package-removal-guard.py`,
   `tests/package-removal-guard.test.sh`.
+- **Every shell script runs in strict mode, or says why not.** A lint
+  (`.github/scripts/check-strict-mode.py`) wants `set -euo pipefail` (in
+  one of its spellings, or a `source` of `00-common.sh`) in the first 30
+  lines of every shell script under `build_files/`, `lucciola/`,
+  `.github/scripts/`, `.github/smoke/` and `tests/`; the 35 that cannot
+  (validators and probes that run every check and count the failures,
+  helpers that handle each command's result themselves, one-line exec
+  wrappers) are listed with their reason in
+  `tests/policy/strict-mode-allowlist.txt`, and an entry without a reason,
+  for a missing file or for a script that is strict after all fails. One
+  test had `set -u` alone and is strict now. `tests/strict-mode.test.sh`.
 
 ### Removed (2026-10-20, developer tools)
 - **Margine's ISO tooling is archived.** `live-env/` (the Titanoboa live
