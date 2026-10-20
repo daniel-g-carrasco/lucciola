@@ -196,6 +196,19 @@ jobs:
         # pins) and that it warns about TPM unlock first, is tested.
         run: bash tests/kernel-switch.test.sh
 
+      - name: MOK key only in the signing stage
+        # The private key is mounted in one RUN, the mok-sign stage's: FROM
+        # the clean base, no network, the signer alone. Package installs and
+        # build steps never see it (review N1). See tests/mok-secret-scope.test.sh.
+        run: bash tests/mok-secret-scope.test.sh
+
+      - name: MOK signer and the step that installs its output
+        # Module signatures as the kernel reads them, vmlinuz via
+        # systemd-sbsign, refused paths (links to the key included), and
+        # finalize.sh refusing files that changed after signing.
+        # See tests/mok-sign.test.sh.
+        run: bash tests/mok-sign.test.sh
+
       - name: Shipped public key is the signing key
         # Devices verify against the copy in system_files; CI signs with the
         # private half of secrets/cosign.pub. If they ever differ, every

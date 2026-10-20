@@ -7,6 +7,30 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Security (2026-10-20, kernel signing)
+- **The MOK private key no longer shares a build step with anything
+  else.** The key that signs the kernel and its modules was mounted in the
+  RUN that installed the CachyOS kernel from COPR and RPM Fusion's release
+  RPM from a URL, and that then ran every build script, the downloaded
+  scrcpy included: any package scriptlet or downloaded program could read
+  it, and with it sign kernels every machine with the key enrolled would
+  boot. That RUN now has no secret: it lists what must be signed. A stage
+  of its own (`mok-sign`), FROM the clean base, with no network and nothing
+  installed, runs only `custom-kernel/mok-sign.sh`, with the key mounted
+  and the files to sign as read-only data; it refuses paths that leave the
+  kernel's directory or go through a symbolic link. The last RUN
+  (`custom-kernel/finalize.sh`) puts the signed vmlinuz and modules in
+  place only if the image still holds exactly the files that were signed,
+  checks the signatures and writes the initramfs (moved from 50-branding,
+  since it packs the signed modules). Modules are signed with openssl the
+  way the kernel's `sign-file` does, byte for byte, instead of running the
+  COPR's `sign-file` with the key. The build stops if the key is ever
+  mounted where build steps run. Signed as before: same key, same
+  signatures, same Secure Boot behaviour. Whether earlier builds exposed
+  the key cannot be told from the image; rotating it would need a migration
+  for every enrolled machine and is a separate decision.
+  `tests/mok-secret-scope.test.sh`, `tests/mok-sign.test.sh`.
+
 ### Removed (2026-10-20, developer tools)
 - **Margine's ISO tooling is archived.** `live-env/` (the Titanoboa live
   image), `tools/iso-builder/` (the window that built it) and
