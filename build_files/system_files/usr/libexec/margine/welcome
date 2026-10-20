@@ -76,6 +76,10 @@ window.welcome headerbar {
   border-radius: 999px;
   background-color: #e6d5bf;
   box-shadow: 0 1px 6px 1px alpha(#e6d5bf, 0.65), 0 2px 18px 6px alpha(#e6d5bf, 0.18);
+}
+/* The glow runs only while the window is the active one (see _glow): a CSS
+   animation has GTK redraw the window on every frame, all day if left open. */
+.welcome .firefly.glow {
   animation: glow 6s ease-in-out infinite;
 }
 @keyframes glow { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
@@ -246,6 +250,12 @@ const WelcomeWindow = GObject.registerClass(
         height_request: 420,
       });
       this.add_css_class("welcome");
+      // The firefly glows only while this window is the active one. Its glow
+      // is a CSS animation, which has GTK redraw the window on every frame:
+      // left open on another workspace it had used an hour of CPU in a day.
+      this.connect("notify::is-active", () => this._glow());
+      this.connect("map", () => this._glow());
+      this.connect("unmap", () => this._glow());
 
       const toolbar = new Adw.ToolbarView();
       toolbar.add_top_bar(new Adw.HeaderBar({ show_title: false }));
@@ -297,12 +307,19 @@ const WelcomeWindow = GObject.registerClass(
       return box;
     }
 
+    _glow() {
+      if (!this._firefly) return;
+      if (this.is_active && this.get_mapped()) this._firefly.add_css_class("glow");
+      else this._firefly.remove_css_class("glow");
+    }
+
     _hero(intro) {
       const box = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 18 });
       const word = new Gtk.Box({ spacing: 7, halign: Gtk.Align.START });
       word.append(label("lucciola", ["wordmark"], { wrap: false }));
       const dot = new Gtk.Box({ valign: Gtk.Align.END, margin_bottom: 22 });
       dot.add_css_class("firefly");
+      this._firefly = dot;
       word.append(dot);
       box.append(word);
       box.append(label(markup(intro), ["lede"]));
