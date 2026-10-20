@@ -62,6 +62,68 @@ stable release is cut.
   the RPM Fusion and negativo17 repository files the build reads.
   Checked against the live Docker CE, Tailscale, VS Code, COPR, RPM Fusion
   and negativo17 keys and repositories. `tests/rpm-trust.test.sh`.
+### Fixed (2026-10-20, docs)
+- **The install instructions named images that do not exist yet.** The
+  README, the website (home page and guide), `lucciola/README.md` and
+  `SECURITY.md` send people to `:stable`, and the guide and the README to
+  `:fedora-kernel`, but neither is published before Fedora 45's release
+  (the promotion is held on purpose until then): following the guide meant
+  turning Secure Boot off and then getting "manifest unknown". Each of
+  those commands now has a short note beside it: the first `:stable`, and
+  the Fedora-kernel version with it, comes out with Fedora 45, planned for
+  27 October 2026, and until then `:candidate` is the test build to use.
+  The notes stay true after that date and can go once it has passed. When
+  `ujust lucciola-kernel` cannot stage an image, it now names "an image not
+  published yet" among the causes.
+
+### Fixed (2026-10-20, boot)
+- **Every boot spent a minute and a half repairing Flatpak.**
+  `flatpak-preinstall.service` relabelled all of `/var/lib/flatpak`
+  (`restorecon -RF`) and ran `flatpak repair --system` before every
+  preinstall, with no time limit, and `multi-user.target` waited for it: on
+  a laptop with 351 refs, 34 s plus 53 s, a 15-17 GB memory peak (page
+  cache) and the target reached after 1 min 41 s. Both steps exist for
+  fresh installs whose bake went wrong (2026-06), and now run only then:
+  when the last preinstall did not pass (a first boot, a failed or
+  interrupted run) or a quick look at the repository finds it broken (a
+  base directory missing, a wrong SELinux type on the top paths), at most
+  once per boot (`/usr/libexec/margine/flatpak-repo-repair`). A settled
+  boot does the cheap steps and the preinstall itself, about 1.5 s. The
+  unit no longer holds `multi-user.target` or `graphical.target`, stops
+  after an hour (the restart two minutes later resumes the download), and
+  runs at the priority of the Flatpak updates (`Nice=10`, idle I/O) with
+  `MemoryHigh=2G`, so the page cache it fills is reclaimed from it first.
+  The first boot after this update repairs once more, since no run has
+  been marked as passed yet.
+
+### Fixed (2026-10-20, apps)
+- **Apps that left the default set were uninstalled.** `flatpak preinstall`
+  does not only install: it keeps a record of the apps it preinstalled (in
+  the system repository's config) and uninstalls any of them the image
+  stops listing. When Bitwarden, VS Code, GNOME Weather, GNOME Maps,
+  Blanket and Fragments left the list on 2026-10-18, the next boot removed
+  them wherever they were on that record, against what this changelog
+  promised. Before every preinstall, `flatpak-preinstall-keep` now takes
+  an installed app that is no longer listed off the record, so it stays as
+  the user's own app; if the helper fails, the preinstall does not run. An
+  app the user removed stays on the record, so Flatpak still does not
+  install it again. The real `flatpak preinstall` is tested against a
+  local repository, before and after (tests/flatpak-preinstall-keep.test.sh).
+  Machines already affected do not get the apps back on their own, since
+  some may have been removed on purpose since: their data in `~/.var/app`
+  is still there, and Bazaar installs them again.
+- **A default app you remove now stays removed on every install.** On
+  installs whose record started after their apps were there (those that
+  came from Margine), a removed default came back at the next boot. The
+  same helper puts every installed default on the record, as Flatpak does
+  on a fresh install. `ujust lucciola-slim-restore` now really brings the
+  removed defaults back: unmasking the service was not enough, because
+  Flatpak remembers the removals; the recipe now forgets them for the apps
+  in the stock list.
+### Changed (terminal)
+- **A new terminal opens in the home folder.** Ptyxis no longer restores the
+  last session by default, which reopened terminals in the folder the last
+  one was closed in. It can be turned back on in Ptyxis' preferences.
 
 ### Fixed (2026-10-19, build)
 - **Builds stopped on `/etc/machine-id`.** Since this morning something in
@@ -106,6 +168,10 @@ stable release is cut.
   password field's cursor is no longer yellow but the text's colour (a
   Noctalia Greeter patch). The blurred login wallpaper of the previous look
   is no longer in the image.
+- **No more "Password:" under the password field.** The field already says
+  "Type password", so PAM's plain password prompt is no longer repeated on
+  the line below. Other questions, like a verification code, and the
+  fingerprint's messages still show there. A Noctalia Greeter patch.
 
 ### Added (the kernel reserve: Lucciola with Fedora's kernel)
 - **A second image, `:fedora-kernel`, the same Lucciola with Fedora's own
@@ -264,7 +330,10 @@ stable release is cut.
     margine-test-vm` points to it when they are missing.
   - **Six preinstalled apps:** VS Code, Bitwarden, GNOME Weather, GNOME
     Maps, Blanket and Fragments, all in Bazaar (`ujust margine-vscode`
-    still layers the VS Code RPM). An install that has them keeps them.
+    still layers the VS Code RPM). An install that had them lost them at
+    the next boot until the 2026-10-20 fix ("Apps that left the default set
+    were uninstalled"); from that fix on, an install that has them keeps
+    them.
   - **The Koofr tray shim** (47-koofr-tray-fix): it downloaded gcc and
     glibc-devel on every build and left cpp (42.6 MiB) behind, for a
     client Spola replaced. libappindicator-gtk3 went with it. `ujust
@@ -316,7 +385,9 @@ stable release is cut.
   - wayland-scroll-factor (45-wsf, `ujust wsf-preload`), which only loads
     into gnome-shell; niri sets the scroll speed itself;
   - Smile and Extension Manager from the preinstalled and baked Flatpaks
-    (an install that has them keeps them);
+    (an install that has them keeps them, reliably only since the
+    2026-10-20 fix: before it, Flatpak uninstalled them wherever its
+    preinstall record listed them);
   - the GNOME first-login helpers (`margine-configure-gnome-*`,
     `margine-install-user-extensions`) and the two first-login autostart
     entries. `ujust margine-bootstrap` keeps its other steps (home layout,

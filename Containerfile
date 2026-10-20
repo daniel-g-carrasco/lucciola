@@ -88,9 +88,9 @@ COPY lucciola/build.sh /build.sh
 # (the ARGs at the top), check the spec's BuildRequires against the tag's
 # meson.build, test-boot. v1.6.0 is commit
 # 44337ecba043749c29de6f3d563315b91987a908 (a signed tag). On top of the
-# tag the spec applies one patch (PAM results in words, the .patch file in
-# lucciola/greeter/ says why) and puts Lucciola's mark in place of the
-# Noctalia logo; check that the patch still applies when the tag moves.
+# tag the spec applies Lucciola's patches (the .patch files in
+# lucciola/greeter/, each says why) and puts Lucciola's mark in place of the
+# Noctalia logo; check that the patches still apply when the tag moves.
 FROM ${BASE_IMAGE} AS greeter-rpm
 ARG NOCTALIA_GREETER_VERSION
 ARG NOCTALIA_GREETER_SHA256
