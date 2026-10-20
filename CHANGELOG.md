@@ -32,6 +32,13 @@ stable release is cut.
   never sends back), every `/api/` request needs it, and a request from a
   foreign page is refused. If the tab gets closed, open the address
   printed in the terminal again.
+- **Login screen on two monitors: the password typed on one is sent from
+  the other.** The login conversation follows the screen the pointer is
+  on, but the text typed in the password field stayed in the first
+  screen's field: Enter on the second found it empty and started the
+  fingerprint over instead of logging in, and unplugging the first screen
+  lost the text. The typed password now moves with the conversation and
+  the old field is emptied (greeter patch 0005, release 6).
 
 ### Changed (terminal)
 - **A new terminal opens in the home folder.** Ptyxis no longer restores the

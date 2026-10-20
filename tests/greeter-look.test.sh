@@ -59,7 +59,7 @@ check "greeter.toml: the fingerprint listens without an Enter (start_on_select, 
   toml "$G/greeter.toml" "d.get('auth', {}).get('start_on_select') is True"
 # shellcheck disable=SC2016  # $1..$4 belong to the inner bash
 for p in "Patch1 0002-start-auth-on-select" "Patch2 0003-caret-in-palette-colour" \
-  "Patch3 0004-quiet-bare-password-prompt"; do
+  "Patch3 0004-quiet-bare-password-prompt" "Patch4 0005-password-follows-the-conversation"; do
   check "the spec applies ${p#* } and build-rpm.sh ships it" \
     bash -c 'grep -Eq "^$4:[[:space:]]+$3.patch$" "$1" && grep -q "$3.patch" "$2" && test -s "${1%/*}/$3.patch"' _ \
     "$ROOT/lucciola/greeter/noctalia-greeter.spec" "$ROOT/lucciola/greeter/build-rpm.sh" "${p#* }" "${p%% *}"
