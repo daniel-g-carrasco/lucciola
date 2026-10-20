@@ -7,6 +7,17 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-20, SBOM)
+- **scrcpy is in the SBOM.** It is installed from its release tarball, not
+  an RPM, so the published SBOM listed its files and no scrcpy package: no
+  version, licence or advisory could be matched to it. The build now
+  records each component it installs outside RPM (scrcpy, the uBlock Origin
+  seed, the MoreWaita icon) in `/usr/share/margine/sbom/` with version,
+  supplier, download URL and checksum, licence, purl, CPE and its files,
+  and CI merges those records into the SBOM after checking each file
+  against the image (`.github/scripts/sbom-add-components.py`); a build
+  without scrcpy's record fails. `tests/sbom-components.test.sh`.
+
 ### Fixed (2026-10-20, checks)
 - **The security scan and the SBOM describe the image that is published.**
   Both read the image as built, before chunking; the chunker then rebuilds
