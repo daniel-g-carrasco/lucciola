@@ -23,6 +23,15 @@ stable release is cut.
   nothing and no login screen started. It now keeps such a link only when
   that display manager is installed; otherwise it switches to greetd,
   starts it at once and says so in the journal.
+- **The content editor (`just edit`) answers only the page it opened.**
+  Its key was written into the page the server handed to anyone who asked,
+  so another program on the computer (a Flatpak app with network access
+  reaches 127.0.0.1 too) could read it and save, commit, push and open a
+  pull request with your GitHub login while the editor ran. The key now
+  travels only in the address the editor opens (`#k=...`, which the browser
+  never sends back), every `/api/` request needs it, and a request from a
+  foreign page is refused. If the tab gets closed, open the address
+  printed in the terminal again.
 
 ### Changed (terminal)
 - **A new terminal opens in the home folder.** Ptyxis no longer restores the

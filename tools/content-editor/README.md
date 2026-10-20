@@ -23,7 +23,10 @@ sends them to GitHub as a proposal you can look at before it goes live.
    ```
 
    (or `python3 tools/content-editor/serve.py`). The browser opens on
-   `http://127.0.0.1:8790`; only this computer can reach it. Ctrl+C in the
+   `http://127.0.0.1:8790/#k=...`; only this computer can reach it, and only
+   the page opened with that address (the key changes at each start) can
+   save or propose: another program on the computer cannot. The same address
+   is printed in the terminal, if the browser tab gets closed. Ctrl+C in the
    terminal stops it.
 
 3. **Edit, save, propose.**
