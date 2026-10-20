@@ -72,3 +72,15 @@ fi
 /usr/bin/adb kill-server >/dev/null 2>&1 || true
 rm -rf /root/.android /var/roothome/.android
 log "scrcpy $( /usr/bin/scrcpy --version | head -1 ) installed"
+# No RPM owns these files, so the SBOM would not know scrcpy is here
+# (review N9): record it (/usr/share/margine/sbom/scrcpy.spdx.json, merged
+# into the published SBOM by CI). The release bundle is statically linked
+# (FFmpeg, SDL and libusb inside), as the note says.
+python3 /ctx/sbom-component.py --name scrcpy --version "${SCRCPY_VERSION}" \
+  --supplier "Organization: Genymobile" \
+  --url "https://github.com/Genymobile/scrcpy/releases/download/v${SCRCPY_VERSION}/${SCRCPY_TAR}" \
+  --sha256 "${SCRCPY_SHA256}" --license Apache-2.0 \
+  --purl "pkg:github/Genymobile/scrcpy@v${SCRCPY_VERSION}" \
+  --cpe "cpe:2.3:a:genymobile:scrcpy:${SCRCPY_VERSION}:*:*:*:*:*:*:*" \
+  --note "Official Linux release bundle, statically linked with FFmpeg, SDL and libusb; the bundled adb is removed, /usr/bin/adb (android-tools RPM) is used." \
+  /usr/lib/margine/scrcpy

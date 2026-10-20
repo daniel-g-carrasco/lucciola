@@ -6,7 +6,8 @@
 # This Containerfile composes the Lucciola image as:
 #
 #   FROM ghcr.io/ublue-os/silverblue-main:45  (Universal Blue main: Fedora Silverblue 45)
-#   + custom kernel from CachyOS COPR (signed with our MOK)
+#   + custom kernel from CachyOS COPR (signed with our MOK in a stage of
+#     its own, the only place the private key is mounted)
 #   + the layer inherited from Margine OS (build_files/: update flow, Secure Boot and TPM
 #     tooling, branding, the GTK defaults, Flatpaks)
 #   + the Lucciola layer (lucciola/: niri, Noctalia, the Lucciola session;
@@ -69,6 +70,11 @@ COPY lucciola/assets            /lucciola-assets
 FROM scratch AS lucciola-ctx
 COPY lucciola/build.sh /build.sh
 
+# The MOK signer alone, so the mok-sign stage's cache depends on it and on
+# the files it signs, not on every build_files edit.
+FROM scratch AS mok-sign-ctx
+COPY build_files/custom-kernel/mok-sign.sh /mok-sign.sh
+
 # ----- Noctalia Greeter: an RPM built from its pinned upstream tag -----
 # Lucciola's login screen (greetd + Noctalia Greeter, lucciola/build.sh step
 # 5). Fedora packages greetd but not the greeter. Built here, from the tag,
@@ -102,19 +108,21 @@ RUN --mount=type=cache,dst=/var/cache \
         NOCTALIA_GREETER_SHA256="${NOCTALIA_GREETER_SHA256}" \
         bash /src/build-rpm.sh
 
-# ----- Base: Universal Blue silverblue-main:44 unless overridden -----
-FROM ${BASE_IMAGE}
+# ----- The build: Universal Blue silverblue-main:45 unless overridden -----
+FROM ${BASE_IMAGE} AS system
 
-# ----- Custom kernel: CachyOS via COPR + MOK signing -----
-# Mounts the custom-kernel scripts from the ctx layer and the MOK signing
-# keys from BuildKit secrets. After this layer, /usr/lib/modules/<KVER>/vmlinuz
-# is the CachyOS kernel image signed with our MOK key — boots cleanly under
-# Secure Boot once the user enrolls MOK.der via mokutil (one-time).
-# Mount ONLY what the kernel layer reads (its own scripts + the shared
-# helpers): with the whole ctx mounted, ANY build_files edit — a
-# branding tweak, a just recipe — invalidated this 25-minute layer's
-# cache (review P2.5). Narrow mounts keep the cache key tied to the
-# files that actually matter here.
+# ----- Custom kernel (CachyOS via COPR) + the Margine layer -----
+# custom-kernel/install.sh installs the kernel and builds v4l2loopback
+# against it, then lists in /usr/share/margine/mok-sign.list what the MOK
+# must sign; build.sh runs every build_files/NN-*/install.sh. NO secret in
+# this RUN (review N1, 2026-10-20): it installs packages from COPR and RPM
+# Fusion, runs their scriptlets as root and executes downloaded programs,
+# and until then the MOK private key was mounted next to all of it. The
+# key is mounted in the mok-sign stage below and nowhere else; build.sh and
+# custom-kernel stop the build if they ever find it
+# (refuse_signing_key, 00-common.sh). tests/mok-secret-scope.test.sh keeps
+# it that way.
+# The whole ctx is mounted: a build_files edit rebuilds this layer.
 # /tmp is a tmpfs mount. buildah gives the tmpfs the mode of the
 # directory underneath, and the plain Bluefin image ships /tmp as 0755
 # (bluefin-dx has 1777); the unprivileged akmods user could not create
@@ -129,8 +137,9 @@ FROM ${BASE_IMAGE}
 # database rpm could not even read to rebuild. Everything that needs a
 # healthy rpmdb now lives on the same side of that commit. (--layers=false
 # would also work and is what proved the diagnosis, but the runner's
-# buildah drops --mount=type=secret in that mode, and the kernel layer
-# is the one place we need the MOK key.)
+# buildah drops --mount=type=secret in that mode.) Signing no longer needs
+# to be in this RUN, so the split stays where it was: the signing reads
+# the kernel's files and writes no rpmdb.
 # Kernel flavour (2026-10-18). cachyos = kernel-cachyos from COPR, built
 # for x86-64-v3, MOK-signed: every published tag but one. fedora = the
 # kernel reserve: the base's own Fedora kernel stays, signed by Fedora and
@@ -142,10 +151,32 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache \
     --mount=type=cache,dst=/var/log \
     --mount=type=tmpfs,dst=/tmp \
-    --mount=type=secret,id=mok-key,target=/run/margine-certs/MOK.key \
-    --mount=type=secret,id=mok-cert,target=/run/margine-certs/MOK.pem \
     env KERNEL_FLAVOR="${KERNEL_FLAVOR}" /ctx/custom-kernel/install.sh \
  && /ctx/build.sh
+
+# ----- MOK signing: the only RUN that sees the private key -----
+# FROM the clean base, not from the build above: every program the signer
+# calls (bash, openssl, systemd-sbsign, xz, zstd, gzip) is the base's own,
+# so no package scriptlet or build step can have replaced one of them to
+# catch the key. Nothing is installed here, the RUN has no network, and the
+# build's kernel and modules come in read-only as data, with the list of
+# what to sign. Out come the signed files, a manifest (sha256 before and
+# after) and the public certificate, which the last RUN puts in place
+# after checking that the image still holds exactly the files signed here.
+# Cache: this stage reruns when the build above or mok-sign.sh changes, not
+# for Lucciola-only edits (it reads the system stage, before lucciola/).
+FROM ${BASE_IMAGE} AS mok-sign
+RUN --network=none \
+    --mount=type=bind,from=mok-sign-ctx,source=/mok-sign.sh,target=/ctx/mok-sign.sh \
+    --mount=type=bind,from=system,source=/usr/lib/modules,target=/in/modules \
+    --mount=type=bind,from=system,source=/usr/share/margine/mok-sign.list,target=/in/mok-sign.list \
+    --mount=type=tmpfs,dst=/tmp \
+    --mount=type=secret,id=mok-key,target=/run/margine-certs/MOK.key \
+    --mount=type=secret,id=mok-cert,target=/run/margine-certs/MOK.pem \
+    bash /ctx/mok-sign.sh /in/modules /in/mok-sign.list /out
+
+# ----- The image: the build above, then Lucciola, then the signed kernel -----
+FROM system
 
 # ----- Lucciola: niri + Noctalia, GNOME kept stock as the fallback session -----
 # What used to be the second build FROM the published Margine image
@@ -171,10 +202,19 @@ RUN --mount=type=bind,from=lucciola-ctx,source=/build.sh,target=/ctx/lucciola/bu
     env NOCTALIA_VR="${NOCTALIA_VR}" NOCTALIA_GREETER_VERSION="${NOCTALIA_GREETER_VERSION}" \
         bash /ctx/lucciola/build.sh
 
-# ----- Build-residue sweep + lint: verify final image is a valid bootc container -----
+# ----- Signed kernel in place, initramfs, residue sweep, lint -----
+# custom-kernel/finalize.sh puts the mok-sign stage's signed vmlinuz and
+# modules in place (refusing them unless the image still holds exactly the
+# files that were signed), installs the MOK certificate, checks the
+# signatures and writes the initramfs, which packs the signed modules.
+# No secret here either: what it mounts from mok-sign is public.
 # 99-cleanup.sh removes the /var state the build's dnf/rpm transactions
 # leave behind (dead weight on installed systems — bootc only uses image
 # /var as a first-boot seed). Chained into the same RUN so the lint
 # always judges the cleaned tree.
-RUN --mount=type=bind,from=ctx,source=/99-cleanup.sh,target=/ctx/99-cleanup.sh \
-    /ctx/99-cleanup.sh && bootc container lint
+RUN --mount=type=bind,from=ctx,source=/00-common.sh,target=/ctx/00-common.sh \
+    --mount=type=bind,from=ctx,source=/custom-kernel/finalize.sh,target=/ctx/custom-kernel/finalize.sh \
+    --mount=type=bind,from=mok-sign,source=/out,target=/ctx/signed \
+    --mount=type=bind,from=ctx,source=/99-cleanup.sh,target=/ctx/99-cleanup.sh \
+    --mount=type=tmpfs,dst=/tmp \
+    /ctx/custom-kernel/finalize.sh && /ctx/99-cleanup.sh && bootc container lint

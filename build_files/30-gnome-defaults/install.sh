@@ -104,6 +104,12 @@ if curl -fL --retry 5 --retry-delay 10 -sS -o "$MOREWAITA_TMP" "$MOREWAITA_RAW" 
   # Refresh Adwaita icon cache so gtk apps see the new SVG.
   gtk-update-icon-cache -q -t -f /usr/share/icons/Adwaita || true
   log "system-software-update.svg installed ($(stat -c %s "$SYSUPDATE_TARGET") bytes)"
+  # Not an RPM: recorded for the SBOM (review N9, see 70-phone-cam).
+  python3 /ctx/sbom-component.py --name morewaita-system-software-update --version "0+git${MOREWAITA_SHA:0:12}" \
+    --supplier "Person: somepaulo" --url "$MOREWAITA_RAW" --sha256 "$MOREWAITA_SHA256" \
+    --license GPL-3.0-only --purl "pkg:github/somepaulo/MoreWaita@${MOREWAITA_SHA}#scalable/legacy/system-software-update.svg" \
+    --note "One icon of the MoreWaita theme, as Adwaita's scalable system-software-update." \
+    "$SYSUPDATE_TARGET"
 else
   log "WARN: system-software-update.svg download/verify failed — launcher icon stays blurry"
 fi

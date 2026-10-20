@@ -80,6 +80,24 @@ retry() {
 # ship. Documented once here so it stops being re-litigated at every
 # review.
 
+# The MOK private key never reaches a build step (review N1, 2026-10-20).
+# Until then the kernel RUN mounted it and also ran build.sh: every package
+# scriptlet, the COPR and RPM Fusion installs and the downloaded scrcpy ran
+# as root next to /run/margine-certs/MOK.key. Signing now happens in the
+# Containerfile's mok-sign stage alone (custom-kernel/mok-sign.sh), FROM
+# the clean base, with no network and nothing installed. Every step that
+# installs or runs third-party code calls this first, so a secret mount
+# added back to its RUN stops the build instead of going unnoticed.
+refuse_signing_key() {
+  local p
+  for p in /run/margine-certs /run/secrets/mok-key /run/secrets/mok-cert; do
+    if [[ -e "$p" ]]; then
+      err "$p is present in a build step: the MOK key may only be mounted in the mok-sign stage (custom-kernel/mok-sign.sh)"
+      exit 1
+    fi
+  done
+}
+
 # Cached, exported globals used across sections. Defined here once so
 # every sub-script gets the same value without recomputing.
 export FEDORA_VER="${FEDORA_VER:-$(rpm -E %fedora 2>/dev/null || echo 44)}"

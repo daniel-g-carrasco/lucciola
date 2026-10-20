@@ -5,6 +5,12 @@ with (build.yml, step "Security scan of the image"). Each file is the
 reviewed state of one category; a change to any of them is a security
 decision and goes through a PR like code.
 
+The scan reads the chunked image, the one that is pushed and signed (since
+2026-10-20, review N3): the push step refuses a registry manifest whose
+config is not the scanned image's. A build chunked with the rpm-ostree
+fallback (a manual dispatch) keeps `/run` and reports buildah's resolv.conf
+mount point there as new residue.
+
 | file | content |
 |---|---|
 | `privileged.txt` | setuid / setgid files and files with capabilities |
