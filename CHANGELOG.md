@@ -7,6 +7,61 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Removed (2026-10-20, developer tools)
+- **Margine's ISO tooling is archived.** `live-env/` (the Titanoboa live
+  image), `tools/iso-builder/` (the window that built it) and
+  `tools/bench/` moved to `docs/history/margine/`, with a README. They
+  built and tested Margine, not Lucciola, and the window dispatched a
+  workflow this repository does not have. Gone with them: the `just
+  build-iso`, `build-iso-fast`, `test-install-vm`, `iso-gui` and
+  `install-desktop` recipes, the lint step that compared the ISO's Flatpak
+  list with the image's, and the static checks of the ISO's kickstarts
+  (the Flatpak preinstall check stays). Lucciola moves installs by rebase
+  first; the ISO comes later, ported from the archive.
+  `installer/flatpaks-base`, which the image build reads, stays.
+  `tests/retired-iso-tooling.test.sh`.
+
+### Fixed (2026-10-20, build)
+- **The base an image records is the base it was built on.** The build
+  looked up the digest of `silverblue-main:45` only for the
+  `org.opencontainers.image.base.digest` label, and if the lookup failed
+  the label stayed empty; buildah then pulled the tag again. Had the tag
+  moved in between, the label named a base the image was not built on, and
+  the kernel reserve, which builds on the labelled digest, would have used
+  a different base from the image it stands in for. The base is now
+  resolved once (`.github/scripts/resolve-base.sh`): the build is FROM that
+  digest, both labels come from the same lookup (`base.name` now follows a
+  trial base too), and a build whose base cannot be resolved stops.
+  `tests/resolve-base.test.sh`.
+
+### Fixed (2026-10-20, checks)
+- **Some checks passed when the command they ran had failed.** The upgrade
+  test sent `rpm-ostree rebase`, the layering of a package and the
+  gaming-native dry run to the test machine as `command | tail`, in a shell
+  without `pipefail`, so the status it read was `tail`'s, always a success;
+  a missing gaming package list counted as a pass. The same held for the
+  dependency check in `validate-baseline-packages`, which also reported
+  every package found when its container stopped before checking any. Each
+  now keeps the command's own exit status, prints only the end of its
+  output, and fails on a missing list. `tests/pipeline-status.test.sh`.
+
+### Security (2026-10-20, third-party repositories)
+- **A pinned signing key now means that key alone.** The build and the
+  `ujust lucciola-docker`, `lucciola-tailscale`, `lucciola-vscode` and
+  `lucciola-devmode` recipes checked only the first fingerprint in a
+  downloaded key file and then handed rpm the whole file, and rpm imports
+  every key in it: a file with the right key first and another one after it
+  passed, and packages signed by the second key would have installed. The
+  repository file was kept as downloaded apart from its `gpgkey=` lines, so
+  `gpgcheck=0` in any section survived too. Both now go through one helper,
+  `/usr/libexec/margine/rpm-trust`: a key file with any other primary key is
+  refused and only the pinned certificate (with its own subkeys) is saved or
+  imported; a repository file that turns signature checking off in any
+  section is refused, and every section gets `gpgcheck=1` and the local,
+  verified key in place of whatever `gpgkey` it named. The same applies to
+  the RPM Fusion and negativo17 repository files the build reads.
+  Checked against the live Docker CE, Tailscale, VS Code, COPR, RPM Fusion
+  and negativo17 keys and repositories. `tests/rpm-trust.test.sh`.
 ### Fixed (2026-10-20, docs)
 - **The install instructions named images that do not exist yet.** The
   README, the website (home page and guide), `lucciola/README.md` and
