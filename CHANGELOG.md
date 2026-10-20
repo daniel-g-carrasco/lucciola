@@ -39,6 +39,16 @@ stable release is cut.
   fingerprint over instead of logging in, and unplugging the first screen
   lost the text. The typed password now moves with the conversation and
   the old field is emptied (greeter patch 0005, release 6).
+- **The guide's way back works for every starting system.** "Going back"
+  gave only Fedora Silverblue 44's address, wrong for Kinoite and Bluefin
+  and a step backwards from Fedora 45. "Before you start" now saves the
+  name of the system you have (`~/lucciola-came-from.txt`), "going back"
+  switches to it, lists the addresses for Silverblue, Kinoite and Bluefin
+  on the release Lucciola is built on, and says what stays: files,
+  settings and Flatpak apps, and that going back a version does not undo
+  app changes. A new "fingerprint" section turns on fingerprint login
+  (`authselect enable-feature with-fingerprint`, which the image does not
+  enable) and registers a finger with `fprintd-enroll`.
 
 ### Changed (terminal)
 - **A new terminal opens in the home folder.** Ptyxis no longer restores the
