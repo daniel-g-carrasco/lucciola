@@ -41,6 +41,18 @@ stable release is cut.
   before the metadata action and at the end of the job. The Containerfile
   part is red until the signing stage (pull request #30) is in main: that
   is the state of the tree. `tests/secret-scope.test.sh`.
+- **The security claims register must name its proofs.** A lint
+  (`.github/scripts/check-claims.py`) fails when a claim marked verified
+  or partial in `docs/SECURITY-CLAIMS.md` names no test, script or
+  workflow step that exists in the tree, or names one that does not, and
+  when a test under `tests/` is run by neither `lint.yml` nor
+  `mutation.yml`. C1, C3, C5, C7, C12 and C14 now name the test, script or
+  step that proves them (they named only words); C13, measured once and
+  never re-checked, is unverified rather than partial. The register gains
+  a table for the two reviews' findings, R1-R10 and N1-N9, each with its
+  fix and its test, the ones whose pull request is not in main yet marked
+  "pending merge"; the monthly review issue lists those until they are
+  verified. `tests/check-claims.test.sh`.
 
 ### Removed (2026-10-20, developer tools)
 - **Margine's ISO tooling is archived.** `live-env/` (the Titanoboa live

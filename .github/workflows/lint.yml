@@ -310,6 +310,17 @@ jobs:
         # tests/vm-test-gate.test.sh.
         run: bash tests/vm-test-gate.test.sh
 
+      - name: The claims-register lint (fixtures)
+        # A verified claim naming only words, a dangling path, an orphan
+        # test: each caught on a throwaway tree. See tests/check-claims.test.sh.
+        run: bash tests/check-claims.test.sh
+
+      - name: Every verified claim names its proof; no orphan test
+        # docs/SECURITY-CLAIMS.md: a row marked verified or partial names a
+        # test, script or workflow step that exists; every test under tests/
+        # is run by lint.yml or mutation.yml. See .github/scripts/check-claims.py.
+        run: python3 .github/scripts/check-claims.py
+
       - name: The secret-scope checker (fixtures)
         # A secret on the wrong stage or without --network=none, a job off
         # the allowlist, an action between staging and the build, a late
