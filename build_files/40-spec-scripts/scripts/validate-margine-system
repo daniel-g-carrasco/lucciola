@@ -879,10 +879,11 @@ hdr "9f. Repositories for layering (rpm-ostree fetches every enabled one)"
 # from negativo17 and updates with the image.
 CISCO_REPO=/usr/share/dnf5/repos.d/fedora-cisco-openh264.repo
 if [[ -f "$CISCO_REPO" ]]; then
-  if sed -n '/^\[fedora-cisco-openh264\]$/,/^\[/p' "$CISCO_REPO" | grep -qx 'enabled=0'; then
+  cisco_section="$(sed -n '/^\[fedora-cisco-openh264\]$/,/^\[/p' "$CISCO_REPO")"
+  if grep -qx 'enabled=0' <<<"$cisco_section"; then
     ok "fedora-cisco-openh264 disabled: layering does not depend on Cisco's mirror"
   else
-    bad "fedora-cisco-openh264 is enabled: an outage of Cisco's mirror fails every rpm-ostree install"
+    bad "fedora-cisco-openh264 is enabled: an outage of Cisco's mirror fails every rpm-ostree install ($(grep -n '^enabled=' "$CISCO_REPO" | head -n1 | tr -d '\n'), $(stat -c 'inode %i, %h link(s)' "$CISCO_REPO"), sha256 $(sha256sum "$CISCO_REPO" | cut -c1-12); section: $(tr '\n' '|' <<<"$cisco_section" | cut -c1-200))"
   fi
 else
   info "no $CISCO_REPO (repository layout changed?)"

@@ -57,6 +57,7 @@ CISCO_REPO=/usr/share/dnf5/repos.d/fedora-cisco-openh264.repo
 sed -i '/^\[fedora-cisco-openh264\]$/,/^\[/{s/^enabled=1$/enabled=0/}' "$CISCO_REPO"
 sed -n '/^\[fedora-cisco-openh264\]$/,/^\[/p' "$CISCO_REPO" | grep -qx 'enabled=0' \
   || { echo "ERROR: fedora-cisco-openh264 is still enabled in $CISCO_REPO" >&2; exit 1; }
+echo "99-cleanup: fedora-cisco-openh264 disabled: $(grep -n '^enabled=' "$CISCO_REPO" | head -n1 | tr -d '\n'), $(stat -c 'inode %i, %h link(s)' "$CISCO_REPO"), sha256 $(sha256sum "$CISCO_REPO" | cut -c1-12)"
 
 # Build state that changed on every rebuild and moved whole layers with
 # it (2026-10-03, measured file by file between two builds of the same
