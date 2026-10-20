@@ -204,7 +204,7 @@ fedora_release_key() {
 fedora_release_keyid() {
   local keyfile fpr
   keyfile="$(fedora_release_key)" || return 1
-  fpr="$(key_fingerprint "$keyfile")" || return 1
+  fpr="$(python3 "$RPM_TRUST" fingerprint "$keyfile")" || { err "rpm-trust could not read $keyfile"; return 1; }
   [[ "$fpr" =~ ^[0-9A-F]{40}$ ]] || { err "unreadable fingerprint for $keyfile"; return 1; }
   fpr="${fpr,,}"
   printf '%s\n' "${fpr: -8}"

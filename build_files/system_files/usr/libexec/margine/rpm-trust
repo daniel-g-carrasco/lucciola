@@ -6,6 +6,10 @@
       key, the pinned one; any other primary key (appended, or in a second
       armored block) is refused. DEST gets that certificate as gpg re-exports
       it from SRC: the primary, its own subkeys and signatures, nothing else.
+  rpm-trust fingerprint SRC
+      Prints the fingerprint of the one primary key in SRC (the image's own
+      Fedora release key, for Koji's signed copies); a file with no key or
+      with more than one primary key is refused.
   rpm-trust repo SRC DEST KEYFILE
       SRC is a .repo file. Every section must keep package signature
       checking on: gpgcheck (or pkg_gpgcheck, localpkg_gpgcheck) set to
@@ -30,6 +34,7 @@ the rest of the downloaded repository file, gpgcheck=0 included.
 import configparser
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -163,7 +168,26 @@ def write(dest, text):
         raise
 
 
+def fingerprint(src):
+    """The one primary key's fingerprint in src, or Refused."""
+    home = tempfile.mkdtemp(prefix="rpm-trust-")
+    try:
+        fprs = primaries(src, home)
+    finally:
+        shutil.rmtree(home, ignore_errors=True)
+    if len(fprs) != 1:
+        raise Refused(f"{src} holds {len(fprs)} primary keys, expected exactly one")
+    return fprs[0]
+
+
 def main(argv):
+    if len(argv) == 3 and argv[1] == "fingerprint":
+        try:
+            print(fingerprint(argv[2]))
+        except (Refused, OSError) as e:
+            print(f"rpm-trust: {e}, refusing", file=sys.stderr)
+            return 1
+        return 0
     if len(argv) != 5 or argv[1] not in ("key", "repo"):
         print(__doc__.split("\n\n")[1], file=sys.stderr)
         return 2
