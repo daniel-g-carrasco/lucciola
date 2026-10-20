@@ -14,16 +14,17 @@ are internal (paths, units, `VARIANT_ID`) or kept as aliases (see section 11). E
 
 > **Two build surfaces.** Branding is split across two images:
 > - **Base image** (`build_files/…`) → the installed system. Built by `just build`.
-> - **Live image** (`live-env/src/…`) → the ISO / installer only. Built on top of
->   the published base by Titanoboa (see `live-env/build-iso-local.sh`).
-> A change in `live-env/` is visible **only in the ISO**, never on an installed
+> - **Live image** (`docs/history/margine/live-env/src/…`) → the ISO / installer
+>   only, built on top of the published base by Titanoboa.
+> A change in the live image is visible **only in the ISO**, never on an installed
 > system, and vice-versa. Mixing these up is the #1 source of "I changed it but it
 > didn't change."
 >
-> Lucciola has no ISO yet: no workflow builds `live-env/`, which is still
-> Margine's live image and says "Margine" throughout (sections 3, 6, 7 and 8,
-> and the rows marked "Margine's ISO" below). It becomes Lucciola's when the
-> ISO comes.
+> Lucciola has no ISO yet. Margine's live image, which says "Margine"
+> throughout (sections 3, 6, 7 and 8, and the rows marked "Margine's ISO"
+> below), is archived in `docs/history/margine/live-env/` with the rest of the
+> ISO tooling (2026-10-20): nothing builds or checks it. It becomes
+> Lucciola's, ported, when the ISO comes.
 
 ---
 
@@ -62,14 +63,14 @@ These five cut across almost every touchpoint below:
 | GNOME **About** logo | `build_files/50-branding/install.sh` | `lucciola-logo`, `LOGO=` in os-release |
 | GNOME About distributor wordmark | `build_files/50-branding/install.sh` | `fedora_logo_med`, `fedora_whitelogo_med` |
 | Boot splash (Plymouth) | `lucciola/assets/plymouth/`, `build_files/50-branding/install.sh` + `…/kargs.d/10-margine-plymouth.toml` | `plymouth-set-default-theme`, `DeviceScale`, `rhgb` |
-| GRUB menu text (Margine's ISO) + HiDPI font | `live-env/src/iso.yaml` + `…/grub2-static/configs.d/05_margine-gfxmode.cfg` | `Install Margine`, `grub2-mkfont`, `margine.pf2` |
+| GRUB menu text (Margine's ISO) + HiDPI font | `docs/history/margine/live-env/src/iso.yaml` + `…/grub2-static/configs.d/05_margine-gfxmode.cfg` | `Install Margine`, `grub2-mkfont`, `margine.pf2` |
 | GDM background / logo (Lucciola's fallback login screen) | `build_files/50-branding/install.sh` | `gdm.d/01-margine-background`, `login-screen` |
 | **Lucciola** login screen (Noctalia Greeter on greetd): look, account picture, logo, preselected session, failed-login text | `lucciola/system_files/usr/share/lucciola/greeter/{sync,greeter}.toml`, `lucciola/greeter/` (spec, patches), `lucciola/build.sh` (step 5), `lucciola-default-avatar.service` | `hide_logo`, `Source1`, `authErrorText`, `[appearance.palette]`, `last = "Lucciola"`, `Icon=` |
 | Desktop wallpaper (GNOME, GDM, Noctalia, the greeter) / accent colour (GTK; GNOME itself stock) | `build_files/50-branding/install.sh`, `lucciola/system_files/usr/share/lucciola/noctalia/15-wallpaper.toml`, `build_files/30-gnome-defaults/install.sh` | `picture-uri`, `wallpaper.default`, `accent-color` |
-| Live ISO "Welcome to Margine" (Margine's ISO) | `live-env/src/build.sh` | `Welcome to Fedora` (the sed targets) |
-| Anaconda installer **window icon** (Margine's ISO) | `live-env/src/build.sh` | `AnacondaInstaller`, `_wmid in`, `StartupWMClass` |
-| Installer product/storage config (Margine's ISO) | `live-env/src/anaconda/profile.d/margine.conf` | `variant_id`, `default_partitioning` |
-| "Secure Boot is disabled" notice (Margine's ISO) | `live-env/src/build.sh` | `margine-live-sb-notice` |
+| Live ISO "Welcome to Margine" (Margine's ISO) | `docs/history/margine/live-env/src/build.sh` | `Welcome to Fedora` (the sed targets) |
+| Anaconda installer **window icon** (Margine's ISO) | `docs/history/margine/live-env/src/build.sh` | `AnacondaInstaller`, `_wmid in`, `StartupWMClass` |
+| Installer product/storage config (Margine's ISO) | `docs/history/margine/live-env/src/anaconda/profile.d/margine.conf` | `variant_id`, `default_partitioning` |
+| "Secure Boot is disabled" notice (Margine's ISO) | `docs/history/margine/live-env/src/build.sh` | `margine-live-sb-notice` |
 | MOK passphrase / enrollment | `build_files/custom-kernel/install.sh` | `margine`, `mok-enroll` |
 | First-login bootstrap + notification (no autostart in Lucciola: `ujust lucciola-bootstrap` by hand) | `build_files/system_files/usr/libexec/margine/first-boot-bootstrap`, `…/usr/libexec/margine-first-boot-status` | `first-boot-bootstrap`, `first-boot-status` |
 | Update notifications | `build_files/system_files/usr/libexec/margine*` (units in `…/usr/lib/systemd/user/`) | `margine-notify` |
@@ -104,7 +105,7 @@ Then **aliased** (copied onto names other software hardcodes; these cannot be
 renamed or deleted):
 
 - `margine-logo.{svg,png}`: the old name, now carrying the tile. The live
-  ISO's installer icon (`live-env/src/build.sh`) and older references use it.
+  ISO's installer icon (`docs/history/margine/live-env/src/build.sh`) and older references use it.
 - `fedora-logo-icon.{svg,png}`: hardcoded by **anaconda-live's welcome dialog**
   (`Adw.StatusPage iconName`) and by **gnome-initial-setup** (which maps
   `os-release ID=fedora` to this icon name). Must be *replaced*, never deleted.
@@ -112,7 +113,7 @@ renamed or deleted):
   gnome-initial-setup's language page.
 - `org.fedoraproject.AnacondaInstaller.{svg,png}`: the installer window icon name
   (see [Anaconda installer icon](#7-anaconda-installer--window-icon-the-hard-one)).
-  Lives in the **live image** (`live-env/src/build.sh`), not the base.
+  Lives in the **live image** (`docs/history/margine/live-env/src/build.sh`), not the base.
 
 **Gotchas**
 - The GNOME **About** panel looks up `LOGO=` via the **icon theme only**; the
@@ -257,7 +258,7 @@ headless and skipping the splash.
 
 ## 3. GRUB / boot menu
 
-**Menu text** (`live-env/src/iso.yaml`, Margine's ISO): entries explicitly read **"Install
+**Menu text** (`docs/history/margine/live-env/src/iso.yaml`, Margine's ISO): entries explicitly read **"Install
 Margine"** (+ *Basic Graphics Mode*, + *verbose, no splash, no serial*, +
 *Enroll Secure Boot key (MokManager)*). The ISO volume label must stay
 `Margine-Live` (the CDLABEL the boot config references).
@@ -439,7 +440,7 @@ is online and nothing replaces the entry.
 
 ## 6. Live ISO: "Welcome to Margine" (Margine's ISO)
 
-**File:** `live-env/src/build.sh` (live image only). anaconda-live ships a GJS
+**File:** `docs/history/margine/live-env/src/build.sh` (live image only). anaconda-live ships a GJS
 welcome app + an autostart `.desktop`, both saying "Welcome to Fedora":
 - GJS source patched: `sed 's/Welcome to Fedora/Welcome to Margine/g'` on
   `…/anaconda/gnome/fedora-welcome` (and `…/org.fedoraproject.welcome-screen`).
@@ -482,7 +483,7 @@ Wayland that value **becomes the app_id** → the real app_id is almost certainl
 built live image, 2026-06-30). With no `<app_id>.desktop` present, nothing matched
 → generic placeholder + "Anaconda Web UI" label.
 
-**The fix** (`live-env/src/build.sh`, anchors `AnacondaInstaller`, `_wmid in`):
+**The fix** (`docs/history/margine/live-env/src/build.sh`, anchors `AnacondaInstaller`, `_wmid in`):
 1. Alias `margine-logo` onto the icon name the window expects, in **two sizes**
    (SVG can render blank on the overview's raster badge):
    `…/hicolor/scalable/apps/org.fedoraproject.AnacondaInstaller.svg` and
@@ -518,18 +519,18 @@ fresh ISO in the SB test VM.
 - `liveinst.desktop` is renamed to `anaconda.desktop` by livesys at boot; the
   `StartupWMClass` edit survives the rename.
 
-**Installer config** (`live-env/src/anaconda/profile.d/margine.conf`): profile id
+**Installer config** (`docs/history/margine/live-env/src/anaconda/profile.d/margine.conf`): profile id
 `margine`, detected by `os_id=fedora` **and** `variant_id=margine`; BTRFS +
 `zstd:1`, `default_partitioning` enforced (don't add explicit `part` directives —
 anaconda-webui v68 then shows CUSTOM); hidden Network/Password/User spokes (WebUI
 handles them). The `%include` post-scripts are wired from
-`live-env/src/anaconda/interactive-defaults.ks`.
+`docs/history/margine/live-env/src/anaconda/interactive-defaults.ks`.
 
 ---
 
 ## 8. Live ISO: "Secure Boot is disabled" notice (Margine's ISO)
 
-**File:** `live-env/src/build.sh` (anchor `margine-live-sb-notice`).
+**File:** `docs/history/margine/live-env/src/build.sh` (anchor `margine-live-sb-notice`).
 A one-shot autostart (`/etc/xdg/autostart/margine-live-sb-notice.desktop` →
 `/usr/libexec/margine-live-sb-notice`) that, **only in the live session and only
 if SB is off** (`mokutil --sb-state`), shows a `zenity --info` explaining that
@@ -711,7 +712,7 @@ themed name via `app_icon` shows the logo.
 
 ## When you add a NEW branding touchpoint
 
-1. Decide the surface: installed system (`build_files/`) or ISO (`live-env/src/`)?
+1. Decide the surface: installed system (`build_files/`) or ISO (`docs/history/margine/live-env/src/`)?
 2. If it's an icon: install the SVG under `hicolor/scalable/apps/`, add a raster
    size if anything renders it as a small badge, then rebuild the cache (`-f -t`).
 3. If it's dconf: write the keyfile, then `dconf update`; remember GDM is a
@@ -729,7 +730,7 @@ themed name via `app_icon` shows the logo.
 
 *Updated for Lucciola's own identity on 2026-10-18 (logo, wallpaper, boot
 splash, greeter, names). Source map assembled 2026-07-01 from a full sweep of
-`build_files/` and `live-env/`. Re-verified claim-by-claim against the code 2026-07-15 (stale
+`build_files/` and `docs/history/margine/live-env/`. Re-verified claim-by-claim against the code 2026-07-15 (stale
 notifier semantics, timer schedule, anchors and package lists corrected; the
 icon-cache `-t` rule is now actually enforced in `50-branding`). Line numbers
 deliberately omitted — grep the anchors.*

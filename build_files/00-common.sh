@@ -102,51 +102,64 @@ fi
 # pin the Docker and Microsoft repo keys the same way. The RPMFusion and
 # NVIDIA constants stay in custom-kernel, the Docker/VS Code ones in
 # 15-devstack: each script owns the fingerprints it consumes.
-# gpg comes from the base image (gnupg2); nothing to install at build time.
-# GNUPGHOME is pinned explicitly because buildah RUN starts from a bare
-# environment: gpg wants a home directory it can create, and the first
-# build to try this failed with an empty fingerprint and no explanation,
-# because stderr was being thrown away. It is not thrown away now.
-key_fingerprint() {
-  local out
-  export GNUPGHOME="${GNUPGHOME:-/run/margine-gnupg}"
-  mkdir -p "$GNUPGHOME" && chmod 700 "$GNUPGHOME"
-  if ! out="$(gpg --batch --no-options --show-keys --with-colons "$1" 2>&1)"; then
-    err "gpg could not read $1:"
-    printf '%s\n' "$out" | sed 's/^/    /' >&2
-    return 1
-  fi
-  printf '%s\n' "$out" | awk -F: '/^fpr:/{print $10; exit}'
-}
+# gpg and python3 come from the base image; nothing to install at build time.
+#
+# The rules live in one place, rpm-trust (system_files, shipped as
+# /usr/libexec/margine/rpm-trust for layer-repo; here read from /ctx before
+# system_files is copied, like margine-seed-etc-passwd). Until 2026-10-20
+# this file compared only the FIRST fingerprint gpg printed and then let rpm
+# import the whole file, and rpm imports every key in it: a key file with
+# the pinned key first and another one after it passed (review R2).
+RPM_TRUST="${RPM_TRUST:-$(dirname "${BASH_SOURCE[0]}")/system_files/usr/libexec/margine/rpm-trust}"
 
+# verify_key_fpr <file> <fingerprint> <label>
+# Refuses unless <file> holds exactly one primary key, <fingerprint>, and
+# rewrites <file> in place with that certificate alone (its own subkeys
+# included), so the `rpm --import` and gpgkey=file:// that follow can only
+# ever see the pinned key.
 verify_key_fpr() {
-  local file="$1" expected="$2" label="$3" actual
+  local file="$1" expected="$2" label="$3"
   if [[ ! -f "$file" ]]; then
     err "$label: expected key file $file, not found"
     return 1
   fi
-  actual="$(key_fingerprint "$file")" || actual=""
-  if [[ "$actual" != "$expected" ]]; then
-    err "$label: GPG key fingerprint mismatch, refusing to build"
-    err "  expected: $expected"
-    err "  on disk:  ${actual:-<unreadable>}"
+  if ! python3 "$RPM_TRUST" key "$file" "$file" "$expected"; then
+    err "$label: GPG key refused, refusing to build"
     return 1
   fi
-  log "$label: key fingerprint verified ($expected)"
+  log "$label: key fingerprint verified, pinned key only ($expected)"
   return 0
 }
 
+# trust_repo_file <src> <dest> <keyfile>
+# For a repository file the build did not write itself (downloaded, or
+# dropped by a *-release RPM): refuses one that turns signature checking off
+# in any section, and writes <dest> with gpgcheck=1 and gpgkey=file://<keyfile>
+# in every section, so dnf can import no key but the verified one.
+trust_repo_file() {
+  local src="$1" dest="$2" keyfile="$3"
+  if ! python3 "$RPM_TRUST" repo "$src" "$dest" "$keyfile"; then
+    err "repository file $src refused, refusing to build"
+    return 1
+  fi
+  log "repository file $dest: signature checking on, key $keyfile"
+}
+
 # Verifies the key files a rpmfusion-<flavor>-release RPM just dropped in
-# /etc/pki/rpm-gpg. Called BEFORE any package is pulled from those repos,
-# which is the only moment the check is worth anything.
+# /etc/pki/rpm-gpg, and the repository files it dropped next to them.
+# Called BEFORE any package is pulled from those repos, which is the only
+# moment the check is worth anything.
 verify_rpmfusion_keys() {
-  local ver flavor fprvar rc=0
+  local ver flavor fprvar key repo rc=0
   ver="$(rpm -E %fedora)"
   for flavor in "$@"; do
     fprvar="RPMFUSION_${flavor^^}_FPR"
-    verify_key_fpr \
-      "/etc/pki/rpm-gpg/RPM-GPG-KEY-rpmfusion-${flavor}-fedora-${ver}" \
-      "${!fprvar}" "rpmfusion-${flavor}" || rc=1
+    key="/etc/pki/rpm-gpg/RPM-GPG-KEY-rpmfusion-${flavor}-fedora-${ver}"
+    verify_key_fpr "$key" "${!fprvar}" "rpmfusion-${flavor}" || { rc=1; continue; }
+    for repo in /etc/yum.repos.d/rpmfusion-"${flavor}"*.repo; do
+      [[ -f "$repo" ]] || { err "rpmfusion-${flavor}: no repository file"; rc=1; break; }
+      trust_repo_file "$repo" "$repo" "$key" || rc=1
+    done
   done
   return $rc
 }

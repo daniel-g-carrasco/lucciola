@@ -1,0 +1,183 @@
+#!/usr/bin/env python3
+"""What a third-party RPM repository may bring in: one pinned key, signed packages.
+
+  rpm-trust key  SRC DEST FINGERPRINT
+      SRC is a downloaded public key file. It must hold exactly one primary
+      key, the pinned one; any other primary key (appended, or in a second
+      armored block) is refused. DEST gets that certificate as gpg re-exports
+      it from SRC: the primary, its own subkeys and signatures, nothing else.
+  rpm-trust repo SRC DEST KEYFILE
+      SRC is a .repo file. Every section must keep package signature
+      checking on: gpgcheck (or pkg_gpgcheck, localpkg_gpgcheck) set to
+      false, or sslverify set to false, is refused. DEST gets the same
+      sections with gpgcheck=1 and gpgkey=file://KEYFILE in each, whatever
+      gpgkey the file named: dnf and rpm-ostree import the keys gpgkey lists
+      without asking, so a URL left there would let whoever answers it add
+      a key.
+
+Exit 0 when DEST was written, 1 when refused (the reason on stderr, ending
+in "refusing"), 2 on bad usage. DEST may be SRC.
+
+Two callers, one implementation (2026-10-20, review R2): the image build
+(build_files/00-common.sh, verify_key_fpr and trust_repo_file, from
+/ctx/system_files) and /usr/libexec/margine/layer-repo, which the ujust
+recipes for Docker CE, Tailscale and VS Code run. Until then both read
+only the first fingerprint gpg printed and handed rpm the whole file, and
+rpm imports every key in it; layer-repo rewrote the gpgkey= lines and kept
+the rest of the downloaded repository file, gpgcheck=0 included.
+"""
+
+import configparser
+import os
+import re
+import subprocess
+import sys
+import tempfile
+
+GPGCHECKS = {"gpgcheck", "pkg_gpgcheck", "localpkg_gpgcheck"}
+TRUE = {"1", "yes", "true", "on"}
+FALSE = {"0", "no", "false", "off"}
+
+
+class Refused(Exception):
+    pass
+
+
+def primaries(path, home):
+    """Fingerprints of the primary keys gpg reads in path, in order."""
+    r = subprocess.run(
+        ["gpg", "--batch", "--no-options", "--homedir", home,
+         "--show-keys", "--with-colons", path],
+        capture_output=True, text=True)
+    if r.returncode != 0:
+        raise Refused(f"gpg cannot read {path}: {r.stderr.strip()}")
+    fprs, want = [], False
+    for line in r.stdout.splitlines():
+        rec = line.split(":")
+        if rec[0] == "pub":
+            want = True
+        elif rec[0] == "fpr" and want:
+            fprs.append(rec[9].upper())
+            want = False
+        elif rec[0] in ("sub", "ssb", "sec"):
+            want = False
+    return fprs
+
+
+def check_one(path, expected, home):
+    fprs = primaries(path, home)
+    if not fprs:
+        raise Refused(f"{path} holds no public key")
+    if fprs[0] != expected:
+        raise Refused(f"fingerprint mismatch: expected {expected}, found {fprs[0]}")
+    if len(fprs) > 1:
+        raise Refused(f"{path} holds {len(fprs) - 1} primary key(s) besides "
+                      f"{expected}: {', '.join(fprs[1:])}")
+
+
+def key(src, dest, expected):
+    expected = re.sub(r"\s+", "", expected).upper()
+    if not re.fullmatch(r"[0-9A-F]{40}|[0-9A-F]{64}", expected):
+        raise Refused(f"'{expected}' is not a full fingerprint")
+    with tempfile.TemporaryDirectory(prefix="rpm-trust-") as home:
+        os.chmod(home, 0o700)
+        check_one(src, expected, home)
+        # import-export runs gpg's whole import (self-signatures checked,
+        # subkeys without a valid binding dropped) and writes the result
+        # instead of storing it: only what gpg understood reaches rpm.
+        out = os.path.join(home, "pinned.asc")
+        with open(out, "wb") as f:
+            r = subprocess.run(
+                ["gpg", "--batch", "--no-options", "--homedir", home,
+                 "--import-options", "import-export", "--armor", "--import", src],
+                stdout=f, stderr=subprocess.PIPE)
+        if r.returncode != 0 or os.path.getsize(out) == 0:
+            raise Refused(f"gpg cannot export the key from {src}: "
+                          f"{r.stderr.decode(errors='replace').strip()}")
+        check_one(out, expected, home)
+        write(dest, open(out, encoding="ascii").read())
+
+
+def boolean(section, name, value):
+    v = value.strip().lower()
+    if v in TRUE:
+        return True
+    if v in FALSE:
+        return False
+    raise Refused(f"[{section}] {name}={value!r} is not a boolean")
+
+
+def repo(src, dest, keyfile):
+    if not keyfile.startswith("/") or re.search(r"\s", keyfile):
+        raise Refused(f"key file '{keyfile}' must be an absolute path without spaces")
+    # strict: a repeated section or option is refused, never resolved by
+    # guessing which copy dnf would read. No DEFAULT section, no
+    # interpolation, option names kept as written.
+    cp = configparser.ConfigParser(strict=True, interpolation=None,
+                                   default_section="\0", delimiters=("=",),
+                                   comment_prefixes=("#", ";"))
+    cp.optionxform = str
+    try:
+        with open(src, encoding="utf-8") as f:
+            cp.read_file(f)
+    except (configparser.Error, UnicodeDecodeError) as e:
+        raise Refused(f"{src} is not a repository file dnf would read the same way: "
+                      f"{str(e).splitlines()[0]}") from None
+    if not cp.sections():
+        raise Refused(f"{src} defines no repository")
+    lines = []
+    for sec in cp.sections():
+        if not re.fullmatch(r"[A-Za-z0-9._:-]+", sec):
+            raise Refused(f"repository id [{sec}] has unexpected characters")
+        lines.append(f"[{sec}]")
+        for name, value in cp.items(sec):
+            low = name.lower()
+            if low in GPGCHECKS:
+                if not boolean(sec, name, value):
+                    raise Refused(f"[{sec}] {name}={value} turns package signature checking off")
+                continue
+            if low == "gpgkey":
+                continue
+            if low == "sslverify" and not boolean(sec, name, value):
+                raise Refused(f"[{sec}] sslverify={value} turns TLS verification off")
+            if low == "repo_gpgcheck":
+                boolean(sec, name, value)
+            # One line per option: a continuation line can never become an
+            # option of its own in the file dnf reads (a URL list stays a
+            # list, space separated).
+            lines.append(f"{name}=" + " ".join(v.strip() for v in value.split("\n") if v.strip()))
+        lines += ["gpgcheck=1", f"gpgkey=file://{keyfile}", ""]
+    write(dest, "\n".join(lines))
+
+
+def write(dest, text):
+    d = os.path.dirname(os.path.abspath(dest))
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".rpm-trust-")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, dest)
+    except BaseException:
+        os.unlink(tmp)
+        raise
+
+
+def main(argv):
+    if len(argv) != 5 or argv[1] not in ("key", "repo"):
+        print(__doc__.split("\n\n")[1], file=sys.stderr)
+        return 2
+    cmd, src, dest, arg = argv[1:]
+    try:
+        (key if cmd == "key" else repo)(src, dest, arg)
+    except Refused as e:
+        print(f"rpm-trust: {e}, refusing", file=sys.stderr)
+        return 1
+    except OSError as e:
+        print(f"rpm-trust: {e}, refusing", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

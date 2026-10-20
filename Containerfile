@@ -33,6 +33,10 @@
 #   buildah build --build-arg BASE_IMAGE=ghcr.io/ublue-os/silverblue-main:45
 #
 # (build.yml: workflow_dispatch with base_image publishes :trial only.)
+# CI never builds FROM the tag: build.yml resolves it to a digest once
+# (.github/scripts/resolve-base.sh) and passes repository@digest here, the
+# same digest it writes in the base.digest label, so both stages below and
+# the label name one base.
 ARG BASE_IMAGE=ghcr.io/ublue-os/silverblue-main:45
 # Noctalia Greeter's pinned tag and the sha256 of its archive: declared here,
 # before any FROM, so the stage that builds it and the step that installs it

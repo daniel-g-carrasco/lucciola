@@ -110,7 +110,7 @@ fi
 
 # Direct-kernel boot (CI serial injection). The shipped live ISO no longer
 # bakes console=ttyS0 (it stalls phantom-UART mini-PCs — see
-# live-env/src/iso.yaml). To keep the ISO boot-test observable over serial,
+# docs/history/margine/live-env/src/iso.yaml). To keep the ISO boot-test observable over serial,
 # the caller extracts the ISO's kernel+initrd and passes them here with a
 # custom --append that adds console=ttyS0; QEMU/OVMF boots them directly
 # while the -cdrom still provides the live squashfs (root=live:CDLABEL=...).

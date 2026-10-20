@@ -1,3 +1,6 @@
+> Archived on 2026-10-20 with Margine's other ISO tooling: see
+> [`../tools/README.md`](../tools/README.md). Lucciola does not build it.
+
 # Margine Live Environment Scaffold
 
 This directory is scaffolding for the ADR-0008 Titanoboa live-ISO migration.
