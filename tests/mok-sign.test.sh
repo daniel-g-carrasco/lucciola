@@ -5,8 +5,11 @@
 #   - every module comes out with the kernel's signature trailer, the CMS
 #     signature verifies against the certificate over the original bytes,
 #     and xz/zstd/gzip modules are packed again;
-#   - vmlinuz is signed with systemd-sbsign (when the host has it and a
-#     kernel image to sign; skipped otherwise);
+#   - vmlinuz is signed with systemd-sbsign (when the host has it and a PE
+#     image to sign: TEST_PE, the running kernel, or systemd-boot's EFI
+#     binary; without them a stub stands in for vmlinuz so that finalize.sh
+#     is still exercised, and MOK_TEST_REQUIRE_PE=1 makes that a failure
+#     instead of a skip, as lint.yml asks);
 #   - paths that leave the tree, go through a symbolic link (one pointing
 #     at the key) or name anything but a module or vmlinuz are refused, as
 #     are a key that does not match the certificate and a missing key;
@@ -40,7 +43,7 @@ mk_tree() {  # mk_tree <dir>
   head -c 5000 /dev/urandom > "$T/raw-zst"; zstd -q -c "$T/raw-zst" > "$d/packed.ko.zst"
   head -c 5000 /dev/urandom > "$T/raw-gz";  gzip -n -c "$T/raw-gz" > "$d/packed.ko.gz"
 }
-mk_list() {  # mk_list <tree> <list> [extra sign= lines...]
+mk_list() {  # mk_list <tree> <list> [extra sign= lines...]; MK_SKIP_VMLINUZ=1 leaves vmlinuz out of sign=
   local tree="$1" list="$2"; shift 2
   {
     echo "# test list"
@@ -48,9 +51,10 @@ mk_list() {  # mk_list <tree> <list> [extra sign= lines...]
     echo "kver=$K"
     echo "sbsign_epoch=1700000000"
     echo "mtime_epoch=1700000000"
-    (cd "$tree" && find "$K" -type f \( -name '*.ko*' -o -name vmlinuz \) | LC_ALL=C sort | sed 's/^/sign=/')
+    (cd "$tree" && find "$K" -type f \( -name '*.ko*' -o -name vmlinuz \) | LC_ALL=C sort \
+       | { if (( ${MK_SKIP_VMLINUZ:-0} )); then sed '/\/vmlinuz$/d'; else cat; fi; } | sed 's/^/sign=/')
     for x in "$@"; do echo "sign=$x"; done
-    echo "vmlinuz_sha256=$( (sha256sum < "$tree/$K/vmlinuz" 2>/dev/null || echo x) | cut -d' ' -f1)"
+    echo "vmlinuz_sha256=$(sha256sum < "$tree/$K/vmlinuz" | cut -d' ' -f1)"
   } > "$list"
 }
 sign() {  # sign <tree> <list> <out> [key] [cert] ; sets RC
@@ -60,15 +64,25 @@ sign() {  # sign <tree> <list> <out> [key] [cert] ; sets RC
 }
 
 mk_tree "$T/tree"
-HAVE_PE=0
-PE="${TEST_PE:-/usr/lib/modules/$(uname -r)/vmlinuz}"
-if [[ -x /usr/lib/systemd/systemd-sbsign && -r "$PE" ]]; then
+# A PE image for vmlinuz: TEST_PE, the running kernel (Fedora keeps it
+# readable under /usr/lib/modules; Ubuntu's /boot/vmlinuz-* is root-only),
+# or systemd-boot's EFI binary.
+HAVE_PE=0; PE=""
+for cand in "${TEST_PE:-}" "/usr/lib/modules/$(uname -r)/vmlinuz" /usr/lib/systemd/boot/efi/systemd-bootx64.efi; do
+  [[ -n "$cand" && -r "$cand" ]] && { PE="$cand"; break; }
+done
+if [[ -x /usr/lib/systemd/systemd-sbsign && -n "$PE" ]]; then
   cp "$PE" "$T/tree/$K/vmlinuz"; HAVE_PE=1
+elif [[ "${MOK_TEST_REQUIRE_PE:-0}" != 0 ]]; then
+  echo "FAIL vmlinuz signing cannot run here: no /usr/lib/systemd/systemd-sbsign or no PE image (MOK_TEST_REQUIRE_PE is set)"; exit 1
 else
-  echo "skip vmlinuz signing: no systemd-sbsign or no kernel image on this host"
+  # The signer cannot take vmlinuz without systemd-sbsign, so it gets the
+  # modules only; a stub stands in for vmlinuz where finalize.sh needs one.
+  echo "skip vmlinuz signing: no /usr/lib/systemd/systemd-sbsign or no PE image on this host (a stub stands in for finalize.sh)"
+  head -c 4096 /dev/urandom > "$T/tree/$K/vmlinuz"
 fi
 cp -a "$T/tree" "$T/tree.orig"
-mk_list "$T/tree" "$T/list"
+MK_SKIP_VMLINUZ=$((1 - HAVE_PE)) mk_list "$T/tree" "$T/list"
 sign "$T/tree" "$T/list" "$T/o"
 check "signs the listed files (rc $RC)" [ "$RC" = 0 ]
 
@@ -151,6 +165,7 @@ refused() {  # refused <name> <list-extra-or-setup...>
   local name="$1"
   check "$name (rc $RC)" bash -c "[ '$RC' != 0 ] && [ ! -s '$T/r/manifest' ]"
 }
+MK_SKIP_VMLINUZ=$((1 - HAVE_PE))
 mk_list "$T/tree" "$T/l2" "$K/../$K/kernel/drivers/plain.ko"
 sign "$T/tree" "$T/l2" "$T/r"; refused "refuses a path with .."
 ln -s "$T/MOK.key" "$T/tree/$K/kernel/drivers/evil.ko"
@@ -170,33 +185,52 @@ mk_list "$T/tree" "$T/l2" "other-kver/kernel/x.ko"
 sign "$T/tree" "$T/l2" "$T/r"; refused "refuses a path outside the listed kernel"
 sign "$T/tree" "$T/list" "$T/r" "$T/other.key" "$T/MOK.pem"; refused "refuses a key that does not match the certificate"
 sign "$T/tree" "$T/list" "$T/r" "$T/missing.key"; refused "refuses to run without the key"
+unset MK_SKIP_VMLINUZ
 
-# finalize.sh, install part, on a copy of the tree.
+# finalize.sh, install part, on a copy of the tree. The CachyOS flavour
+# wants vmlinuz listed and in the manifest: without systemd-sbsign the
+# signer never saw it, so the stub goes into a copy of the output by hand,
+# the same bytes before and after, as the 2500-module case does below.
 sed -n '/^refuse_signing_key() {/,/^}/p' "$ROOT/build_files/00-common.sh" > "$T/common.sh"
 fin() {  # fin <tree> <list> <signed> ; sets RC
   RC=0
   env COMMON_SH="$T/common.sh" MODULES_DIR="$1" SIGN_LIST="$2" SIGNED_DIR="$3" \
       MOK_DER="$T/installed/MOK.der" FINALIZE_STEPS=install bash "$FINALIZE" > "$T/out" 2>&1 || RC=$?
 }
+refused_by() {  # refused_by <name> <reason-regex> ; RC must be 1 and the reason logged
+  check "$1 (rc $RC)" bash -c "[ '$RC' = 1 ] && grep -q '$2' '$T/out'"
+}
+if (( HAVE_PE )); then
+  FIN_LIST="$T/list"; FIN_OUT="$T/o"
+else
+  mk_list "$T/tree.orig" "$T/list.fin"
+  cp -a "$T/o" "$T/o.fin"; cp "$T/tree.orig/$K/vmlinuz" "$T/o.fin/files/$K/vmlinuz"
+  h="$(sha256sum < "$T/tree.orig/$K/vmlinuz" | cut -d' ' -f1)"; echo "$h $h $K/vmlinuz" >> "$T/o.fin/manifest"
+  FIN_LIST="$T/list.fin"; FIN_OUT="$T/o.fin"
+fi
 cp -a "$T/tree.orig" "$T/img"
-fin "$T/img" "$T/list" "$T/o"
+fin "$T/img" "$FIN_LIST" "$FIN_OUT"
 check "finalize: puts the signed files in place (rc $RC)" [ "$RC" = 0 ]
-check "finalize: image files are the signed bytes" diff -r "$T/img/$K" "$T/o/files/$K"
-check "finalize: certificate installed" cmp -s "$T/installed/MOK.der" "$T/o/MOK.der"
+check "finalize: image files are the signed bytes" diff -r "$T/img/$K" "$FIN_OUT/files/$K"
+check "finalize: certificate installed" cmp -s "$T/installed/MOK.der" "$FIN_OUT/MOK.der"
 check "finalize: mtime pinned to the kernel's build time" \
   [ "$(stat -c %Y "$T/img/$K/kernel/drivers/plain.ko")" = 1700000000 ]
 cp -a "$T/tree.orig" "$T/img2"
 head -c 10 /dev/urandom >> "$T/img2/$K/kernel/drivers/packed.ko.zst"
-fin "$T/img2" "$T/list" "$T/o"
-check "finalize: refuses a module that changed after it was listed (rc $RC)" [ "$RC" = 1 ]
-cp -a "$T/o" "$T/o-short"; sed -i '1d' "$T/o-short/manifest"
+fin "$T/img2" "$FIN_LIST" "$FIN_OUT"
+refused_by "finalize: refuses a module that changed after it was listed" 'changed after it was listed for signing'
+cp -a "$FIN_OUT" "$T/o-short"; sed -i '1d' "$T/o-short/manifest"
 cp -a "$T/tree.orig" "$T/img3"
-fin "$T/img3" "$T/list" "$T/o-short"
-check "finalize: refuses a manifest that is not the list (rc $RC)" [ "$RC" = 1 ]
+fin "$T/img3" "$FIN_LIST" "$T/o-short"
+refused_by "finalize: refuses a manifest that is not the list" 'does not name exactly the files'
 cp -a "$T/tree.orig" "$T/img4"
 head -c 100 /dev/urandom > "$T/img4/$K/kernel/drivers/unlisted.ko"
-fin "$T/img4" "$T/list" "$T/o"
-check "finalize: refuses an unlisted CachyOS module (rc $RC)" [ "$RC" = 1 ]
+fin "$T/img4" "$FIN_LIST" "$FIN_OUT"
+refused_by "finalize: refuses an unlisted CachyOS module" 'modules the MOK did not sign'
+cp -a "$T/tree.orig" "$T/img5"
+head -c 10 /dev/urandom >> "$T/img5/$K/vmlinuz"
+fin "$T/img5" "$FIN_LIST" "$FIN_OUT"
+refused_by "finalize: refuses a vmlinuz that is no longer the kernel step's" 'vmlinuz changed after the kernel step'
 
 # Thousands of modules, as a real kernel has (6492): the checks over the
 # whole list must not trip on their own size (a pipe into grep -q died of
@@ -204,7 +238,7 @@ check "finalize: refuses an unlisted CachyOS module (rc $RC)" [ "$RC" = 1 ]
 # overflow the 64 KiB pipe buffer).
 mkdir -p "$T/big/$K/kernel"
 for i in $(seq 1 2500); do printf '%s' "$i" > "$T/big/$K/kernel/m$i.ko"; done
-cp "$T/tree.orig/$K/vmlinuz" "$T/big/$K/vmlinuz" 2>/dev/null || printf 'pe' > "$T/big/$K/vmlinuz"
+cp "$T/tree.orig/$K/vmlinuz" "$T/big/$K/vmlinuz"
 # vmlinuz first, as custom-kernel lists it.
 {
   echo "flavor=cachyos"; echo "kver=$K"; echo "sbsign_epoch=1700000000"; echo "mtime_epoch=1700000000"
@@ -226,22 +260,19 @@ cp -a "$T/tree.orig" "$T/fed"
 {
   echo "flavor=fedora"; echo "kver=$K"; echo "sbsign_epoch=1700000000"; echo "mtime_epoch=1700000000"
   echo "sign=$K/kernel/drivers/plain.ko"
-  echo "vmlinuz_sha256=$( (sha256sum < "$T/fed/$K/vmlinuz" 2>/dev/null || echo x) | cut -d' ' -f1)"
+  echo "vmlinuz_sha256=$(sha256sum < "$T/fed/$K/vmlinuz" | cut -d' ' -f1)"
 } > "$T/fed.list"
-if [[ -f "$T/fed/$K/vmlinuz" ]]; then
-  sign "$T/fed" "$T/fed.list" "$T/fo"
-  check "fedora flavour: signs the listed module only (rc $RC)" \
-    bash -c "[ '$RC' = 0 ] && [ \"\$(cd '$T/fo/files' && find . -type f)\" = './$K/kernel/drivers/plain.ko' ]"
-  fin "$T/fed" "$T/fed.list" "$T/fo"
-  check "fedora flavour: finalize installs it, vmlinuz and the other modules untouched (rc $RC)" \
-    bash -c "[ '$RC' = 0 ] && cmp -s '$T/fed/$K/vmlinuz' '$T/tree.orig/$K/vmlinuz' \
-             && cmp -s '$T/fed/$K/kernel/drivers/packed.ko.zst' '$T/tree.orig/$K/kernel/drivers/packed.ko.zst' \
-             && ! cmp -s '$T/fed/$K/kernel/drivers/plain.ko' '$T/tree.orig/$K/kernel/drivers/plain.ko'"
-  cp -a "$T/tree.orig" "$T/fed2"
-  head -c 10 /dev/urandom >> "$T/fed2/$K/vmlinuz"
-  fin "$T/fed2" "$T/fed.list" "$T/fo"
-  check "fedora flavour: refuses a vmlinuz that is no longer the kernel step's (rc $RC)" \
-    bash -c "[ '$RC' = 1 ] && grep -q 'vmlinuz changed after the kernel step' '$T/out'"
-fi
+sign "$T/fed" "$T/fed.list" "$T/fo"
+check "fedora flavour: signs the listed module only (rc $RC)" \
+  bash -c "[ '$RC' = 0 ] && [ \"\$(cd '$T/fo/files' && find . -type f)\" = './$K/kernel/drivers/plain.ko' ]"
+fin "$T/fed" "$T/fed.list" "$T/fo"
+check "fedora flavour: finalize installs it, vmlinuz and the other modules untouched (rc $RC)" \
+  bash -c "[ '$RC' = 0 ] && cmp -s '$T/fed/$K/vmlinuz' '$T/tree.orig/$K/vmlinuz' \
+           && cmp -s '$T/fed/$K/kernel/drivers/packed.ko.zst' '$T/tree.orig/$K/kernel/drivers/packed.ko.zst' \
+           && ! cmp -s '$T/fed/$K/kernel/drivers/plain.ko' '$T/tree.orig/$K/kernel/drivers/plain.ko'"
+cp -a "$T/tree.orig" "$T/fed2"
+head -c 10 /dev/urandom >> "$T/fed2/$K/vmlinuz"
+fin "$T/fed2" "$T/fed.list" "$T/fo"
+refused_by "fedora flavour: refuses a vmlinuz that is no longer the kernel step's" 'vmlinuz changed after the kernel step'
 
 [ "$fails" = 0 ] && echo "mok-sign: all checks passed" || { echo "mok-sign: $fails failed"; exit 1; }
