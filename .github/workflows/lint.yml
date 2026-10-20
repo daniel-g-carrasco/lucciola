@@ -249,3 +249,27 @@ jobs:
           set -euo pipefail
           dnf -y -q install flatpak ostree python3
           bash tests/flatpak-preinstall-keep.test.sh
+
+  policy:
+    # The repository's rules about itself, read from tests/policy/ and
+    # docs/SECURITY-CLAIMS.md: what the checks below enforce is written down
+    # as data, so a change to a rule is a reviewable diff, and the checkers
+    # are tested on fixtures before they judge the tree. A job of its own,
+    # always run, no path filter: a required check (tools/repo-guard.sh).
+    runs-on: ubuntu-26.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: PyYAML (the checkers read the workflows)
+        run: python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml
+
+      - name: The mutation checker (fixtures)
+        # Killed, survived and broken verdicts on a throwaway repository, and
+        # the system PATH first. See tests/mutation-check.test.sh.
+        run: bash tests/mutation-check.test.sh
+
+      - name: Every mutant still applies
+        # A guard that moved leaves its mutant without an anchor: caught here,
+        # on every pull request, not at the weekly run (mutation.yml).
+        run: python3 .github/scripts/mutation-check.py --check

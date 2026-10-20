@@ -1,0 +1,8 @@
+# Review R1 (2026-10-20): the secret scanner printed the token it found,
+# in the CI log and in an artifact kept for 30 days. The report must name
+# the file and the category, never the bytes.
+name = "scanner-prints-token"
+file = ".github/scripts/scan-image-security.py"
+old = 'return b"access token"'
+new = 'return m.group(0)'
+must_fail = "bash tests/scan-image-security.test.sh"

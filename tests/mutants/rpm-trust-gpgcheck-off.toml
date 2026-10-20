@@ -1,0 +1,10 @@
+# Review R2: a downloaded repository file that turns signature checking
+# off in any section must be refused, not rewritten.
+name = "rpm-trust-gpgcheck-off"
+file = "build_files/system_files/usr/libexec/margine/rpm-trust"
+old = '''                if not boolean(sec, name, value):
+                    raise Refused(f"[{sec}] {name}={value} turns package signature checking off")
+                continue'''
+new = '''                boolean(sec, name, value)
+                continue'''
+must_fail = "bash tests/rpm-trust.test.sh"

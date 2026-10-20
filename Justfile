@@ -330,3 +330,11 @@ format:
 [group('Content')]
 edit *args:
     python3 tools/content-editor/serve.py {{ args }}
+
+# Break each guard in tests/mutants on purpose and see its check fail (just mutate --list, --only NAME)
+[group('Checks')]
+mutate *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # The system python first: a virtualenv's has no PyYAML.
+    PATH="/usr/bin:/bin:$PATH" python3 .github/scripts/mutation-check.py {{ args }}

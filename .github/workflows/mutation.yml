@@ -1,0 +1,95 @@
+# Mutation checks: every guard in tests/mutants/ is broken on purpose and
+# its check must fail (.github/scripts/mutation-check.py). The two reviews of
+# 2026-10-20 found guards whose tests stayed green with the guard removed;
+# a check that cannot fail is assurance that is not there. A mutant that
+# survives is a missing assertion: add it, never drop the mutant.
+#
+# Weekly, on demand, and on pull requests that touch the guards or their
+# tests. Lint applies every mutant on every pull request (--check, the
+# `policy` job) so a moved guard is noticed at once; running the checks is
+# this workflow's job. The one mutant whose check needs Flatpak 1.16 runs in
+# the Fedora container, like the test itself in lint.yml.
+name: Mutation checks
+
+on:
+  schedule:
+    - cron: '0 5 * * 1' # Monday 05:00 UTC
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'tests/**'
+      - '.github/scripts/**'
+      - '.github/workflows/mutation.yml'
+      - 'build_files/00-common.sh'
+      - 'build_files/custom-kernel/**'
+      - 'build_files/system_files/usr/libexec/**'
+      - 'tools/content-editor/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mutants:
+    name: Guards fail when broken
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run every mutant (the Fedora-only one aside)
+        run: |
+          python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml
+          python3 .github/scripts/mutation-check.py --exclude-tag fedora
+
+      - name: Notify ntfy (a guard did not fail when broken)
+        if: failure()
+        env:
+          NTFY_URL: ${{ secrets.NTFY_TOPIC_URL }}
+        run: |
+          if [[ -z "${NTFY_URL:-}" ]]; then
+            echo "NTFY_TOPIC_URL secret not set, skipping notification."
+            exit 0
+          fi
+          curl --silent --show-error --fail \
+            -H "Title: Mutation check FAILED (${{ github.job }})" \
+            -H "Priority: high" \
+            -H "Tags: x,microscope" \
+            -H "Click: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            -d "A guard survived its mutation or a mutant no longer applies. The run log names it." \
+            "$NTFY_URL" || echo "ntfy notify failed (non-fatal)"
+
+  mutants-fedora:
+    name: Guards fail when broken (Fedora, real flatpak preinstall)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    container:
+      image: registry.fedoraproject.org/fedora:45@sha256:e0f7c9b6ed4f631ac8d0261f7543c3646d148be46a94d60b9465b73c7d4e1500
+    steps:
+      - name: Tools (git before the checkout, so the checkout is a clone)
+        run: dnf -y -q install git flatpak ostree python3
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run the mutants that need Flatpak 1.16
+        run: python3 .github/scripts/mutation-check.py --tag fedora
+
+      - name: Notify ntfy (a guard did not fail when broken)
+        if: failure()
+        env:
+          NTFY_URL: ${{ secrets.NTFY_TOPIC_URL }}
+        run: |
+          if [[ -z "${NTFY_URL:-}" ]]; then
+            echo "NTFY_TOPIC_URL secret not set, skipping notification."
+            exit 0
+          fi
+          curl --silent --show-error --fail \
+            -H "Title: Mutation check FAILED (${{ github.job }})" \
+            -H "Priority: high" \
+            -H "Tags: x,microscope" \
+            -H "Click: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            -d "A guard survived its mutation or a mutant no longer applies. The run log names it." \
+            "$NTFY_URL" || echo "ntfy notify failed (non-fatal)"

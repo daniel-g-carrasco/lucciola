@@ -7,6 +7,20 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Added (2026-10-20, checks that can fail)
+- **Mutation checks.** Each guard the two reviews looked at is broken on
+  purpose, one file per breakage in `tests/mutants/`, and its test must
+  fail (`.github/scripts/mutation-check.py`, `just mutate`): the secret
+  scanner printing a token, symlinks resolved on the runner, the staleness
+  check calling `bootc status`, `rpm-trust` accepting `gpgcheck=0`, the
+  signed-transport migration taking any image of the owner, the sign job
+  without its condition, a `tail` hiding a failed command, a base that does
+  not resolve, `flatpak-preinstall-keep` doing nothing. A mutant whose test
+  stays green is a guard nobody tests. Weekly and on pull requests that
+  touch the guards (`mutation.yml`, ntfy on failure); lint applies every
+  mutant on every pull request so a moved guard is noticed at once.
+  `tests/mutation-check.test.sh`.
+
 ### Removed (2026-10-20, developer tools)
 - **Margine's ISO tooling is archived.** `live-env/` (the Titanoboa live
   image), `tools/iso-builder/` (the window that built it) and
