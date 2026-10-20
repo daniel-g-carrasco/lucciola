@@ -62,6 +62,16 @@ stable release is cut.
   joins once `:stable` is promoted (before Fedora 45's release it cannot
   resolve, a known state). `.github/scripts/upgrade-matrix.py`,
   `tests/upgrade-matrix.test.sh`.
+- **No package leaves the image unnoticed.** Every main build compares
+  its `rpm -qa` with the published `:candidate` and writes the added and
+  removed packages in the step summary; a removed package must be listed,
+  dated, in `build_files/expected-removals.txt`, and a line older than
+  two weeks fails the build, so the file never becomes an allowlist. This
+  is the guard against the 2026-10-11 base-trim cascade, when images
+  without Nautilus and Ptyxis were published with every check green. Pull
+  requests and a registry without `:candidate` are skipped; a trial build
+  reports only. `.github/scripts/package-removal-guard.py`,
+  `tests/package-removal-guard.test.sh`.
 
 ### Removed (2026-10-20, developer tools)
 - **Margine's ISO tooling is archived.** `live-env/` (the Titanoboa live

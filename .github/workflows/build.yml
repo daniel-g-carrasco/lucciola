@@ -522,6 +522,65 @@ jobs:
           sudo .github/scripts/validate-image-rootfs.sh \
             "localhost/${{ env.IMAGE_NAME }}:${{ steps.metadata.outputs.version }}"
 
+      # No package leaves the image unnoticed (2026-10-20). On 2026-10-11 a
+      # base-image change made the trim step remove more than it was written
+      # for, and images without Nautilus and Ptyxis were published with every
+      # check green: nothing compared what shipped yesterday with what ships
+      # today. This step does: the new image's `rpm -qa` against the
+      # :candidate the registry serves. Added and removed packages always go
+      # to the step summary; on a build that publishes :candidate (push,
+      # schedule, dispatch) a removed package must be listed, dated, in
+      # build_files/expected-removals.txt, and a line older than two weeks
+      # fails too (the file never becomes a permanent allowlist). A trial
+      # build reports only. Pull requests are skipped (their base is not what
+      # :candidate was built from), and so is a registry without :candidate.
+      # A registry that cannot be read is a warning, never a quiet pass.
+      # Before the chunking, which removes the built image. The pulled
+      # :candidate is 6.5 GB expanded and is removed again at once.
+      # See .github/scripts/package-removal-guard.py.
+      - name: Packages removed since the published image
+        env:
+          IMG: localhost/${{ env.IMAGE_NAME }}:${{ steps.metadata.outputs.version }}
+          PUBLISHED: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.CANDIDATE_TAG }}
+          EVENT: ${{ github.event_name }}
+          PUBLISH_TAG: ${{ steps.base.outputs.publish_tag }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = pull_request ]; then
+            echo "pull request build: the comparison with :candidate is for main builds"
+            exit 0
+          fi
+          PUBLISHED="${PUBLISHED,,}"
+          if ! sudo skopeo inspect --retry-times 3 --no-tags "docker://$PUBLISHED" > /dev/null 2> inspect.err; then
+            if grep -qiE 'manifest unknown|name unknown|not found' inspect.err; then
+              echo "no published $PUBLISHED yet: nothing to compare with"
+              exit 0
+            fi
+            echo "::warning::cannot inspect $PUBLISHED ($(tail -n1 inspect.err)): the package guard did not run"
+            { echo "### Packages since the published image"; echo; echo "The guard did not run: $PUBLISHED could not be inspected."; } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          pulled=false
+          for attempt in 1 2 3; do
+            if sudo podman pull --quiet "$PUBLISHED" > /dev/null; then pulled=true; break; fi
+            echo "pull of $PUBLISHED, attempt $attempt, failed; retrying in 15s"; sleep 15
+          done
+          if [ "$pulled" != true ]; then
+            echo "::warning::could not pull $PUBLISHED: the package guard did not run"
+            { echo "### Packages since the published image"; echo; echo "The guard did not run: $PUBLISHED could not be pulled."; } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          sudo podman run --rm --entrypoint /usr/bin/rpm "$PUBLISHED" -qa --qf '%{NAME}\n' | sort -u > published-packages.txt
+          sudo podman rmi -f "$PUBLISHED" > /dev/null 2>&1 || true
+          sudo podman run --rm --entrypoint /usr/bin/rpm "$IMG" -qa --qf '%{NAME}\n' | sort -u > new-packages.txt
+          ENFORCE=()
+          [ "$PUBLISH_TAG" = "$CANDIDATE_TAG" ] && ENFORCE=(--enforce)
+          rc=0
+          python3 .github/scripts/package-removal-guard.py --new new-packages.txt --published published-packages.txt \
+            --expected build_files/expected-removals.txt --summary packages.md "${ENFORCE[@]}" || rc=$?
+          cat packages.md >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+
       # Gaming-native layer (2026-10-18). The image no longer carries steam's
       # 32-bit chain: `ujust lucciola-gaming-native` layers it, and it must fit
       # the packages of this image exactly. dnf resolves the recipe's list in

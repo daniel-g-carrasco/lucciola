@@ -321,6 +321,12 @@ jobs:
         # is run by lint.yml or mutation.yml. See .github/scripts/check-claims.py.
         run: python3 .github/scripts/check-claims.py
 
+      - name: The package-removal guard (fixtures and wiring)
+        # An unexpected removal fails a main build, an expected one is dated
+        # and expires, additions are reported; build.yml runs it on the built
+        # image before chunking. See tests/package-removal-guard.test.sh.
+        run: bash tests/package-removal-guard.test.sh
+
       - name: The weekly upgrade matrix
         # The cells upgrade-matrix.py prints (dispatch inputs, the weekly
         # starting points, steam only once :stable is promoted) and the
