@@ -7,6 +7,16 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-20, second review)
+- **`ujust lucciola-autologin` changes both login screens or neither.** It
+  writes greetd's config and mirrors the choice into GDM's, and wrote them
+  one after the other in place: if the GDM file could not be written, the
+  command failed with greetd's passwordless login already on. Both files
+  are now prepared next to the originals first and only then swapped in;
+  if the second swap fails the first is put back, and the error says that
+  nothing was changed. The file that removes the password is always
+  swapped last.
+
 ### Changed (terminal)
 - **A new terminal opens in the home folder.** Ptyxis no longer restores the
   last session by default, which reopened terminals in the folder the last
