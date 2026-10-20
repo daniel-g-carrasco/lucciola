@@ -28,11 +28,13 @@ sudo rpm-ostree rebase ostree-unverified-registry:ghcr.io/daniel-g-carrasco/lucc
 systemctl reboot
 ```
 
+The first `:stable` comes out with Fedora 45, planned for 27 October 2026; until it exists, the rebase stops with "manifest unknown". To try Lucciola before then, write `:candidate`, the test build, and rebase to `:stable` once it is out.
+
 This first download is unverified because a stock Fedora system has no signature policy for Lucciola yet. The policy comes with the image, and at the first boot Lucciola moves itself to the signed transport, so every update after that is checked.
 
 The guide in [`site/`](site/index.html) walks through every step, including how to register Lucciola's key and turn Secure Boot back on.
 
-No x86-64-v3, or a CachyOS kernel update misbehaving on your PC? `ghcr.io/daniel-g-carrasco/lucciola:fedora-kernel` is the same system with Fedora's own kernel, and `ujust lucciola-kernel fedora` switches an installed system to it.
+No x86-64-v3, or a CachyOS kernel update misbehaving on your PC? `ghcr.io/daniel-g-carrasco/lucciola:fedora-kernel` is the same system with Fedora's own kernel, and `ujust lucciola-kernel fedora` switches an installed system to it. It is published together with the first `:stable`.
 
 ## More
 

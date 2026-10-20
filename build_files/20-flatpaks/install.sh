@@ -39,8 +39,11 @@ set -euo pipefail
 #
 # Not preinstalled since 2026-10-18 (Lucciola): VS Code (`ujust
 # margine-vscode` layers the RPM; the Flatpak is in Bazaar), Bitwarden,
-# GNOME Weather, GNOME Maps, Blanket and Fragments. flatpak-preinstall
-# never uninstalls, so a system that has them keeps them.
+# GNOME Weather, GNOME Maps, Blanket and Fragments. `flatpak preinstall`
+# on its own WOULD uninstall them (it syncs: an app it preinstalled and the
+# list no longer names goes away, which is what happened on 2026-10-18);
+# flatpak-preinstall-keep runs before it and hands such apps to the user,
+# so a system that has them keeps them. Leaving this list never removes.
 #
 # The gaming variant was retired 2026-06-06. Users who want gaming run
 # `ujust lucciola-gaming` after first boot: see build_files/60-custom.just.

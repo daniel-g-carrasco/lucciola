@@ -265,7 +265,7 @@ cmd_switch() {
     return 0
   fi
   if ! rpm-ostree rebase "$target"; then
-    die "rpm-ostree could not stage $target (network, or the signature did not verify). Nothing changed."
+    die "rpm-ostree could not stage $target (network, an image not published yet, or the signature did not verify). Nothing changed."
   fi
   echo
   say "Staged: restart to boot $(kernel_name "$want") (systemctl reboot)."
