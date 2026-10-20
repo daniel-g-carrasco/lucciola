@@ -10,6 +10,11 @@ name: Lint
 
 on:
   pull_request:
+    # labeled/unlabeled besides the defaults: the build-inputs-need-vm-test
+    # job below judges the vm-test label, so a label change must re-run it.
+    # No path filter: this workflow's jobs are the required checks, and a
+    # required check that does not run blocks the merge forever.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main]
 
@@ -250,6 +255,31 @@ jobs:
           dnf -y -q install flatpak ostree python3
           bash tests/flatpak-preinstall-keep.test.sh
 
+  build-inputs-need-vm-test:
+    # A pull request that changes what the image is built from (the
+    # Containerfile, build_files, lucciola, the build workflow, the
+    # validators, the security baseline, the disk layouts) must carry the
+    # vm-test label, so build.yml builds and boot-tests it as :pr-N before it
+    # merges; without the label nothing builds it, and such changes reached
+    # main unbuilt more than once. Fails in plain words until the label is
+    # there (label events re-run it); passes for every other pull request.
+    # Required check (tools/repo-guard.sh): no name:, no path filter.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build inputs changed without the vm-test label?
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 .github/scripts/build-inputs-need-vm-test.py \
+            --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}"
+
   policy:
     # The repository's rules about itself, read from tests/policy/ and
     # docs/SECURITY-CLAIMS.md: what the checks below enforce is written down
@@ -273,3 +303,9 @@ jobs:
         # A guard that moved leaves its mutant without an anchor: caught here,
         # on every pull request, not at the weekly run (mutation.yml).
         run: python3 .github/scripts/mutation-check.py --check
+
+      - name: The vm-test gate (fixtures and wiring)
+        # Which paths are build inputs, the words of the failure, and that
+        # lint.yml, build.yml and Renovate agree with it. See
+        # tests/vm-test-gate.test.sh.
+        run: bash tests/vm-test-gate.test.sh

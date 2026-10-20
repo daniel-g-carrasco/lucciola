@@ -20,6 +20,14 @@ stable release is cut.
   touch the guards (`mutation.yml`, ntfy on failure); lint applies every
   mutant on every pull request so a moved guard is noticed at once.
   `tests/mutation-check.test.sh`.
+- **A pull request that changes the image needs the `vm-test` label to
+  merge.** A new check in lint, `build-inputs-need-vm-test`, runs on every
+  pull request and fails, saying what to do, when the changed files include
+  the Containerfile, `build_files/`, `lucciola/`, `installer/`,
+  `disk_config/`, `build.yml`, the validators or the security baseline and
+  the label is missing; adding the label re-runs it and makes `build.yml`
+  build `:pr-N`. Renovate adds the label to the same paths. Meant to be a
+  required check (see `tools/repo-guard.sh`). `tests/vm-test-gate.test.sh`.
 
 ### Removed (2026-10-20, developer tools)
 - **Margine's ISO tooling is archived.** `live-env/` (the Titanoboa live

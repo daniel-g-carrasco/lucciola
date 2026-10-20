@@ -82,10 +82,20 @@
     {
       // Anything baked into the image must prove it BUILDS before it
       // merges: the vm-test label makes build.yml run the full 30-min
-      // image build (validators included) on the PR.
+      // image build (validators included) on the PR. The list is the
+      // gate's (.github/scripts/build-inputs-need-vm-test.py, a required
+      // check since 2026-10-20): a Renovate PR touching one of these
+      // without the label could not merge.
       matchFileNames: [
         'build_files/**',
         'Containerfile',
+        'lucciola/**',
+        'installer/**',
+        'disk_config/**',
+        '.github/workflows/build.yml',
+        '.github/scripts/validate-image-rootfs.sh',
+        '.github/scripts/scan-image-security.py',
+        '.github/security-baseline/**',
       ],
       addLabels: [
         'vm-test',
