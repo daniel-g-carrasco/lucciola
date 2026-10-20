@@ -620,11 +620,23 @@ if (( ! IS_LIVE )); then
   info "installed-state checks skipped (image context — Flatpaks install at first boot)"
   INSTALLED=""
 else
+# The first preinstall run no longer holds the boot targets (2026-10-20):
+# while it is still downloading the default apps, an app it has not reached
+# yet is pending, not missing. "Passed" is the marker ExecStartPost writes
+# after a preinstall that worked (flatpak-repo-repair --passed).
+PREINSTALL_PENDING=0
+if [[ ! -e /var/lib/margine/flatpak-preinstall/passed ]] \
+   && [[ "$(systemctl is-active flatpak-preinstall.service 2>/dev/null)" =~ ^(activating|active|reloading)$ ]]; then
+  PREINSTALL_PENDING=1
+  info "flatpak-preinstall.service is still running its first pass: apps it has not installed yet are pending, not missing"
+fi
 INSTALLED=$(flatpak list --system --columns=application 2>/dev/null | sort)
 MISSING_FP=""
 for app in "${EXPECTED_FLATPAKS[@]}"; do
   if echo "$INSTALLED" | grep -qxF "$app"; then
     ok "$app installed"
+  elif (( PREINSTALL_PENDING )); then
+    warn "$app not installed yet (preinstall still running)"
   else
     bad "$app NOT installed"
     MISSING_FP="$MISSING_FP $app"

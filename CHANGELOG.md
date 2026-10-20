@@ -7,6 +7,13 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (validator)
+- **Apps still downloading are pending, not failures.** Since the first
+  preinstall run no longer holds the boot, `lucciola-validate-margine-system`
+  run in those minutes reports an app the run has not reached yet as a
+  warning, not as a missing app; once the run has passed, a missing app is
+  a failure as before.
+
 ### Fixed (2026-10-20, docs)
 - **The install instructions named images that do not exist yet.** The
   README, the website (home page and guide), `lucciola/README.md` and
