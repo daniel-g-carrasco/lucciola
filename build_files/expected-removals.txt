@@ -1,0 +1,19 @@
+# Packages expected to leave the image, compared with the published :candidate.
+#
+# Every main build compares its `rpm -qa` with the :candidate the registry
+# serves (build.yml, "Packages removed since the published image";
+# .github/scripts/package-removal-guard.py). A package that disappears and
+# is not listed here fails the build: on 2026-10-11 a base change made the
+# trim step remove more than it was written for, and images without Nautilus
+# and Ptyxis were published with every check green.
+#
+# One line per package, dated the day the removal was decided, with the
+# reason:
+#
+#   <package name>  <YYYY-MM-DD>  <why it leaves>
+#
+# Add the line in the pull request that removes the package (or, after a
+# base-image change, in the pull request that accepts the removal). A line
+# is good for 14 days from its date; after that it fails the build and must
+# be deleted, so this file never becomes a permanent allowlist. Added
+# packages are only reported, in the step summary.

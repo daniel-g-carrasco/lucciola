@@ -1,0 +1,8 @@
+# The gate's list of build inputs is the whole gate: a Containerfile edit
+# that slips through merges unbuilt.
+name = "vm-test-gate-ignores-containerfile"
+file = ".github/scripts/build-inputs-need-vm-test.py"
+old = '''    "Containerfile",
+    "build_files/**",'''
+new = '''    "build_files/**",'''
+must_fail = "bash tests/vm-test-gate.test.sh"

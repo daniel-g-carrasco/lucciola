@@ -23,7 +23,13 @@
 # that scope (the migration step), switch the default to
 # ostree-image-signed; for a lucciola-to-lucciola upgrade pick it by hand.
 #
-# Manual only (workflow_dispatch); nothing is promoted or published.
+# On demand (workflow_dispatch: one move, the inputs below) and weekly
+# (Sunday 08:00 UTC, after the weekly build and its smoke-boot): every
+# starting point the guide names, one VM at a time, from the matrix
+# .github/scripts/upgrade-matrix.py prints (margine:lucciola with a layered
+# package, stock Silverblue, Kinoite and Bluefin; steam layered only once
+# :stable is promoted, see the script). A failed cell notifies ntfy with
+# its name and does not cancel the others. Nothing is promoted or published.
 name: Upgrade smoke (old install to new image)
 
 on:
@@ -55,18 +61,61 @@ on:
         description: "ID_LIKE expected on the new deployment"
         required: false
         default: "fedora"
+  schedule:
+    # Sunday 08:00 UTC: the weekly build runs at 04:00 and its smoke-boot
+    # has produced the week's :candidate by then (2026-10-20).
+    - cron: '0 8 * * 0'
 
 concurrency:
   group: upgrade-smoke
   cancel-in-progress: false
 
 jobs:
+  plan:
+    # The cells: one from the inputs on a dispatch, the weekly list on the
+    # schedule. A job of its own, with no condition, so upgrade_smoke's
+    # implicit success() cannot skip it by accident (check-job-conditions).
+    name: Which starting points to test
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Plan the cells
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          PROMOTE_STABLE: ${{ vars.LUCCIOLA_PROMOTE_STABLE }}
+          FROM_REF: ${{ inputs.from_ref }}
+          TO_REF: ${{ inputs.to_ref }}
+          TRANSPORT: ${{ inputs.transport }}
+          LAYER: ${{ inputs.layer }}
+          EXPECT_ID_LIKE: ${{ inputs.expect_id_like }}
+        run: |
+          set -euo pipefail
+          matrix="$(python3 .github/scripts/upgrade-matrix.py --event "$EVENT" \
+            --promote-stable "${PROMOTE_STABLE:-false}" --from "$FROM_REF" --to "$TO_REF" \
+            --transport "$TRANSPORT" --layer "$LAYER" --expect-id-like "$EXPECT_ID_LIKE")"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
   upgrade_smoke:
-    name: Install old, rebase to new, boot and check
+    name: ${{ matrix.name }}
+    needs: plan
     runs-on: ubuntu-26.04
     timeout-minutes: 90
     permissions:
       contents: read
+    strategy:
+      # One VM at a time (the runner has one, the workflow one concurrency
+      # group); a failed cell must not cancel the ones after it.
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -114,8 +163,8 @@ jobs:
       - name: Resolve both refs to digests
         id: ref
         env:
-          FROM_REF: ${{ inputs.from_ref }}
-          TO_REF: ${{ inputs.to_ref }}
+          FROM_REF: ${{ matrix.from_ref }}
+          TO_REF: ${{ matrix.to_ref }}
         run: |
           set -euo pipefail
           resolve() {
@@ -176,9 +225,9 @@ jobs:
       - name: Boot, layer, rebase, reboot, check
         env:
           TO: ${{ steps.ref.outputs.to }}
-          TRANSPORT: ${{ inputs.transport || 'ostree-unverified-registry' }}
-          LAYER: ${{ inputs.layer }}
-          EXPECT_ID_LIKE: ${{ inputs.expect_id_like }}
+          TRANSPORT: ${{ matrix.transport }}
+          LAYER: ${{ matrix.layer }}
+          EXPECT_ID_LIKE: ${{ matrix.expect_id_like }}
         run: |
           set -euo pipefail
           QCOW=$(ls output/qcow2/*.qcow2 | head -1)
@@ -191,10 +240,10 @@ jobs:
         if: always()
         run: |
           {
-            echo "### Upgrade smoke"
+            echo "### Upgrade smoke: ${{ matrix.name }}"
             echo
             echo "- installed: \`${{ steps.ref.outputs.from }}\`"
-            echo "- target: \`${{ steps.ref.outputs.to }}\` (${{ inputs.transport || 'ostree-unverified-registry' }})"
+            echo "- target: \`${{ steps.ref.outputs.to }}\` (${{ matrix.transport }}, layer: ${{ matrix.layer || 'none' }})"
             echo
             echo '```'
             grep -E 'MARGINE-UPGRADE|FAIL:|old deployment|booted deployment|validator' -A3 driver.log 2>/dev/null | head -80 || true
@@ -205,9 +254,32 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: upgrade-smoke-logs
+          # One artifact per cell: a run holds several.
+          name: upgrade-smoke-logs-${{ matrix.slug }}
           path: |
             serial.log
             driver.log
             qemu.err
           retention-days: 7
+
+      - name: Notify ntfy (this starting point failed)
+        if: failure()
+        env:
+          NTFY_URL: ${{ secrets.NTFY_TOPIC_URL }}
+          CELL: ${{ matrix.name }}
+          FROM_REF: ${{ matrix.from_ref }}
+          TO_REF: ${{ matrix.to_ref }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [[ -z "${NTFY_URL:-}" ]]; then
+            echo "NTFY_TOPIC_URL secret not set, skipping notification."
+            exit 0
+          fi
+          REASON="$(grep -oE 'MARGINE-UPGRADE: FAIL.*' driver.log 2>/dev/null | tail -n1 | cut -c1-400 || true)"
+          curl --silent --show-error --fail \
+            -H "Title: Upgrade smoke FAILED: ${CELL}" \
+            -H "Priority: high" \
+            -H "Tags: x,arrows_counterclockwise" \
+            -H "Click: ${RUN_URL}" \
+            -d "${FROM_REF} -> ${TO_REF}: ${REASON:-no verdict reached (the VM never got there, or an earlier step failed); see the run log}" \
+            "$NTFY_URL" || echo "ntfy notify failed (non-fatal)"

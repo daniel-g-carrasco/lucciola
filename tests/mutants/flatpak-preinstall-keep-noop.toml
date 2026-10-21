@@ -1,0 +1,14 @@
+# Review R4 (fix of 2026-10-20): before every preinstall the helper takes
+# an installed app that left the default set off Flatpak's record, or the
+# preinstall uninstalls it. A helper that never writes must fail the test
+# that runs the real `flatpak preinstall`. The test needs Flatpak 1.16 or
+# later with `preinstall`: in CI it runs in the Fedora container
+# (mutation.yml), hence the tag, and FLATPAK_TEST_REQUIRED turns a missing
+# flatpak into a failure instead of a skip.
+name = "flatpak-preinstall-keep-noop"
+file = "build_files/system_files/usr/libexec/margine/flatpak-preinstall-keep"
+old = '    if new == record:'
+new = '    if True:'
+must_fail = "bash tests/flatpak-preinstall-keep.test.sh"
+tags = ["fedora"]
+env = { FLATPAK_TEST_REQUIRED = "1" }

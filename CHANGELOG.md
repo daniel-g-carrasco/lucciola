@@ -14,6 +14,94 @@ stable release is cut.
   day (5% of a core, steadily). It now glows only while the window is the
   active one.
 
+### Added (2026-10-20, checks that can fail)
+- **Mutation checks.** Each guard the two reviews looked at is broken on
+  purpose, one file per breakage in `tests/mutants/`, and its test must
+  fail (`.github/scripts/mutation-check.py`, `just mutate`): the secret
+  scanner printing a token, symlinks resolved on the runner, the staleness
+  check calling `bootc status`, `rpm-trust` accepting `gpgcheck=0`, the
+  signed-transport migration taking any image of the owner, the sign job
+  without its condition, a `tail` hiding a failed command, a base that does
+  not resolve, `flatpak-preinstall-keep` doing nothing. A mutant whose test
+  stays green is a guard nobody tests. Weekly and on pull requests that
+  touch the guards (`mutation.yml`, ntfy on failure); lint applies every
+  mutant on every pull request so a moved guard is noticed at once.
+  `tests/mutation-check.test.sh`.
+- **A pull request that changes the image needs the `vm-test` label to
+  merge.** A new check in lint, `build-inputs-need-vm-test`, runs on every
+  pull request and fails, saying what to do, when the changed files include
+  the Containerfile, `build_files/`, `lucciola/`, `installer/`,
+  `disk_config/`, `build.yml`, the validators or the security baseline and
+  the label is missing; adding the label re-runs it and makes `build.yml`
+  build `:pr-N`. Renovate adds the label to the same paths. Meant to be a
+  required check (see `tools/repo-guard.sh`). `tests/vm-test-gate.test.sh`.
+- **Where the signing secrets may appear is written down and checked.**
+  `tests/policy/secret-stages.txt` names the Containerfile stage whose RUN
+  may mount a build secret (`mok-sign`, with `--network=none`; the final
+  stage never may) and `tests/policy/secret-jobs.txt` the workflow jobs
+  that may name `secrets.MOK_*` and `secrets.COSIGN*`; lint fails on a
+  secret anywhere else, on a stale entry, on a secret outside a step's
+  `env:`, and unless the step that stages the MOK key to disk is followed
+  at once by the build and then by the wipe, with no action in between
+  (`.github/scripts/check-secret-scope.py`). `build.yml` now stages the
+  key right before `buildah build` and wipes it right after, instead of
+  before the metadata action and at the end of the job. The Containerfile
+  part is red until the signing stage (pull request #30) is in main: that
+  is the state of the tree. `tests/secret-scope.test.sh`.
+- **The security claims register must name its proofs.** A lint
+  (`.github/scripts/check-claims.py`) fails when a claim marked verified
+  or partial in `docs/SECURITY-CLAIMS.md` names no test, script or
+  workflow step that exists in the tree, or names one that does not, and
+  when a test under `tests/` is run by neither `lint.yml` nor
+  `mutation.yml`. C1, C3, C5, C7, C12 and C14 now name the test, script or
+  step that proves them (they named only words); C13, measured once and
+  never re-checked, is unverified rather than partial. The register gains
+  a table for the two reviews' findings, R1-R10 and N1-N9, each with its
+  fix and its test, the ones whose pull request is not in main yet marked
+  "pending merge"; the monthly review issue lists those until they are
+  verified. `tests/check-claims.test.sh`.
+- **The upgrade test runs every Sunday from every documented start.**
+  `upgrade-smoke.yml` keeps its manual run and gains a schedule (08:00
+  UTC, after the weekly build): from `margine:lucciola` with `cowsay`
+  layered, from stock Silverblue 45, Kinoite 45 and Bluefin, all to
+  `:candidate`, one VM at a time, a failed cell notifying ntfy by name
+  without cancelling the others; `steam` layered on `margine:lucciola`
+  joins once `:stable` is promoted (before Fedora 45's release it cannot
+  resolve, a known state). `.github/scripts/upgrade-matrix.py`,
+  `tests/upgrade-matrix.test.sh`.
+- **No package leaves the image unnoticed.** Every main build compares
+  its `rpm -qa` with the published `:candidate` and writes the added and
+  removed packages in the step summary; a removed package must be listed,
+  dated, in `build_files/expected-removals.txt`, and a line older than
+  two weeks fails the build, so the file never becomes an allowlist. This
+  is the guard against the 2026-10-11 base-trim cascade, when images
+  without Nautilus and Ptyxis were published with every check green. Pull
+  requests and a registry without `:candidate` are skipped; a trial build
+  reports only. `.github/scripts/package-removal-guard.py`,
+  `tests/package-removal-guard.test.sh`.
+- **Every shell script runs in strict mode, or says why not.** A lint
+  (`.github/scripts/check-strict-mode.py`) wants `set -euo pipefail` (in
+  one of its spellings, or a `source` of `00-common.sh`) in the first 30
+  lines of every shell script under `build_files/`, `lucciola/`,
+  `.github/scripts/`, `.github/smoke/` and `tests/`; the 35 that cannot
+  (validators and probes that run every check and count the failures,
+  helpers that handle each command's result themselves, one-line exec
+  wrappers) are listed with their reason in
+  `tests/policy/strict-mode-allowlist.txt`, and an entry without a reason,
+  for a missing file or for a script that is strict after all fails. One
+  test had `set -u` alone and is strict now. `tests/strict-mode.test.sh`.
+- **Branch protection as code.** `tools/repo-guard.sh` (`just repo-guard`)
+  holds the protection `main` should have: the always-running lint jobs
+  (`lint`, `flatpak-preinstall`, `build-inputs-need-vm-test`, `policy`)
+  as required checks on an up-to-date branch, a pull request with no
+  approval needed, conversations resolved, admins included, no force-push,
+  no deletion. `check` prints the drift and `apply` sets it after a typed
+  yes; neither has been run: `main` is unprotected today. A weekly
+  workflow (`repo-guard.yml`) reads the public `protected` field and
+  notifies when it is false. Only jobs that run on every pull request may
+  be required: one that does not run blocks the merge forever (the pitfall
+  is written in the script). `tests/repo-guard.test.sh`.
+
 ### Changed (2026-10-20, Keep Awake)
 - **Keep Awake no longer leaves the laptop unlocked.** Its one mode kept
   sleep, the idle lock and the lid switch away together, so a laptop closed

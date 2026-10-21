@@ -53,6 +53,17 @@ def main():
     lines += [f"- [ ] **{r['ID']}** {r['Promise']}: *{r['Status']}*" for r in claims] or ["- none"]
     lines.append("")
 
+    # The findings of outside reviews (sections "Review findings (date)"),
+    # listed until each is verified: a fix that is pending merge, or text
+    # nobody can test, stays visible every month.
+    for title, rows in t.items():
+        if not title.startswith("Review findings"):
+            continue
+        rows = [r for r in rows if not r.get("Status", "").lower().startswith("verified")]
+        lines.append(f"## {title}: not verified ({len(rows)})\n")
+        lines += [f"- [ ] **{r['ID']}** {r.get('Finding', '')}: *{r.get('Status', '')}*" for r in rows] or ["- none"]
+        lines.append("")
+
     for title, key in (("Decisions pending", "Question"), ("Engineering items", "Item")):
         rows = [r for r in t.get(title, []) if r.get("Status", "open").lower() != "done"]
         lines.append(f"## {title} ({len(rows)})\n")
