@@ -678,19 +678,24 @@ def pair_input_ok(host, port, code):
 
 
 def adb_result(text, rc):
-    """One word for adb's answer to pair or connect."""
+    """One word for adb's answer to pair or connect. adb exits 0 even when
+    it fails, so the words decide: a wireless-debugging phone that is not
+    paired answers "failed to connect" (its TLS handshake refuses the PC),
+    so that counts as not paired."""
     low = (text or "").lower()
     if "successfully paired" in low or "connected to" in low or "already connected" in low:
         return "ok"
-    if "failed to authenticate" in low or "pairing" in low and "fail" in low or "wrong" in low:
-        return "not-paired"
     if "connection refused" in low or "no route" in low or "timed out" in low or "unable to connect" in low:
         return "unreachable"
+    if "failed to authenticate" in low or "failed to connect" in low or ("pairing" in low and "fail" in low) or "wrong" in low:
+        return "not-paired"
     return "ok" if rc == 0 else "error"
 
 
-def webcam_status(device, stream, adb_ready, wireless_ready):
-    """The sentence under the Camera row."""
+def webcam_status(device, stream, adb_ready, wireless_ready, service_seen=False):
+    """The sentence under the Camera row. wireless_ready means adb is
+    connected to the phone over the network; service_seen means the phone
+    advertises wireless debugging but adb could not connect: not paired yet."""
     if device is None:
         return "Virtual camera missing: Lucciola's key must be registered for its module to load"
     if stream:
@@ -699,4 +704,6 @@ def webcam_status(device, stream, adb_ready, wireless_ready):
         return "Ready over Wi-Fi"
     if adb_ready:
         return "Ready over USB"
-    return "Not connected for the camera: a USB cable with USB debugging, or the wireless setup"
+    if service_seen:
+        return "Wireless debugging is on, but this PC is not paired with it yet: Set Up Wireless, once"
+    return "Not connected for the camera: a USB cable with USB debugging on, or Set Up Wireless with wireless debugging on"

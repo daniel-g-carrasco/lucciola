@@ -2425,6 +2425,20 @@ class SystemWindow(Adw.ApplicationWindow):
                     "functions": functions,
                 })
             devices.sort(key=ls.device_sort_key)
+            # A phone that advertises wireless debugging and is not connected
+            # yet: try once here, so the Camera row says what is true (paired
+            # phones connect, unpaired ones do not) instead of guessing.
+            tried = False
+            for d in devices:
+                if d["state"] != "connected" or self._wireless_device_for(d) is not None:
+                    continue
+                service = ls.connect_service_for(self._adb_services, d["addresses"])
+                if service is not None:
+                    run([ADB, "connect", f"{service['host']}:{service['port']}"], timeout=12)
+                    tried = True
+            if tried:
+                _, out, _ = run([ADB, "devices", "-l"], timeout=15)
+                self._adb_devices = ls.adb_devices(out)
             on_main(self._set_phone, gen, name, devices)
 
         in_thread(worker)
@@ -2621,15 +2635,17 @@ class SystemWindow(Adw.ApplicationWindow):
         stream = self._cam.info()
         own_stream = stream if stream and (stream["serial"].split(":")[0] in device["addresses"] or not stream["wireless"]) else None
         usb = [d for d in self._usb_phones() if d["state"] == "device"]
-        wireless = self._wireless_device_for(device) or ls.connect_service_for(self._adb_services, device["addresses"])
-        status = ls.webcam_status(self._cam_device, own_stream, bool(usb), wireless is not None)
+        connected = self._wireless_device_for(device)
+        wireless_ready = connected is not None and connected["state"] == "device"
+        service_seen = ls.connect_service_for(self._adb_services, device["addresses"]) is not None
+        status = ls.webcam_status(self._cam_device, own_stream, bool(usb), wireless_ready, service_seen)
         cam_row = info_row(expander, "Camera", "camera-web-symbolic", status)
         cam_row.set_subtitle_lines(3)
         if self._cam_device is None:
             button_row(expander, "Register Lucciola's Key", "security-high-symbolic", lambda *_: self.show_page("startup"))
             return
         button_row(expander, "Use as a Webcam…", "camera-web-symbolic", lambda *_: self._on_phone_webcam(device), "suggested-action")
-        if wireless is None:
+        if not wireless_ready and not own_stream:
             button_row(expander, "Set Up Wireless…", "network-wireless-symbolic", lambda *_: self._on_phone_wireless_setup(device))
         if own_stream:
             button_row(expander, "Stop the Camera", "media-playback-stop-symbolic", lambda *_: self._stop_camera(), "destructive-action")

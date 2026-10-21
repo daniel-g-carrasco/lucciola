@@ -254,6 +254,8 @@ check("pair_input_ok refuses a short code", ls.pair_input_ok("192.168.2.254", "4
 check("pair_input_ok refuses a bad port", ls.pair_input_ok("192.168.2.254", "70000", "123456") is False)
 check("adb_result: paired", ls.adb_result("Successfully paired to 192.168.2.254:41111 [guid=adb-x]", 0) == "ok")
 check("adb_result: not paired", ls.adb_result("failed to authenticate to 192.168.2.254:40255", 1) == "not-paired")
+check("adb_result: a wireless phone that refuses the handshake is not paired, whatever the exit code", ls.adb_result("failed to connect to 192.168.2.254:44259", 0) == "not-paired")
+check("webcam_status: wireless debugging on but unpaired says so", "not paired" in ls.webcam_status("/dev/video21", None, False, False, True))
 check("adb_result: unreachable", ls.adb_result("failed to connect to 192.168.2.254:5555: Connection refused", 1) == "unreachable")
 check("webcam_status: streaming sentence", "720" in ls.webcam_status("/dev/video21", {"size": "1280x720", "facing": "back", "wireless": True}, True, True))
 check("webcam_status: module missing", "key" in ls.webcam_status(None, None, False, False))
