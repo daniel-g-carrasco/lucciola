@@ -98,6 +98,7 @@ etc/systemd/user/default.target.wants/mpris-proxy.service
 etc/systemd/user/graphical-session-pre.target.wants/xdg-user-dirs.service
 etc/systemd/user/pipewire.service.wants/wireplumber.service
 etc/systemd/user/sockets.target.wants/dbus.socket
+etc/systemd/user/sockets.target.wants/gcr-ssh-agent.socket
 etc/systemd/user/sockets.target.wants/pipewire-pulse.socket
 etc/systemd/user/sockets.target.wants/pipewire.socket
 etc/systemd/user/timers.target.wants/grub-boot-success.timer

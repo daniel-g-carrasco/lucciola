@@ -7,6 +7,16 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Added (2026-10-20, SSH agent)
+- **An SSH agent in every session.** GNOME's `gcr-ssh-agent` is enabled for
+  all users, socket-activated; the socket sets `SSH_AUTH_SOCK` in the user
+  manager, so niri and everything it starts see it. It offers the keys in
+  `~/.ssh`, asks a passphrase in a dialog the first time a key is used and
+  can keep it in the keyring, which the login opens. Without an agent a
+  passphrase was asked at every connection, so keys stayed unprotected on
+  disk. The build refuses an image where the socket is not enabled, and
+  `validate-margine-system` checks it on the installed system.
+
 ### Fixed (2026-10-21, build)
 - **A build no longer fails at random on a package the mirrors have
   dropped.** While Fedora 45 is a pre-release, metadata can still list a
