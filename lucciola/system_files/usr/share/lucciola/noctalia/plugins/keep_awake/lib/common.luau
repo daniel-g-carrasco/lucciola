@@ -7,17 +7,31 @@ local M = {}
 
 M.PANEL = "lucciola/keep_awake:panel"
 M.GLYPH_ON = "zzz-off"
+M.GLYPH_SCREEN = "sun"
 M.GLYPH_SCHEDULED = "clock-play"
 M.GLYPH_IDLE = "zzz"
 
+-- mode is "awake" (no suspend; the screen locks on idle as usual and the lid
+-- locks it at once) or "screen" (the screen stays on and the idle lock away
+-- too); the scheduled start has its own.
 function M.snapshot()
   return {
     ready = noctalia.state.get("ka.ready") == true,
     active = noctalia.state.get("ka.active") == true,
     untilT = noctalia.state.get("ka.until") or 0,
+    mode = noctalia.state.get("ka.mode") or "awake",
     sStart = noctalia.state.get("ka.sstart") or 0,
     sUntil = noctalia.state.get("ka.suntil") or 0,
+    sMode = noctalia.state.get("ka.smode") or "awake",
   }
+end
+
+-- The glyph of a Keep Awake running in the given mode.
+function M.glyph(mode)
+  if mode == "screen" then
+    return M.GLYPH_SCREEN
+  end
+  return M.GLYPH_ON
 end
 
 -- Whole days between the calendar date of t and today.
@@ -73,7 +87,7 @@ function M.send(...)
 end
 
 function M.watch(fn)
-  for _, key in { "ka.ready", "ka.active", "ka.until", "ka.sstart", "ka.suntil" } do
+  for _, key in { "ka.ready", "ka.active", "ka.until", "ka.mode", "ka.sstart", "ka.suntil", "ka.smode" } do
     noctalia.state.watch(key, fn)
   end
 end

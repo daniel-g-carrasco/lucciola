@@ -4,7 +4,8 @@
 # control-centre tile in place of Noctalia's caffeine, a panel with quick
 # durations and a scheduler, and launcher results ("awake", "sveglio", "2h").
 # Noctalia's caffeine is still what keeps its own idle lock away while Keep
-# Awake holds; it just no longer has a button of its own.
+# Awake holds with the screen on (--screen); it just no longer has a button
+# of its own. In the default mode the idle lock stays as it is.
 [[plugins.source]]
 name = "lucciola"
 kind = "path"
