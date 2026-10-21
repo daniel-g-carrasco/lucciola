@@ -1,11 +1,13 @@
 --!nonstrict
 -- Keep Awake in the launcher: "/awake" lists the actions; in the global
--- search they appear for words like awake, sveglio, sospensione, coperchio.
--- "/awake 2h", "awake 45m", "awake 18:30" offer a matching duration or end.
+-- search they appear for words like awake, sveglio, sospensione, coperchio,
+-- schermo. "/awake 2h", "awake 45m", "awake 18:30" offer a matching duration
+-- or end (in the default mode: the screen still locks on idle, the lid locks
+-- it at once); "screen" keeps the screen on for two hours.
 
 local common = require("./lib/common.luau")
 
-local WORDS = { "awake", "keep", "sveglio", "sveglia", "sospensione", "sospendi", "coperchio", "lid", "sleep", "suspend", "caffe" }
+local WORDS = { "awake", "keep", "sveglio", "sveglia", "sospensione", "sospendi", "coperchio", "lid", "sleep", "suspend", "caffe", "schermo", "screen" }
 
 local function hasWord(q)
   for _, w in WORDS do
@@ -69,6 +71,7 @@ function onQuery(text)
   table.insert(rows, { id = "on", title = noctalia.tr("launcher.tonight"), subtitle = noctalia.tr("launcher.subtitle"), glyph = common.GLYPH_ON })
   table.insert(rows, { id = "tomorrow", title = noctalia.tr("launcher.tomorrow"), subtitle = noctalia.tr("launcher.subtitle"), glyph = common.GLYPH_ON })
   table.insert(rows, { id = "dur:3600", title = noctalia.tr("launcher.for", { duration = "1 h" }), glyph = common.GLYPH_ON })
+  table.insert(rows, { id = "screen", title = noctalia.tr("launcher.screen"), subtitle = noctalia.tr("launcher.screen_sub"), glyph = common.GLYPH_SCREEN })
   if s.sStart > 0 then
     table.insert(rows, {
       id = "cancel",
@@ -86,6 +89,8 @@ function onActivate(id)
     noctalia.togglePanel(common.PANEL)
   elseif id == "on" or id == "tomorrow" or id == "off" or id == "cancel" then
     common.send(id)
+  elseif id == "screen" then
+    common.send("on", "--screen")
   else
     local kind, value = id:match("^(%a+):(%d+)$")
     if kind == "dur" then

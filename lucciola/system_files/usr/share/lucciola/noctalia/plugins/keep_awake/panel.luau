@@ -1,6 +1,8 @@
 --!nonstrict
--- Keep Awake panel: status, quick durations, and a scheduler (start "now" or
--- on a day and time, end on a day and time).
+-- Keep Awake panel: status, the mode (awake: the screen locks on idle as
+-- usual and the lid locks it at once; screen on: the idle lock stays away
+-- too), quick durations, and a scheduler (start "now" or on a day and time,
+-- end on a day and time).
 
 local common = require("./lib/common.luau")
 
@@ -29,6 +31,16 @@ local startTime = timeIndex(8 * 60)
 local endDay = 1 -- tomorrow
 local endTime = timeIndex(23 * 60 + 59)
 local message = ""
+-- The mode of everything this panel starts; keep-awake gets --screen for it.
+local screen = false
+
+local function send(...)
+  local args = { ... }
+  if screen then
+    table.insert(args, "--screen")
+  end
+  common.send(table.unpack(args))
+end
 
 local function startDays()
   return { noctalia.tr("panel.now"), noctalia.tr("panel.today"), noctalia.tr("panel.tomorrow"), noctalia.tr("panel.day_after") }
@@ -52,8 +64,10 @@ end
 local function statusBlock(s)
   local title, detail, color
   if s.active then
-    title = noctalia.tr("panel.status_on")
+    title = noctalia.tr(s.mode == "screen" and "panel.status_on_screen" or "panel.status_on")
     detail = noctalia.tr("tooltip.until", { time = common.when(s.untilT) })
+      .. ". "
+      .. noctalia.tr(s.mode == "screen" and "panel.detail_screen" or "panel.detail_awake")
     color = "primary"
   else
     title = noctalia.tr("panel.status_off")
@@ -62,17 +76,21 @@ local function statusBlock(s)
   end
   local lines = {
     ui.row({ gap = 10, align = "center" }, {
-      ui.glyph({ name = s.active and common.GLYPH_ON or common.GLYPH_IDLE, size = 22, color = color }),
+      ui.glyph({ name = s.active and common.glyph(s.mode) or common.GLYPH_IDLE, size = 22, color = color }),
       ui.column({ gap = 2, flexGrow = 1 }, {
         ui.label({ text = title, fontSize = 15, fontWeight = "bold", color = color }),
-        ui.label({ text = detail, fontSize = 12, color = "on_surface_variant" }),
+        ui.label({ text = detail, fontSize = 12, color = "on_surface_variant", wrap = true }),
       }),
       ui.button({
         text = s.active and noctalia.tr("panel.turn_off") or noctalia.tr("panel.turn_on"),
         variant = s.active and "destructive" or "primary",
         controlSize = "sm",
         onClick = function()
-          common.send(s.active and "off" or "on")
+          if s.active then
+            common.send("off")
+          else
+            send("on")
+          end
         end,
       }),
     }),
@@ -102,7 +120,7 @@ local function quickButton(label, ...)
     controlSize = "sm",
     flexGrow = 1,
     onClick = function()
-      common.send(table.unpack(args))
+      send(table.unpack(args))
     end,
   })
 end
@@ -112,6 +130,21 @@ local function render()
   panel.render(ui.column({ gap = 14, padding = 16 }, {
     ui.label({ text = "Keep Awake", fontSize = 16, fontWeight = "bold", color = "primary" }),
     statusBlock(s),
+
+    ui.row({ gap = 8, align = "center" }, {
+      ui.label({ text = noctalia.tr("panel.mode"), width = 44 }),
+      ui.select({
+        options = { noctalia.tr("panel.mode_awake"), noctalia.tr("panel.mode_screen") },
+        selectedIndex = screen and 1 or 0,
+        controlSize = "sm",
+        flexGrow = 1,
+        onChange = function(v)
+          screen = tonumber(v) == 1
+          message = ""
+          render()
+        end,
+      }),
+    }),
 
     ui.label({ text = noctalia.tr("panel.quick"), fontSize = 13, fontWeight = "bold" }),
     ui.row({ gap = 8 }, {
@@ -173,9 +206,9 @@ function onSchedule()
   else
     message = ""
     if startT then
-      common.send("schedule", "@" .. startT, "@" .. endT)
+      send("schedule", "@" .. startT, "@" .. endT)
     else
-      common.send("on", "@" .. endT)
+      send("on", "@" .. endT)
     end
   end
   render()
