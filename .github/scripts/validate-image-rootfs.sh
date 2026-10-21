@@ -324,6 +324,17 @@ python3 "$(dirname "$0")/../../tools/content-editor/welcome_content.py" "$ROOTFS
   || { echo "::error::A.4.bis the welcome window's texts (usr/share/lucciola/welcome/content.json) do not pass the check"; fail=1; }
 check_nonempty "usr/share/icons/hicolor/scalable/apps/margine-scheduler.svg" "A.4.bis"
 grep -qxF 'Icon=margine-scheduler' "$ROOTFS/usr/share/applications/margine-scheduler.desktop" || { echo "::error::A.4.bis scheduler launcher does not use margine-scheduler icon"; fail=1; }
+# The family-style app icons (docs/BRANDING.md, "App icons: the family
+# style") are tracked files; the update launcher and the welcome window
+# name their own since 2026-10-21 (system-software-update and lucciola-logo
+# before). No build step may write over them: the scheduler's heredoc is gone.
+for n in dev.margine.System dev.margine.Welcome dev.margine.PhoneCam lucciola-guide margine-scheduler margine-system-update; do
+  check_nonempty "usr/share/icons/hicolor/scalable/apps/${n}.svg" "A.4.bis"
+  grep -q 'viewBox="0 0 512 512"' "$ROOTFS/usr/share/icons/hicolor/scalable/apps/${n}.svg" 2>/dev/null \
+    || { echo "::error::A.4.bis ${n}.svg is not the family-style icon (viewBox 0 0 512 512)"; fail=1; }
+done
+grep -qxF 'Icon=margine-system-update' "$ROOTFS/usr/share/applications/margine-system-update.desktop" || { echo "::error::A.4.bis the update launcher does not use the margine-system-update icon"; fail=1; }
+grep -qxF 'Icon=dev.margine.Welcome' "$ROOTFS/usr/share/applications/dev.margine.Welcome.desktop" || { echo "::error::A.4.bis the welcome launcher does not use the dev.margine.Welcome icon"; fail=1; }
 for f in usr/share/margine/offline-docs usr/share/applications/margine-documentation.desktop \
          usr/bin/margine-docs-open usr/lib/systemd/system/margine-docs-refresh.timer; do
   if [[ -e "$ROOTFS/$f" ]]; then echo "::error::$f is back in the image (A.4.bis: the offline docs left on 2026-10-18)"; fail=1; fi

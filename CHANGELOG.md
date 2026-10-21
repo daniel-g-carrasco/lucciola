@@ -7,6 +7,19 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (2026-10-21, app icons)
+- **Six app icons in one family style**: Lucciola System (the firefly),
+  Welcome (the light mark), the guide (an open book), Phone Camera (an eye),
+  CPU Scheduler (the lightning bolt) and the update launcher (a triangle in a
+  circle). Each is a dark disc with a two-tone subject, no strokes and no
+  filters; the ivory-disc and symbolic variants and the Inkscape masters are
+  under `docs/branding/` (rules in `docs/BRANDING.md`, "App icons: the family
+  style"). Welcome no longer borrows the system logo as its icon, and the
+  update launcher has an icon of its own instead of the stock name, so the
+  build no longer downloads one from MoreWaita; the scheduler icon is a
+  tracked file instead of a heredoc in the branding script. The rootfs
+  validator checks the six files and the two launchers.
+
 ### Fixed (2026-10-20, lint)
 - **The MOK signer test runs whole on the lint runner.** The runner has no
   `systemd-sbsign` and keeps its kernel image root-only, so the test put
