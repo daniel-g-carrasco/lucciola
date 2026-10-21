@@ -61,14 +61,18 @@ This layer adds:
   (`noctalia.palette`) and selects it once in the default profile; another
   palette picked later in Ptyxis stays;
 - Keep Awake, a Noctalia plugin over `/usr/libexec/lucciola/keep-awake`: no
-  suspend, no idle lock and the lid does nothing, now, until a time, or from a
-  scheduled time. A bar indicator is lit while it is on, a clock while it is
-  scheduled, dim when off; notifications carry the bar's glyphs; the
-  control-centre tile takes the place of Noctalia's
-  caffeine; the panel (click the indicator, right-click the tile) has quick
-  durations and a scheduler; the launcher answers "awake", "sveglio", "2h",
-  "18:30". From a terminal: `lucciola-keep-awake on [UNTIL] | tomorrow |
-  schedule START [UNTIL] | off | cancel | status [--json]`;
+  suspend, now, until a time, or from a scheduled time. The screen still
+  locks on idle as usual; closing the lid locks the session at once instead
+  of suspending (not at a desk with another monitor on) and keeps the power
+  profile on power-saver until it opens again. `--screen` also keeps the
+  screen on and the idle lock away, two hours unless told otherwise. A bar
+  indicator is lit while it is on (a sun with the screen kept on), a clock
+  while it is scheduled, dim when off; notifications carry the bar's glyphs;
+  the control-centre tile takes the place of Noctalia's caffeine; the panel
+  (click the indicator, right-click the tile) has the mode, quick durations
+  and a scheduler; the launcher answers "awake", "sveglio", "screen", "2h",
+  "18:30". From a terminal: `lucciola-keep-awake on [UNTIL] [--screen] |
+  tomorrow | schedule START [UNTIL] | off | cancel | status [--json]`;
 - `ddcutil`, so Noctalia's brightness slider also drives external monitors
   over DDC/CI (the package's udev rule opens the i2c devices to the
   logged-in user, its modules-load entry loads i2c-dev);

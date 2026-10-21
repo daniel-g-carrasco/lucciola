@@ -1,8 +1,8 @@
 --!nonstrict
--- Keep Awake bar indicator. Lit (primary) while Keep Awake holds, a clock
--- while a start is scheduled, dim when off (hidden then if show_when_idle is
--- false). Click opens the panel; right click turns it on until midnight or
--- off.
+-- Keep Awake bar indicator. Lit (primary) while Keep Awake holds (a sun when
+-- the screen is kept on too), a clock while a start is scheduled, dim when
+-- off (hidden then if show_when_idle is false). Click opens the panel; right
+-- click turns it on until midnight or off.
 
 local common = require("./lib/common.luau")
 
@@ -12,11 +12,14 @@ local function render()
   local rows = {}
   if s.active then
     barWidget.setVisible(true)
-    barWidget.setGlyph(common.GLYPH_ON)
+    barWidget.setGlyph(common.glyph(s.mode))
     barWidget.setGlyphColor("primary")
     barWidget.setText(showTime and common.when(s.untilT) or "")
     barWidget.setColor("primary")
     table.insert(rows, { noctalia.tr("tooltip.active"), noctalia.tr("tooltip.until", { time = common.when(s.untilT) }) })
+    if s.mode == "screen" then
+      table.insert(rows, { noctalia.tr("tooltip.mode"), noctalia.tr("tooltip.screen") })
+    end
   elseif s.sStart > 0 then
     barWidget.setVisible(true)
     barWidget.setGlyph(common.GLYPH_SCHEDULED)

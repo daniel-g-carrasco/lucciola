@@ -1,44 +1,66 @@
 #!/usr/bin/bash
-# Keep the laptop awake: no suspend, no idle blanking or lock, and closing the
-# lid does nothing. The "Keep Awake Today" the Arch + Hyprland Margine had,
-# for long copies, downloads or a session left running with the lid closed.
+# Keep the laptop awake: no suspend, and closing the lid locks the session
+# instead of suspending it. The "Keep Awake Today" the Arch + Hyprland Margine
+# had, for long copies, downloads or a session left running with the lid
+# closed.
 #
-#   keep-awake on [UNTIL]          from now until UNTIL (default: midnight)
-#   keep-awake tomorrow            from now until the end of tomorrow
-#   keep-awake schedule START [UNTIL]
-#                                  start later (default UNTIL: the midnight
-#                                  after START), e.g. schedule "tomorrow 08:00"
-#   keep-awake off                 stop now (a scheduled start stays)
-#   keep-awake cancel              drop the scheduled start
-#   keep-awake toggle | status [--json]
+#   keep-awake on [UNTIL] [--screen]   from now until UNTIL (default: midnight,
+#                                      two hours with --screen)
+#   keep-awake tomorrow [--screen]     from now until the end of tomorrow
+#   keep-awake schedule START [UNTIL] [--screen]
+#                                      start later (default UNTIL: the midnight
+#                                      after START), e.g. schedule "tomorrow 08:00"
+#   keep-awake off                     stop now (a scheduled start stays)
+#   keep-awake cancel                  drop the scheduled start
+#   keep-awake toggle [--screen] | status [--json]
+#
+# Two modes. By default only sleep is kept away: the session still locks
+# after ten minutes of inactivity and the screen still turns off, as always;
+# closing the lid locks the session at once instead of suspending (unless
+# another monitor is on: at a desk a closed lid means nothing) and puts the
+# power profile on power-saver until the lid opens again, so a laptop left
+# closed in a bag runs locked and cooler. --screen also keeps the screen on
+# and the idle lock away, for a talk or a film; it ends after two hours
+# unless told otherwise, and the lid locks the session all the same.
 #
 # UNTIL and START are anything `date -d` reads: "tomorrow 23:59", "+3 hours",
-# "2026-10-20 18:00". "on" while already on moves the end later, never
-# earlier.
+# "2026-10-20 18:00". "on" while already on in the same mode moves the end
+# later, never earlier; "on" in the other mode switches to it, with the end
+# asked for.
 #
 # On PATH as lucciola-keep-awake (a symlink in /usr/bin). The scheduled start
 # runs the resolved path ($self), so the name it is called by does not matter.
 #
 # "on" starts a transient user unit that holds a logind block inhibitor for
-# sleep, idle and the lid switch until the end time. The bar shows it through
-# Lucciola's Keep Awake plugin for Noctalia (bar indicator, panel,
-# control-centre tile, launcher), which reads `status --json`. The unit also
-# turns Noctalia's caffeine on while it holds: Noctalia's own idle lock and
-# screen-off follow Wayland idle inhibitors, not logind's.
+# sleep and the lid switch (idle too with --screen) until the end time; its
+# process (`_hold`) watches the lid through UPower and locks with
+# /usr/libexec/lucciola/lock. The bar shows it through Lucciola's Keep Awake
+# plugin for Noctalia (bar indicator, panel, control-centre tile, launcher),
+# which reads `status --json`. With --screen the unit also turns Noctalia's
+# caffeine on while it holds: Noctalia's own idle lock and screen-off follow
+# Wayland idle inhibitors, not logind's.
 set -euo pipefail
 
-# KEEP_AWAKE_TEST=1 runs on separate units and leaves the bar and notifications alone.
+# KEEP_AWAKE_TEST=1 runs on separate units and leaves the bar and
+# notifications alone; KEEP_AWAKE_GDBUS, KEEP_AWAKE_NIRI and KEEP_AWAKE_LOCK
+# stand in for the tools the lid watcher uses (tests/keep-awake.test.sh).
 t="${KEEP_AWAKE_TEST:+-test}"
 unit=lucciola-keep-awake$t.service
 sched=lucciola-keep-awake-scheduled$t
+GDBUS="${KEEP_AWAKE_GDBUS:-/usr/bin/gdbus}"
+NIRI="${KEEP_AWAKE_NIRI:-/usr/bin/niri}"
+LOCK="${KEEP_AWAKE_LOCK:-/usr/libexec/lucciola/lock}"
 caffeine() { [[ -n "$t" ]] || /usr/bin/noctalia msg "caffeine-$1" >/dev/null 2>&1 || true; }
 self="$(readlink -f "$0")"
 state="${XDG_STATE_HOME:-$HOME/.local/state}/lucciola"
 endfile="$state/keep-awake-until$t"
+modefile="$state/keep-awake-mode$t"
 schedfile="$state/keep-awake-scheduled$t"
+profilefile="$state/keep-awake-profile$t"
 
 active() { systemctl --user --quiet is-active "$unit"; }
 notify() { [[ -z "$t" ]] && command -v notify-send >/dev/null && notify-send -a "Keep Awake" -i "$1" "$2" "$3" >/dev/null 2>&1 || true; }
+mode_label() { if [[ "${1:-awake}" == screen ]]; then echo " (screen on)"; fi; }
 when() {  # epoch -> "23:59" today, "tomorrow 23:59", or "Sat 18 Oct 23:59"
   local e=$1 d
   d=$(date -d "@$e" +%F)
@@ -54,39 +76,57 @@ when() {  # epoch -> "23:59" today, "tomorrow 23:59", or "Sat 18 Oct 23:59"
 epoch() { date -d "$1" +%s 2>/dev/null || { echo "keep-awake: cannot read the time '$1'" >&2; exit 2; }; }
 
 on() {
-  local end now secs
+  local now end secs cur what why v
   now=$(date +%s)
-  end=$(epoch "${1:-tomorrow 00:00}")
+  if [[ -n "${1:-}" ]]; then end=$(epoch "$1")
+  elif [[ "$MODE" == screen ]]; then end=$(( now + 7200 ))
+  else end=$(epoch "tomorrow 00:00"); fi
   (( end > now + 60 )) || end=$(( now + 60 ))
   if active; then
-    local cur; cur=$(cat "$endfile" 2>/dev/null || echo 0)
-    if (( end <= cur )); then
+    cur=$(cat "$endfile" 2>/dev/null || echo 0)
+    if [[ "$(cat "$modefile" 2>/dev/null || echo awake)" == "$MODE" ]] && (( end <= cur )); then
       notify lucciola-keep-awake "Keep Awake is already on" "Until $(when "$cur")."
       return 0
     fi
-    systemctl --user stop "$unit"   # restarted below with the later end
+    systemctl --user stop "$unit"   # restarted below with the later end or the other mode
   fi
   secs=$(( end - now ))
-  mkdir -p "$state"; echo "$end" > "$endfile"
+  mkdir -p "$state"; echo "$end" > "$endfile"; echo "$MODE" > "$modefile"
   # A scheduled start that has just fired is no longer pending.
   if [[ -f "$schedfile" ]] && (( $(cut -d" " -f1 "$schedfile") <= now + 5 )); then rm -f "$schedfile"; fi
   systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
+  local -a opts=()
+  for v in KEEP_AWAKE_TEST KEEP_AWAKE_GDBUS KEEP_AWAKE_NIRI KEEP_AWAKE_LOCK; do
+    if [[ -n "${!v:-}" ]]; then opts+=(--setenv="$v=${!v}"); fi
+  done
+  if [[ "$MODE" == screen ]]; then
+    what=sleep:idle:handle-lid-switch
+    why="Keep Awake (screen on) until $(when "$end"): no suspend, no idle lock; the lid locks the session"
+    opts+=(-p ExecStartPre="-/usr/bin/sh -c '[ -n \"\$KEEP_AWAKE_TEST\" ] || exec /usr/bin/noctalia msg caffeine-enable'"
+           -p ExecStopPost="-/usr/bin/sh -c '[ -n \"\$KEEP_AWAKE_TEST\" ] || exec /usr/bin/noctalia msg caffeine-disable'")
+  else
+    what=sleep:handle-lid-switch
+    why="Keep Awake until $(when "$end"): no suspend; the lid locks the session instead"
+  fi
   systemd-run --user --quiet --collect --unit="$unit" \
-    --description="Keep Awake until $(when "$end")" \
-    ${t:+--setenv=KEEP_AWAKE_TEST=1} \
-    -p ExecStartPre="-/usr/bin/sh -c '[ -n \"\$KEEP_AWAKE_TEST\" ] || exec /usr/bin/noctalia msg caffeine-enable'" \
-    -p ExecStopPost="-/usr/bin/sh -c '[ -n \"\$KEEP_AWAKE_TEST\" ] || exec /usr/bin/noctalia msg caffeine-disable'" \
-    -p ExecStopPost="-/usr/bin/rm -f $endfile" \
-    /usr/bin/systemd-inhibit --what=sleep:idle:handle-lid-switch --mode=block \
-      --who="Keep Awake" --why="Keep Awake until $(when "$end"): no suspend, closing the lid does nothing" \
-      /usr/bin/sleep "$secs"
-  notify lucciola-keep-awake "Keep Awake on until $(when "$end")" "No suspend, no screen lock; closing the lid does nothing."
+    --description="Keep Awake$(mode_label "$MODE") until $(when "$end")" \
+    "${opts[@]}" \
+    -p ExecStopPost="-$self _profile restore" \
+    -p ExecStopPost="-/usr/bin/rm -f $endfile $modefile" \
+    /usr/bin/systemd-inhibit --what="$what" --mode=block \
+      --who="Keep Awake" --why="$why" \
+      "$self" _hold "$secs"
+  if [[ "$MODE" == screen ]]; then
+    notify lucciola-keep-awake "Keep Awake on until $(when "$end"), screen on" "No suspend and no idle lock for now; closing the lid still locks the session."
+  else
+    notify lucciola-keep-awake "Keep Awake on until $(when "$end")" "No suspend; the screen locks on idle as usual, and closing the lid locks it at once."
+  fi
 }
 
 off() {
   if active; then
     systemctl --user stop "$unit"
-    rm -f "$endfile"
+    rm -f "$endfile" "$modefile"
     notify lucciola-keep-awake-off "Keep Awake off" "The laptop suspends again when you close the lid."
   else
     # The bar may show caffeine on without the inhibitor (a reload, a crash):
@@ -97,19 +137,22 @@ off() {
 
 schedule() {
   local start until s
-  start=$(epoch "${1:?usage: keep-awake schedule START [UNTIL]}")
+  local -a cmd
+  start=$(epoch "${1:?usage: keep-awake schedule START [UNTIL] [--screen]}")
   (( start > $(date +%s) )) || { echo "keep-awake: the start time is in the past" >&2; exit 2; }
   if [[ -n "${2:-}" ]]; then until=$(epoch "$2"); else until=$(date -d "$(date -d "@$start" +%F) +1 day 00:00" +%s); fi
   (( until > start )) || { echo "keep-awake: the end must come after the start" >&2; exit 2; }
   systemctl --user stop "$sched.timer" >/dev/null 2>&1 || true
   systemctl --user reset-failed "$sched.timer" "$sched.service" >/dev/null 2>&1 || true
   s=$(date -d "@$start" "+%F %T")
+  cmd=("$self" on "@$until")
+  if [[ "$MODE" == screen ]]; then cmd+=(--screen); fi
   systemd-run --user --quiet --collect --unit="$sched" --on-calendar="$s" --timer-property=AccuracySec=1s ${t:+--setenv=KEEP_AWAKE_TEST=1} \
-    --description="Keep Awake from $(when "$start") until $(when "$until")" \
-    "$self" on "@$until"
-  mkdir -p "$state"; echo "$start $until" > "$schedfile"
+    --description="Keep Awake$(mode_label "$MODE") from $(when "$start") until $(when "$until")" \
+    "${cmd[@]}"
+  mkdir -p "$state"; echo "$start $until $MODE" > "$schedfile"
   notify lucciola-keep-awake-scheduled "Keep Awake scheduled" "From $(when "$start") until $(when "$until")."
-  echo "Keep Awake scheduled from $(when "$start") until $(when "$until")."
+  echo "Keep Awake$(mode_label "$MODE") scheduled from $(when "$start") until $(when "$until")."
 }
 
 cancel() {
@@ -124,16 +167,19 @@ cancel() {
 }
 
 status_json() {
-  local a=false u=0 ss=0 su=0
-  if active; then a=true; u=$(cat "$endfile" 2>/dev/null || echo 0); fi
-  if systemctl --user --quiet is-active "$sched.timer" && [[ -f "$schedfile" ]]; then read -r ss su < "$schedfile"; fi
-  printf '{"active":%s,"until":%s,"scheduled_start":%s,"scheduled_until":%s,"now":%s}\n' "$a" "${u:-0}" "${ss:-0}" "${su:-0}" "$(date +%s)"
+  local a=false u=0 m=awake ss=0 su=0 sm=awake
+  if active; then
+    a=true; u=$(cat "$endfile" 2>/dev/null || echo 0); m=$(cat "$modefile" 2>/dev/null || echo awake)
+  fi
+  if systemctl --user --quiet is-active "$sched.timer" && [[ -f "$schedfile" ]]; then read -r ss su sm < "$schedfile"; fi
+  printf '{"active":%s,"until":%s,"mode":"%s","scheduled_start":%s,"scheduled_until":%s,"scheduled_mode":"%s","now":%s}\n' \
+    "$a" "${u:-0}" "${m:-awake}" "${ss:-0}" "${su:-0}" "${sm:-awake}" "$(date +%s)"
 }
 
 status() {
   [[ "${1:-}" == "--json" ]] && { status_json; return; }
   if active; then
-    if [[ -f "$endfile" ]]; then echo "on until $(when "$(cat "$endfile")")"
+    if [[ -f "$endfile" ]]; then echo "on until $(when "$(cat "$endfile")")$(mode_label "$(cat "$modefile" 2>/dev/null || echo awake)")"
     else echo "on: $(systemctl --user show -p Description --value "$unit")"; fi
   else echo "off"; fi
   if systemctl --user --quiet is-active "$sched.timer"; then
@@ -141,6 +187,81 @@ status() {
   fi
 }
 
+# The lid, through UPower, while the unit holds: closing it locks the session
+# (not at a desk with another monitor on) and keeps the power profile on
+# power-saver until it opens again. Every step here returns 0: the watcher
+# must outlive a lock that fails or a daemon that is missing.
+lid_closed_now() {
+  local out
+  out=$("$GDBUS" call --system --dest org.freedesktop.UPower --object-path /org/freedesktop/UPower \
+        --method org.freedesktop.DBus.Properties.Get org.freedesktop.UPower LidIsClosed 2>/dev/null) || return 1
+  [[ "$out" == *true* ]]
+}
+docked() {  # another monitor is on: a closed lid is the desk, not the bag
+  "$NIRI" msg --json outputs 2>/dev/null | python3 -c '
+import json, sys
+outs = json.load(sys.stdin)
+on = [n for n, o in outs.items() if o.get("logical") is not None and not n.startswith(("eDP", "LVDS", "DSI"))]
+sys.exit(0 if on else 1)' 2>/dev/null
+}
+lid_closed() {
+  if docked; then echo "keep-awake: lid closed, another monitor is on: nothing to do"; return 0; fi
+  if "$LOCK" >/dev/null 2>&1; then echo "keep-awake: lid closed: session locked"
+  else echo "keep-awake: lid closed, but the session could not be locked" >&2; fi
+  profile hold || true
+}
+lid_opened() { profile restore || true; }
+hold() {  # _hold SECS: what the inhibitor runs; ends after SECS
+  local secs=$1 t0 left line
+  t0=$(date +%s)
+  if lid_closed_now; then lid_closed; fi
+  if [[ -x "$GDBUS" ]]; then
+    timeout "$secs" "$GDBUS" monitor --system --dest org.freedesktop.UPower --object-path /org/freedesktop/UPower 2>/dev/null \
+      | while IFS= read -r line; do
+          case "$line" in
+            *"'LidIsClosed': <true>"*)  lid_closed ;;
+            *"'LidIsClosed': <false>"*) lid_opened ;;
+          esac
+        done || true
+  else
+    echo "keep-awake: $GDBUS is missing: the lid is not watched" >&2
+  fi
+  left=$(( secs - ($(date +%s) - t0) ))
+  if (( left > 0 )); then sleep "$left"; fi
+}
+
+current_profile() {  # the power profile (tuned-ppd or power-profiles-daemon), or nothing
+  "$GDBUS" call --system --dest net.hadess.PowerProfiles --object-path /net/hadess/PowerProfiles \
+    --method org.freedesktop.DBus.Properties.Get net.hadess.PowerProfiles ActiveProfile 2>/dev/null \
+    | sed -n "s/.*<'\([^']*\)'>.*/\1/p"
+}
+set_profile() {
+  "$GDBUS" call --system --dest net.hadess.PowerProfiles --object-path /net/hadess/PowerProfiles \
+    --method org.freedesktop.DBus.Properties.Set net.hadess.PowerProfiles ActiveProfile "<'$1'>" >/dev/null 2>&1
+}
+profile() {  # _profile hold|restore: power-saver while the lid is closed, then back
+  local cur prev
+  cur=$(current_profile) || cur=""
+  [[ -n "$cur" ]] || return 0   # no power profiles daemon: nothing to do
+  case "$1" in
+    hold)
+      if [[ "$cur" == power-saver || -f "$profilefile" ]]; then return 0; fi
+      mkdir -p "$state"; echo "$cur" > "$profilefile"
+      if set_profile power-saver; then echo "keep-awake: power profile on power-saver while the lid is closed (was $cur)"; fi ;;
+    restore)
+      [[ -f "$profilefile" ]] || return 0
+      prev=$(cat "$profilefile"); rm -f "$profilefile"
+      # Back to what it was only if nobody changed it in between.
+      [[ "$cur" == power-saver ]] || return 0
+      if set_profile "$prev"; then echo "keep-awake: power profile back to $prev"; fi ;;
+    *) echo "keep-awake: _profile hold|restore" >&2; return 2 ;;
+  esac
+}
+
+MODE=awake
+args=()
+for a in "$@"; do case "$a" in --screen) MODE=screen ;; *) args+=("$a") ;; esac; done
+set -- "${args[@]}"
 case "${1:-status}" in
   on) on "${2:-}" ;;
   tomorrow) on "tomorrow 23:59:59" ;;
@@ -149,5 +270,7 @@ case "${1:-status}" in
   cancel) cancel ;;
   toggle) if active; then off; else on; fi ;;
   status) status "${2:-}" ;;
-  *) echo "usage: ${0##*/} on [UNTIL] | tomorrow | schedule START [UNTIL] | off | cancel | toggle | status" >&2; exit 2 ;;
+  _hold) hold "${2:?}" ;;
+  _profile) profile "${2:?}" ;;
+  *) echo "usage: ${0##*/} on [UNTIL] [--screen] | tomorrow [--screen] | schedule START [UNTIL] [--screen] | off | cancel | toggle [--screen] | status [--json]" >&2; exit 2 ;;
 esac
