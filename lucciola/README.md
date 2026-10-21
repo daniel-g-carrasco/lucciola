@@ -17,7 +17,9 @@ This layer adds:
 - `niri` and `xwayland-satellite` from Fedora, and `noctalia` from Fedora at a
   pinned version (`NOCTALIA_VR` in the Containerfile, the Fedora tag comes
   from the base: bump it only together with a test boot, since upstream
-  supports only its latest release);
+  supports only its latest release; when the repositories no longer carry
+  that build, the image takes Koji's copy of it, signed by Fedora and
+  checked against the release key before dnf sees it);
 - the niri defaults in `/usr/share/lucciola/niri/config.kdl`, loaded through
   `/etc/niri/config.kdl`, with the keybindings carried over from Margine; personal settings go in
   `~/.config/niri/lucciola.kdl`;

@@ -68,6 +68,9 @@ key_case "not a key"                                     "$T/garbage.asc"     "$
 key_case "a short key id instead of a fingerprint"       "$T/pinned.asc"      "${PIN: -16}" 1
 python3 "$TRUST" key "$T/other.asc" "$T/dest.asc" "$PIN" > "$T/out" 2>&1 || true
 check "key: a different key is a fingerprint mismatch, refusing" grep -q "fingerprint mismatch.*refusing" "$T/out"
+check "fingerprint: the pinned key file prints its one primary" [ "$(python3 "$TRUST" fingerprint "$T/pinned.asc")" = "$PIN" ]
+python3 "$TRUST" fingerprint "$T/two-blocks.asc" > "$T/out" 2>&1 && rc=0 || rc=$?
+check "fingerprint: a file with two primaries is refused" [ "$rc" = 1 ]
 
 # --- Repository files
 K=/etc/pki/rpm-gpg/RPM-GPG-KEY-test
