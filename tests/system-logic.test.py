@@ -207,5 +207,33 @@ check("netflix absent", ls.netflix_state("Zen:       installed\nProfile:   /p\nE
 check("netflix no profile yet", ls.netflix_state("Zen:       installed\nProfile:   none yet (launch Zen once)\n", 0) == "no-profile")
 check("netflix no browser", ls.netflix_state("Zen Browser is not installed.\n", 1) == "no-browser")
 
+
+# the phone: device states, plugin settings, the run-command config
+check("device state: paired and reachable is connected", ls.device_state(True, True, False, False) == "connected")
+check("device state: paired but away", ls.device_state(True, False, False, False) == "paired-away")
+check("device state: the phone asks first", ls.device_state(False, True, True, False) == "wants-to-pair")
+check("device state: we asked", ls.device_state(False, True, False, True) == "requested")
+check("device state: a stranger on the network", ls.device_state(False, True, False, False) == "available")
+check("every device state has a label", all(k in ls.DEVICE_STATE_LABELS for k in ("connected", "paired-away", "wants-to-pair", "requested", "available")))
+check("battery phrase", ls.battery_phrase(42, True) == "Battery 42%, charging" and ls.battery_phrase(None, False) == "")
+cfg = "[General]\nname=Pixel\n[Plugins]\nkdeconnect_sendnotificationsEnabled=false\nkdeconnect_clipboardEnabled=true\n"
+check("plugin setting: explicit off", ls.plugin_setting(cfg, "kdeconnect_sendnotifications") is False)
+check("plugin setting: explicit on", ls.plugin_setting(cfg, "kdeconnect_clipboard") is True)
+check("plugin setting: unset is None, never a default", ls.plugin_setting(cfg, "kdeconnect_sftp") is None)
+check("plugin setting: a key outside [Plugins] does not count", ls.plugin_setting("[General]\nkdeconnect_sftpEnabled=true\n", "kdeconnect_sftp") is None)
+check("notifications to the phone are the one default off", ls.PHONE_DEFAULT_OFF == ("kdeconnect_sendnotifications",))
+check("ini quoting round-trips quotes and backslashes", ls.ini_unquote(ls.ini_quote('a "b" \\ c,d;e=f')) == 'a "b" \\ c,d;e=f')
+keys = iter(f"k{i}" for i in range(20))
+text, added = ls.commands_config("", ls.PHONE_COMMANDS, lambda: next(keys))
+check("commands_config adds every preset to an empty config", added == len(ls.PHONE_COMMANDS) and text.startswith('[General]\ncommands="{'))
+text2, added2 = ls.commands_config(text, ls.PHONE_COMMANDS, lambda: next(keys))
+check("commands_config adds nothing the second time", added2 == 0 and text2 == text)
+own = '[General]\ncommands="{\\"x\\":{\\"name\\":\\"Mine\\",\\"command\\":\\"echo hi\\"}}"\n'
+text3, added3 = ls.commands_config(own, ls.PHONE_COMMANDS[:1], lambda: "k")
+check("commands_config keeps the user's own command", added3 == 1 and "echo hi" in text3 and "Lock the screen" in text3)
+check("commands_config survives a broken file", ls.commands_config("commands=not json\n", ls.PHONE_COMMANDS[:1], lambda: "k")[1] == 1)
+check("device_sort_key: connected before available", ls.device_sort_key({"state": "connected", "name": "b"}) < ls.device_sort_key({"state": "available", "name": "a"}))
+check("the ready-made commands use Lucciola's own lock", any(c == "/usr/libexec/lucciola/lock" for _, c in ls.PHONE_COMMANDS))
+
 print("system-logic: all checks passed" if fails == 0 else f"system-logic: {fails} failed")
 sys.exit(1 if fails else 0)

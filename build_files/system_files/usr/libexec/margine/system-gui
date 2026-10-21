@@ -82,6 +82,15 @@ SUNSHINE_APP = "dev.lizardbyte.app.Sunshine"
 ZEN_APP = "app.zen_browser.zen"
 DARKTABLE_APP = "org.darktable.Darktable"
 BLENDER_APP = "org.blender.Blender"
+# KDE Connect's daemon on the session bus (the phone layer, Features page);
+# D-Bus activation starts it on the first call.
+KDECONNECTD = "/usr/bin/kdeconnectd"
+KDEC_BUS = "org.kde.kdeconnect"
+KDEC_PATH = "/modules/kdeconnect"
+KDEC_DAEMON = "org.kde.kdeconnect.daemon"
+KDEC_DEVICE = "org.kde.kdeconnect.device"
+KDEC_CONFIG = os.path.expanduser("~/.config/kdeconnect")
+KDEC_DOWNLOAD = "https://kdeconnect.kde.org/download.html"
 REFRESH_EVERY = 10 * 60   # seconds between unasked refreshes
 REFRESH_ON_FOCUS = 5 * 60  # refresh when the window comes back after this long
 
@@ -89,6 +98,7 @@ PAGES = (
     ("overview", "Overview", "computer-symbolic"),
     ("features", "Features", "application-x-addon-symbolic"),
     ("apps", "Apps", "view-grid-symbolic"),
+    ("phone", "Phone", "phone-symbolic"),
     ("startup", "Startup & Security", "security-high-symbolic"),
     ("login", "Login", "avatar-default-symbolic"),
     ("hardware", "Hardware", "preferences-system-symbolic"),
@@ -254,12 +264,20 @@ def spinner(size):
     return s
 
 
+def add_to(group, row):
+    """A row into a PreferencesGroup (add) or an ExpanderRow (add_row)."""
+    if hasattr(group, "add_row"):
+        group.add_row(row)
+    else:
+        group.add(row)
+
+
 def info_row(group, title, icon_name, subtitle=""):
     row = Adw.ActionRow(title=title, subtitle=subtitle)
     row.add_prefix(icon(icon_name))
     row.set_activatable(False)
     row.set_subtitle_selectable(True)
-    group.add(row)
+    add_to(group, row)
     return row
 
 
@@ -269,7 +287,7 @@ def button_row(group, title, icon_name, callback, css=None):
     if css:
         row.add_css_class(css)
     row.connect("activated", callback)
-    group.add(row)
+    add_to(group, row)
     return row
 
 
@@ -306,6 +324,11 @@ class SystemWindow(Adw.ApplicationWindow):
         self._features = {}
         self._amd_gpu = False
         self._profile = "stock"
+        self._phone_devices = []
+        self._phone_rows = []
+        self._phone_signal_ids = []
+        self._phone_refresh_pending = False
+        self._phone_name_guard = False
         self._current_page = "overview"
 
         for name, cb in (
@@ -383,6 +406,7 @@ class SystemWindow(Adw.ApplicationWindow):
         self._stack.add_named(self._build_overview(), "overview")
         self._stack.add_named(self._build_features(), "features")
         self._stack.add_named(self._build_apps(), "apps")
+        self._stack.add_named(self._build_phone(), "phone")
         self._stack.add_named(self._build_startup(), "startup")
         self._stack.add_named(self._build_login(), "login")
         self._stack.add_named(self._build_hardware(), "hardware")
@@ -418,6 +442,8 @@ class SystemWindow(Adw.ApplicationWindow):
             self._refresh_features()
         elif page_id == "apps":
             self._refresh_apps()
+        elif page_id == "phone":
+            self._refresh_phone()
         elif page_id == "startup":
             self._refresh_startup()
         elif page_id == "login":
@@ -1908,6 +1934,319 @@ class SystemWindow(Adw.ApplicationWindow):
                                         working=spec[f"working_{side}"], done=spec[f"done_{side}"]),
             destructive=(not turn_on and key == "spola"),
         )
+
+    # ═══════════════════════════════ Phone ══════════════════════════
+    # KDE Connect's daemon over D-Bus: the devices it knows, their pairing,
+    # battery, the functions per device, a ring, a file, ready-made
+    # commands. The app on the phone does the rest.
+
+    def _bus(self):
+        if getattr(self, "_session_bus", None) is None:
+            self._session_bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        return self._session_bus
+
+    def _kdec_call(self, path, iface, method, params=None, timeout=15000):
+        """One D-Bus call to the daemon; the unpacked reply, or None on any error."""
+        try:
+            reply = self._bus().call_sync(KDEC_BUS, path, iface, method, params, None,
+                                          Gio.DBusCallFlags.NONE, timeout, None)
+        except GLib.Error:
+            return None
+        return reply.unpack() if reply is not None else ()
+
+    def _kdec_props(self, path, iface):
+        """All properties of an interface, or {} when the object is not there."""
+        reply = self._kdec_call(path, "org.freedesktop.DBus.Properties", "GetAll", GLib.Variant("(s)", (iface,)))
+        return reply[0] if reply else {}
+
+    def _build_phone(self):
+        page = preferences_page()
+        self._phone_missing = Adw.PreferencesGroup(
+            title="Phone",
+            description="The phone link is not installed. It comes from the Features page: KDE Connect's service on this PC, the KDE Connect app on the phone.",
+        )
+        page.add(self._phone_missing)
+        button_row(self._phone_missing, "Open Features", "application-x-addon-symbolic", lambda *_: self.show_page("features"), "suggested-action")
+
+        self._phone_pc = Adw.PreferencesGroup(
+            title="This PC",
+            description="The phone sees this PC under this name, on the same Wi-Fi. Pair from the KDE Connect app on the phone, or from a device below.",
+        )
+        page.add(self._phone_pc)
+        self._phone_name_row = Adw.EntryRow(title="Name on the Phone")
+        self._phone_name_row.set_show_apply_button(True)
+        self._phone_name_row.connect("apply", self._on_phone_name_apply)
+        self._phone_pc.add(self._phone_name_row)
+        self._phone_look_button = button_row(self._phone_pc, "Look for Devices Again", "view-refresh-symbolic", self._on_phone_look)
+
+        self._phone_devices_group = Adw.PreferencesGroup(title="Devices")
+        page.add(self._phone_devices_group)
+
+        more = Adw.PreferencesGroup(title="More")
+        page.add(more)
+        row = Adw.ActionRow(title="Get KDE Connect for the Phone", subtitle="Android, from Google Play or F-Droid; iPhone with fewer functions")
+        row.add_prefix(icon("phone-symbolic"))
+        row.add_suffix(icon("go-next-symbolic"))
+        row.set_activatable(True)
+        row.connect("activated", lambda *_: Gtk.UriLauncher.new(KDEC_DOWNLOAD).launch(self, None, None))
+        more.add(row)
+        info_row(more, "Mouse and Keyboard From the Phone", "input-mouse-symbolic", "Not available under niri yet: it needs a RemoteDesktop portal")
+        row = Adw.ActionRow(title="KDE Connect's Own Settings", subtitle="Everything else, in KDE Connect's window")
+        row.add_prefix(icon("preferences-system-symbolic"))
+        row.add_suffix(icon("go-next-symbolic"))
+        row.set_activatable(True)
+        row.connect("activated", lambda *_: self._launch_desktop("org.kde.kdeconnect.app.desktop"))
+        more.add(row)
+        self._phone_more = more
+        return page
+
+    def _phone_subscribe(self):
+        """The daemon's signals refresh the page while it is open: a phone
+        appearing, a pairing request, a device changing state."""
+        if self._phone_signal_ids:
+            return
+        bus = self._bus()
+        for iface, member in ((KDEC_DAEMON, "deviceListChanged"), (KDEC_DAEMON, "pairingRequestsChanged"),
+                              (KDEC_DEVICE, "pairStateChanged"), (KDEC_DEVICE, "reachableChanged"),
+                              (KDEC_DEVICE, "pluginsChanged")):
+            sid = bus.signal_subscribe(KDEC_BUS, iface, member, None, None, Gio.DBusSignalFlags.NONE,
+                                       lambda *_: self._phone_refresh_soon())
+            self._phone_signal_ids.append(sid)
+
+    def _phone_refresh_soon(self):
+        if self._phone_refresh_pending or self._current_page != "phone":
+            return
+        self._phone_refresh_pending = True
+
+        def go():
+            self._phone_refresh_pending = False
+            self._refresh_phone()
+            return False
+
+        GLib.timeout_add(600, go)
+
+    def _refresh_phone(self):
+        gen = self._bump("phone")
+        installed = os.path.exists(KDECONNECTD)
+        self._phone_missing.set_visible(not installed)
+        for group in (self._phone_pc, self._phone_devices_group, self._phone_more):
+            group.set_visible(installed)
+        if not installed:
+            return
+        self._phone_look_button.set_sensitive(False)
+
+        def worker():
+            name = self._kdec_call(KDEC_PATH, KDEC_DAEMON, "announcedName")
+            name = name[0] if name else ""
+            ids = self._kdec_call(KDEC_PATH, KDEC_DAEMON, "devices", GLib.Variant("(bb)", (False, False)))
+            devices = []
+            for dev_id in (ids[0] if ids else []):
+                path = f"{KDEC_PATH}/devices/{dev_id}"
+                props = self._kdec_props(path, KDEC_DEVICE)
+                if not props:
+                    continue
+                state = ls.device_state(props.get("isPaired", False), props.get("isReachable", False),
+                                        props.get("isPairRequestedByPeer", False), props.get("isPairRequested", False))
+                battery = self._kdec_props(f"{path}/battery", "org.kde.kdeconnect.device.battery") if state == "connected" else {}
+                config = read_file(os.path.join(KDEC_CONFIG, dev_id, "config"))
+                functions = []
+                if props.get("isPaired"):
+                    supported = set(props.get("supportedPlugins") or [])
+                    for plugin, title, blurb in ls.PHONE_FUNCTIONS:
+                        if plugin not in supported:
+                            continue
+                        explicit = ls.plugin_setting(config, plugin)
+                        if explicit is None and plugin in ls.PHONE_DEFAULT_OFF:
+                            # Lucciola's default, written once so the daemon keeps it.
+                            self._kdec_call(path, KDEC_DEVICE, "setPluginEnabled", GLib.Variant("(sb)", (plugin, False)))
+                            explicit = False
+                        if explicit is None:
+                            reply = self._kdec_call(path, KDEC_DEVICE, "isPluginEnabled", GLib.Variant("(s)", (plugin,)))
+                            explicit = bool(reply[0]) if reply else False
+                        functions.append((plugin, title, blurb, explicit))
+                devices.append({
+                    "id": dev_id, "path": path, "name": props.get("name") or dev_id, "type": props.get("type") or "",
+                    "state": state, "key": props.get("verificationKey") or "",
+                    "battery": battery.get("charge") if battery.get("hasBattery", True) else None,
+                    "charging": bool(battery.get("isCharging", False)),
+                    "functions": functions,
+                })
+            devices.sort(key=ls.device_sort_key)
+            on_main(self._set_phone, gen, name, devices)
+
+        in_thread(worker)
+
+    def _set_phone(self, gen, name, devices):
+        if not self._current("phone", gen):
+            return
+        self._phone_subscribe()
+        self._phone_devices = devices
+        self._phone_name_guard = True
+        self._phone_name_row.set_text(name)
+        self._phone_name_guard = False
+        self._phone_look_button.set_sensitive(not self._busy)
+        for row in self._phone_rows:
+            self._phone_devices_group.remove(row)
+        self._phone_rows = []
+        if not devices:
+            row = Adw.ActionRow(title="No phone yet", subtitle="Open KDE Connect on the phone, on the same Wi-Fi: this PC appears there, and the phone appears here")
+            row.add_prefix(icon("phone-symbolic"))
+            self._phone_devices_group.add(row)
+            self._phone_rows.append(row)
+            return
+        for device in devices:
+            row = self._phone_device_row(device)
+            self._phone_devices_group.add(row)
+            self._phone_rows.append(row)
+
+    def _phone_device_row(self, device):
+        state = device["state"]
+        label = ls.DEVICE_STATE_LABELS[state]
+        battery = ls.battery_phrase(device["battery"], device["charging"])
+        subtitle = f"{label}. {battery}" if battery else label
+        if state == "wants-to-pair" and device["key"]:
+            subtitle += f". Key {device['key']}: the phone shows the same one"
+        icon_name = "phone-symbolic" if "phone" in device["type"] else "computer-symbolic"
+        if state in ("connected", "paired-away"):
+            row = Adw.ExpanderRow(title=device["name"], subtitle=subtitle)
+            row.add_prefix(icon(icon_name))
+            if state == "connected":
+                button_row(row, "Ring the Phone", "audio-volume-high-symbolic", lambda *_: self._phone_simple(device, "findmyphone", "org.kde.kdeconnect.device.findmyphone", "ring", "Ringing the phone"))
+                button_row(row, "Send a File…", "document-send-symbolic", lambda *_: self._on_phone_send(device))
+                if any(p == "kdeconnect_sftp" and on for p, _t, _b, on in device["functions"]):
+                    # The plugin mounts the phone (sshfs) and opens the mount point in Files.
+                    button_row(row, "Browse the Phone in Files", "folder-remote-symbolic", lambda *_: self._phone_simple(device, "sftp", "org.kde.kdeconnect.device.sftp", "startBrowsing", "Opening the phone in Files"))
+            for plugin, title, blurb, enabled in device["functions"]:
+                switch = Adw.SwitchRow(title=title, subtitle=blurb)
+                switch.set_active(enabled)
+                switch.connect("notify::active", self._on_phone_function, device, plugin)
+                row.add_row(switch)
+            if any(p == "kdeconnect_runcommand" for p, *_ in device["functions"]):
+                button_row(row, "Add Ready-Made Commands", "utilities-terminal-symbolic", lambda *_: self._on_phone_commands(device))
+            button_row(row, "Forget This Phone…", "edit-delete-symbolic", lambda *_: self._on_phone_unpair(device), "destructive-action")
+            return row
+        row = Adw.ActionRow(title=device["name"], subtitle=subtitle)
+        row.set_subtitle_lines(3)
+        row.add_prefix(icon(icon_name))
+        if state == "wants-to-pair":
+            accept = Gtk.Button(label="Accept", valign=Gtk.Align.CENTER)
+            accept.add_css_class("suggested-action")
+            accept.connect("clicked", lambda *_: self._phone_simple(device, None, KDEC_DEVICE, "acceptPairing", "Pairing accepted"))
+            reject = Gtk.Button(label="Reject", valign=Gtk.Align.CENTER)
+            reject.connect("clicked", lambda *_: self._phone_simple(device, None, KDEC_DEVICE, "cancelPairing", "Pairing rejected"))
+            row.add_suffix(accept)
+            row.add_suffix(reject)
+        elif state == "available":
+            pair = Gtk.Button(label="Pair…", valign=Gtk.Align.CENTER)
+            pair.connect("clicked", lambda *_: self._on_phone_pair(device))
+            row.add_suffix(pair)
+        elif state == "requested":
+            cancel = Gtk.Button(label="Cancel", valign=Gtk.Align.CENTER)
+            cancel.connect("clicked", lambda *_: self._phone_simple(device, None, KDEC_DEVICE, "cancelPairing", "Pairing request withdrawn"))
+            row.add_suffix(cancel)
+        return row
+
+    def _phone_simple(self, device, plugin, iface, method, done):
+        """A method with no arguments on the device or one of its plugins."""
+        path = device["path"] + (f"/{plugin}" if plugin else "")
+
+        def worker():
+            ok = self._kdec_call(path, iface, method) is not None
+            on_main(self._toast, done if ok else "KDE Connect did not answer")
+            on_main(self._phone_refresh_soon)
+
+        in_thread(worker)
+
+    def _on_phone_pair(self, device):
+        self._confirm(
+            f"Pair With {device['name']}?",
+            "The phone shows a request with a key; this page shows the same key. Accept on the phone when the two match.",
+            "Pair", lambda: self._phone_simple(device, None, KDEC_DEVICE, "requestPairing", "Pairing requested: accept on the phone"),
+        )
+
+    def _on_phone_unpair(self, device):
+        self._confirm(
+            f"Forget {device['name']}?",
+            "The two stop talking until they pair again. Nothing is deleted on either side.",
+            "Forget", lambda: self._phone_simple(device, None, KDEC_DEVICE, "unpair", f"{device['name']} forgotten"), destructive=True,
+        )
+
+    def _on_phone_function(self, switch, _pspec, device, plugin):
+        wanted = switch.get_active()
+
+        def worker():
+            self._kdec_call(device["path"], KDEC_DEVICE, "setPluginEnabled", GLib.Variant("(sb)", (plugin, wanted)))
+
+        in_thread(worker)
+
+    def _on_phone_send(self, device):
+        dialog = Gtk.FileDialog()
+        dialog.set_title("Send to the Phone")
+
+        def done(d, result):
+            try:
+                file = d.open_finish(result)
+            except GLib.Error:
+                return
+            uri = file.get_uri()
+
+            def worker():
+                ok = self._kdec_call(device["path"] + "/share", "org.kde.kdeconnect.device.share", "shareUrl", GLib.Variant("(s)", (uri,))) is not None
+                on_main(self._toast, f"Sending {file.get_basename()} to {device['name']}" if ok else "KDE Connect did not take the file")
+
+            in_thread(worker)
+
+        dialog.open(self, None, done)
+
+    def _on_phone_commands(self, device):
+        names = ", ".join(name for name, _ in ls.PHONE_COMMANDS)
+        self._confirm(
+            "Add the Ready-Made Commands?",
+            f"The phone gets these commands for this PC, under Run Command in the KDE Connect app: {names}. Commands already there stay; add your own from KDE Connect's own settings.",
+            "Add", lambda: self._phone_add_commands(device),
+        )
+
+    def _phone_add_commands(self, device):
+        import uuid
+        folder = os.path.join(KDEC_CONFIG, device["id"], "kdeconnect_runcommand")
+        path = os.path.join(folder, "config")
+        text, added = ls.commands_config(read_file(path), ls.PHONE_COMMANDS, lambda: str(uuid.uuid4()))
+        try:
+            os.makedirs(folder, mode=0o700, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(text)
+        except OSError as e:
+            self._toast(f"Could not write the commands: {e}")
+            return
+
+        def worker():
+            self._kdec_call(device["path"], KDEC_DEVICE, "reloadPlugins")
+            on_main(self._toast, f"{added} command{'s' if added != 1 else ''} added: they appear in the app on the phone" if added else "The commands were already there")
+
+        in_thread(worker)
+
+    def _on_phone_look(self, _row):
+        self._phone_look_button.set_sensitive(False)
+
+        def worker():
+            self._kdec_call(KDEC_PATH, KDEC_DAEMON, "forceOnNetworkChange")
+            time.sleep(2)
+            on_main(self._refresh_phone)
+
+        in_thread(worker)
+
+    def _on_phone_name_apply(self, row):
+        if self._phone_name_guard:
+            return
+        name = row.get_text().strip()
+        if not name:
+            return
+
+        def worker():
+            self._kdec_call(KDEC_PATH, KDEC_DAEMON, "setAnnouncedName", GLib.Variant("(s)", (name,)))
+            on_main(self._toast, f"This PC is {name} to the phone now")
+
+        in_thread(worker)
 
     # ══════════════════════ help, report, about ═════════════════════
 

@@ -468,3 +468,128 @@ def netflix_state(status_text, rc):
         if line.startswith("Extension:"):
             return "installed" if "not" not in line else "absent"
     return "unknown"
+
+
+# ── the phone (KDE Connect's daemon over D-Bus) ──────────────────────────
+
+# The functions the Phone page offers per device, with the plugin that does
+# each (the ids KDE Connect uses) and a sentence. Notifications to the phone
+# start off on Lucciola: they carry their text, the user turns them on.
+PHONE_FUNCTIONS = (
+    ("kdeconnect_notifications", "Phone Notifications Here", "The phone's notifications appear on this PC, with a reply where the app allows it"),
+    ("kdeconnect_sendnotifications", "This PC's Notifications on the Phone", "Off until you turn it on: notifications carry their text. The app on the phone must have Receive Notifications on for this PC, off there by default"),
+    ("kdeconnect_clipboard", "Shared Clipboard", "Copy on one, paste on the other"),
+    ("kdeconnect_share", "Files and Links", "Send a file or a link either way; received files land in Downloads"),
+    ("kdeconnect_sftp", "The Phone in Files", "Browse the phone's storage from Files"),
+    ("kdeconnect_mprisremote", "Media Control", "Play, pause, volume and track from the phone"),
+    ("kdeconnect_battery", "Battery", "The phone's charge in the tray and here"),
+    ("kdeconnect_findmyphone", "Ring the Phone", "Make the phone ring from here"),
+    ("kdeconnect_runcommand", "Commands", "Run commands on this PC from the phone: lock, suspend, power off"),
+    ("kdeconnect_systemvolume", "This PC's Volume", "Change this PC's volume from the phone"),
+    ("kdeconnect_ping", "Ping", "A test notification either way"),
+)
+PHONE_DEFAULT_OFF = ("kdeconnect_sendnotifications",)
+
+# Ready-made commands for the phone (KDE Connect's runcommand plugin runs
+# each with /bin/sh -c in the user's session).
+PHONE_COMMANDS = (
+    ("Lock the screen", "/usr/libexec/lucciola/lock"),
+    ("Suspend", "systemctl suspend"),
+    ("Power off", "systemctl poweroff"),
+    ("Mute or unmute", "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"),
+    ("Keep awake until midnight", "/usr/libexec/lucciola/keep-awake on"),
+    ("Stop keeping awake", "/usr/libexec/lucciola/keep-awake off"),
+)
+
+
+def device_state(paired, reachable, requested_by_peer, requested):
+    """What a device is to this PC right now, in one word the page maps to a sentence."""
+    if requested_by_peer:
+        return "wants-to-pair"
+    if paired and reachable:
+        return "connected"
+    if paired:
+        return "paired-away"
+    if requested:
+        return "requested"
+    return "available"
+
+
+DEVICE_STATE_LABELS = {
+    "connected": "Connected",
+    "paired-away": "Paired, not reachable now",
+    "wants-to-pair": "Wants to pair with this PC",
+    "requested": "Pairing requested: accept on the phone",
+    "available": "On this network, not paired",
+}
+
+
+def battery_phrase(charge, charging):
+    if charge is None or charge < 0:
+        return ""
+    return f"Battery {charge}%" + (", charging" if charging else "")
+
+
+def plugin_setting(config_text, plugin):
+    """The explicit setting of a plugin in the device's config ([Plugins]
+    group, <plugin>Enabled=true|false): True, False, or None when the daemon
+    applies its own default."""
+    group = None
+    for raw in config_text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            group = line[1:-1]
+            continue
+        if group != "Plugins" or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        if key.strip() == f"{plugin}Enabled":
+            return value.strip().lower() == "true"
+    return None
+
+
+def ini_quote(value):
+    """A value as QSettings' INI format reads it back whole: quoted, with
+    backslashes and double quotes escaped (an unquoted comma would split it
+    into a list)."""
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def ini_unquote(value):
+    value = value.strip()
+    if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+        return value[1:-1].replace('\\"', '"').replace("\\\\", "\\")
+    return value
+
+
+def commands_config(existing_text, presets, new_key):
+    """The runcommand plugin's config with the presets added once (a command
+    already there, by its command line, is left as it is): the text to write,
+    and how many were added. existing_text is the current file, or empty."""
+    commands = {}
+    for raw in existing_text.splitlines():
+        if raw.strip().startswith("commands="):
+            try:
+                commands = json.loads(ini_unquote(raw.split("=", 1)[1]))
+            except ValueError:
+                commands = {}
+            if not isinstance(commands, dict):
+                commands = {}
+    present = {str(v.get("command", "")).strip() for v in commands.values() if isinstance(v, dict)}
+    added = 0
+    for name, command in presets:
+        if command in present:
+            continue
+        commands[new_key()] = {"name": name, "command": command}
+        present.add(command)
+        added += 1
+    text = "[General]\ncommands=" + ini_quote(json.dumps(commands, separators=(",", ":"))) + "\n"
+    return text, added
+
+
+def device_sort_key(device):
+    """Connected first, then wanting to pair, then paired, then the rest; by name inside."""
+    order = {"wants-to-pair": 0, "connected": 1, "paired-away": 2, "requested": 3, "available": 4}
+    return (order.get(device.get("state"), 9), (device.get("name") or "").lower())

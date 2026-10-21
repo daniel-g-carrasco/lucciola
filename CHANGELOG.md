@@ -7,6 +7,22 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Added (2026-10-21, Phone page)
+- **A Phone page in Lucciola System**, over KDE Connect's daemon on the
+  session bus: the name this PC shows to the phone (editable), the devices
+  on the network with their state (connected, paired but away, wanting to
+  pair with the key to compare, available), Pair, Accept and Reject,
+  battery, Ring the Phone, Send a File, the functions per device as
+  switches (phone notifications here, this PC's notifications on the
+  phone, clipboard, files and links, the phone in Files, media control,
+  battery, ring, commands, volume, ping), Add Ready-Made Commands (lock the
+  screen with Lucciola's lock, suspend, power off, mute, keep awake until
+  midnight and stop), Forget This Phone. Notifications to the phone start
+  off on Lucciola, written once through the daemon when a paired phone is
+  first seen: they carry their text, the user turns them on. The page
+  refreshes itself on the daemon's signals. Without the phone layer it
+  points to Features; KDE Connect's own window stays one row away.
+
 ### Added (2026-10-21, phone link)
 - **Phone, the first row of the Features page of Lucciola System**, and
   `ujust lucciola-phone`: KDE Connect's service (kdeconnectd), its tray

@@ -149,7 +149,9 @@ check "no long dash in the window's strings" bash -c "! grep -q \$'\\u2014' '$GU
 check "no terminal command in the window's strings" bash -c "! grep -E '\"[^\"]*(ujust |rpm-ostree |flatpak |systemctl |scxctl )[^\"]*\"' '$GUI' | grep -vE '^\s*#|\[\"|subprocess|argv|run\(' | grep -q ."
 check "no deprecated dim-label style" bash -c "! grep -q 'dim-label' '$GUI'"
 check "Help, shortcuts and Report a Problem are in the menu" bash -c "grep -q '\"win.help\"' '$GUI' && grep -q '\"win.shortcuts\"' '$GUI' && grep -q '\"win.report\"' '$GUI'"
-check "the pages exist" bash -c "grep -q '\"startup\"' '$GUI' && grep -q '\"login\"' '$GUI' && grep -q '\"hardware\"' '$GUI' && grep -q '\"features\"' '$GUI' && grep -q '\"apps\"' '$GUI'"
+check "the pages exist" bash -c "grep -q '\"startup\"' '$GUI' && grep -q '\"login\"' '$GUI' && grep -q '\"hardware\"' '$GUI' && grep -q '\"features\"' '$GUI' && grep -q '\"apps\"' '$GUI' && grep -q '\"phone\"' '$GUI'"
+check "the Phone page talks to the daemon by its bus name and never runs kdeconnect-cli" bash -c "grep -q 'KDEC_BUS = \"org.kde.kdeconnect\"' '$GUI' && ! grep -q 'kdeconnect-cli' '$GUI'"
+check "the Phone page writes Lucciola's default (notifications to the phone off) through the daemon" grep -q 'PHONE_DEFAULT_OFF' "$GUI"
 for k in $(grep -oE '"key": "[a-z-]+"' "$GUI" | cut -d'"' -f4); do
   check "the window's feature '$k' has its verbs in the helper" bash -c "echo \"$verbs\" | grep -qx '$k-on' && echo \"$verbs\" | grep -qx '$k-off'"
 done
