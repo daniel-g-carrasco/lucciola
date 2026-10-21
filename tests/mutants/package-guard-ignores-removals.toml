@@ -1,0 +1,11 @@
+# The guard exists for one case, a package gone from the image that nobody
+# listed; a guard that does not report it is the pipeline of 2026-10-11.
+name = "package-guard-ignores-removals"
+file = ".github/scripts/package-removal-guard.py"
+old = '''    for name in removed:
+        if name not in expected:
+            problems.append'''
+new = '''    for name in removed:
+        if name not in expected and False:
+            problems.append'''
+must_fail = "bash tests/package-removal-guard.test.sh"

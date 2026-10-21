@@ -7,7 +7,7 @@
 # second remote makes "install X" ambiguous. A remote with apps installed
 # from it is left alone: that is the user's choice. Runs before every
 # preinstall (ExecStartPre, non-fatal), so it is idempotent and quiet.
-set -u
+set -euo pipefail
 FLATPAK="${FLATPAK:-flatpak}"
 remotes="$($FLATPAK remotes --system --columns=name 2>/dev/null)" || exit 0
 origins="$($FLATPAK list --system --columns=origin 2>/dev/null)" || origins=""

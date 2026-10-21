@@ -1,0 +1,7 @@
+# `set -u` alone is the shape review R6 found: the check must want -e and
+# pipefail too, not any `set` line.
+name = "strict-mode-accepts-u-alone"
+file = ".github/scripts/check-strict-mode.py"
+old = '''        missing = {"e", "u", "pipefail"} - found'''
+new = '''        missing = {"u"} - found'''
+must_fail = "bash tests/strict-mode.test.sh"
