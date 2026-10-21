@@ -71,49 +71,15 @@ if command -v dconf >/dev/null 2>&1; then
 fi
 
 # ---------------------------------------------------------------------------
-# Surgical icon fix: replace ONE low-res Adwaita Legacy PNG
+# The system update launcher's icon
 # ---------------------------------------------------------------------------
-# Verified 2026-06-05: margine-system-update.desktop's `Icon=system-
-# software-update` rendered as a blurry low-res sprite because the
-# only system-software-update icon in Bluefin DX's image is the
-# AdwaitaLegacy 48×48 PNG. Earlier attempt (PR #32) installed the
-# whole MoreWaita icon theme + set it as system default — daniel
-# rejected that as overkill ("anziché scaricare svg dell'icona e
-# applicare quello, imposti MOREWAITA SU TUTTO IL SISTEMA?").
-#
-# Surgical fix: download just the ONE high-res SVG from MoreWaita
-# and place it as Adwaita's scalable override for the icon name
-# `system-software-update`. Adwaita's scalable/ entries win over
-# its legacy PNGs at any rendering size, so the launcher draws
-# crisp at any DPI without touching the user's icon theme. No
-# tar download, no theme switch, no behaviour change anywhere
-# else in the desktop.
-# Pinned to a MoreWaita commit + sha256-verified. This is a third-party
-# asset baked into the image, so a moving `main` (or a compromise of it)
-# must not be able to silently swap the shipped SVG. Bump SHA + checksum
-# together when refreshing the icon.
-MOREWAITA_SHA="53bc2ba9c2cdc1f26ef822fcdd8a95e01cce5d58"
-MOREWAITA_SHA256="5ad21425761a7b22feaa5e8ff2681dc6743dffee76fcaab97220ae7d91ea8753"
-MOREWAITA_RAW="https://raw.githubusercontent.com/somepaulo/MoreWaita/${MOREWAITA_SHA}/scalable/legacy/system-software-update.svg"
-SYSUPDATE_TARGET="/usr/share/icons/Adwaita/scalable/apps/system-software-update.svg"
-log "Downloading high-res system-software-update.svg from MoreWaita → $SYSUPDATE_TARGET"
-MOREWAITA_TMP="$(mktemp)"
-if curl -fL --retry 5 --retry-delay 10 -sS -o "$MOREWAITA_TMP" "$MOREWAITA_RAW" \
-   && echo "${MOREWAITA_SHA256}  ${MOREWAITA_TMP}" | sha256sum -c - >/dev/null 2>&1; then
-  install -Dm0644 "$MOREWAITA_TMP" "$SYSUPDATE_TARGET"
-  # Refresh Adwaita icon cache so gtk apps see the new SVG.
-  gtk-update-icon-cache -q -t -f /usr/share/icons/Adwaita || true
-  log "system-software-update.svg installed ($(stat -c %s "$SYSUPDATE_TARGET") bytes)"
-  # Not an RPM: recorded for the SBOM (review N9, see 70-phone-cam).
-  python3 /ctx/sbom-component.py --name morewaita-system-software-update --version "0+git${MOREWAITA_SHA:0:12}" \
-    --supplier "Person: somepaulo" --url "$MOREWAITA_RAW" --sha256 "$MOREWAITA_SHA256" \
-    --license GPL-3.0-only --purl "pkg:github/somepaulo/MoreWaita@${MOREWAITA_SHA}#scalable/legacy/system-software-update.svg" \
-    --note "One icon of the MoreWaita theme, as Adwaita's scalable system-software-update." \
-    "$SYSUPDATE_TARGET"
-else
-  log "WARN: system-software-update.svg download/verify failed — launcher icon stays blurry"
-fi
-rm -f "$MOREWAITA_TMP"
+# margine-system-update.desktop uses its own icon, margine-system-update,
+# a tracked file in system_files in the family style (docs/BRANDING.md,
+# "App icons: the family style"). Until 2026-10-21 it used the stock name
+# system-software-update, whose only copy in the base image was a 48 px
+# PNG, so a pinned high-res SVG was downloaded from MoreWaita at build time
+# and placed in Adwaita's scalable/ directory. Nothing in Lucciola names
+# system-software-update now, and no third-party asset is fetched here.
 
 log "Compiling glib schemas"
 glib-compile-schemas /usr/share/glib-2.0/schemas
