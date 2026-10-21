@@ -263,7 +263,7 @@ check("webcam_status: module missing", "key" in ls.webcam_status(None, None, Fal
 
 # the camera engine: the server command, the QR payload, the pairing service
 cam = ls.server_command("camera", facing="front", size="1280x720", bit_rate=4000000, max_fps=30)
-check("server command: scrcpy's server, raw stream, no control, camera source", cam[:5] == ["CLASSPATH=/data/local/tmp/scrcpy-server.jar", "app_process", "/", "com.genymobile.scrcpy.Server", "5.0.1"] and "raw_stream=true" in cam and "control=false" in cam and "video_source=camera" in cam and "camera_facing=front" in cam and "audio=false" in cam)
+check("server command: scrcpy's server, raw stream, no control, camera source", cam[:5] == ["CLASSPATH=/data/local/tmp/lucciola-scrcpy-server.jar", "app_process", "/", "com.genymobile.scrcpy.Server", "5.0.1"] and "raw_stream=true" in cam and "control=false" in cam and "video_source=camera" in cam and "camera_facing=front" in cam and "audio=false" in cam)
 mic = ls.server_command("mic")
 check("server command: the mic is audio only, raw PCM", "video=false" in mic and "audio_source=mic" in mic and "audio_codec=raw" in mic)
 check("server command: an unknown mode is refused", (lambda: (ls.server_command("screen"), False))() if False else True)
@@ -272,6 +272,40 @@ svc2 = ls.mdns_services("List of discovered mdns services\nlucciola-1a2b\t_adb-t
 check("pairing_service_for finds the phone that scanned our code", ls.pairing_service_for(svc2, "lucciola-1a2b")["port"] == 41111)
 check("pairing_service_for ignores other services", ls.pairing_service_for(svc2, "other") is None)
 check("stream defaults: 720p over the air, 1080p over the cable", ls.stream_defaults(True) == ("1280x720", 4000000) and ls.stream_defaults(False)[0] == "1920x1080")
+PIXEL_LIST = """[server] INFO: List of cameras:
+    --camera-id=0    (back, 4080x3072, fps={15, 24, 30, 60}, zoom-range=[0,55, 8])
+        - 4032x3024
+        - 1920x1080
+        - 1280x720
+      High speed capture (--camera-high-speed):
+        - 1280x720 (fps={120, 240})
+        - 1920x1080 (fps={120, 240})
+    --camera-id=1    (front, 3440x2448, fps={15, 24, 30, 60}, zoom-range=[0,9, 10])
+        - 3264x2448
+        - 1920x1080
+        - 640x480
+"""
+by_facing = ls.camera_sizes_by_facing(PIXEL_LIST)
+check("camera sizes per lens: each lens its own list, largest first, high speed skipped",
+      by_facing == {"back": ["4032x3024", "1920x1080", "1280x720"], "front": ["3264x2448", "1920x1080", "640x480"]})
+check("camera sizes per lens: nothing from an empty list", ls.camera_sizes_by_facing("") == {})
+check("list command: the same server in list mode, cleanup off so it keeps its jar",
+      "cleanup=false" in ls.list_command("camera_sizes") and "list_camera_sizes=true" in ls.list_command("camera_sizes")
+      and ls.list_command()[0] == "CLASSPATH=" + ls.SCRCPY_SERVER_ON_PHONE)
+check("the jar on the phone carries Lucciola's name, out of scrcpy's own cleanup", ls.SCRCPY_SERVER_ON_PHONE != "/data/local/tmp/scrcpy-server.jar" and "cleanup=false" in cam)
+check("a stream id gives the server its own socket", "scid=0000002a" in ls.server_command("camera", scid=42) and ls.socket_name(42) == "scrcpy_0000002a" and ls.socket_name() == "scrcpy")
+check("webcam_status: a dropped link says the node stays listed",
+      "stays listed" in ls.webcam_status("/dev/video21", {"size": "1280x720", "facing": "back", "wireless": True, "state": "reconnecting"}, True, True))
+check("reconnect window: long enough for a Wi-Fi hiccup, short enough to give up", 30 <= ls.RECONNECT_SECONDS <= 300 and 3 <= ls.STALL_SECONDS <= 30)
+check("size_key sorts by pixels", ls.size_key("1920x1080") > ls.size_key("1280x720"))
+vc = ls.video_caps("1920x1080", "YUY2")
+check("pinned video caps: size, format, BT.601 limited, progressive, square pixels, one view, 30 fps",
+      all(f in vc for f in ("format=YUY2", "width=1920", "height=1080", "colorimetry=bt601", "interlace-mode=progressive",
+                            "pixel-aspect-ratio=1/1", "multiview-mode=mono", "framerate=30/1")))
+check("pinned video caps: the feed side carries no frame rate", "framerate" not in ls.video_caps("1280x720", rate=False))
+check("pinned video caps: a size that is not WxH falls back to 720p", "width=1280,height=720" in ls.video_caps("", "I420"))
+check("microphone caps: 16-bit stereo at the server's rate; jitter buffer under a quarter second",
+      ls.MIC_CAPS == f"audio/x-raw,format=S16LE,rate={ls.MIC_RATE},channels={ls.MIC_CHANNELS},layout=interleaved" and 0 < ls.MIC_BUFFER_NS <= 250_000_000)
 
 print("system-logic: all checks passed" if fails == 0 else f"system-logic: {fails} failed")
 sys.exit(1 if fails else 0)

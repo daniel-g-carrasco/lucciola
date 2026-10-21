@@ -34,9 +34,14 @@
 # /usr/share/lucciola/system/lucciola_system.py, which the tests run
 # without a display.
 
+import itertools
 import os
+import random
+import signal
+import socket
 import subprocess
 import sys
+import threading
 import time
 
 import gi
@@ -99,7 +104,6 @@ KDEC_DOWNLOAD = "https://kdeconnect.kde.org/download.html"
 # copy into the v4l2loopback device when the image's module is loaded, for
 # apps that only speak V4L2. qrencode draws the pairing QR code. All as the
 # user, no privilege. Phone Camera was a window of its own until 2026-10-21.
-SCRCPY = "/usr/bin/scrcpy"
 ADB = "/usr/bin/adb"
 QRENCODE = "/usr/bin/qrencode"
 CAM_LABEL = "Lucciola Phone Cam"
@@ -329,153 +333,551 @@ def find_loopback_device():
     return fallback
 
 
+PHONE_LOCK = threading.Lock()
+STREAM_GENERATIONS = itertools.count(1)
+
+
+class Stopped(RuntimeError):
+    """The stream was stopped while a step on the phone was under way."""
+
+
+def push_server(serial):
+    """scrcpy's server, sent before every launch under Lucciola's own name:
+    the phone may have lost it, and a server run with cleanup on (as the
+    scrcpy client runs it) deletes its jar at start."""
+    rc, out, err = run([ADB, "-s", serial, "push", ls.SCRCPY_SERVER, ls.SCRCPY_SERVER_ON_PHONE], timeout=30)
+    if rc != 0:
+        raise RuntimeError("could not send the server to the phone: " + ls.last_line(err or out))
+
+
+def device_present(serial):
+    rc, out, _ = run([ADB, "-s", serial, "get-state"], timeout=10)
+    return rc == 0 and out.strip() == "device"
+
+
+def list_camera_sizes(serial):
+    """{facing: sizes}, straight from the server's list mode."""
+    with PHONE_LOCK:
+        push_server(serial)
+        rc, out, err = run([ADB, "-s", serial, "shell"] + ls.list_command("camera_sizes"), timeout=25)
+    return ls.camera_sizes_by_facing(out + "\n" + err) if rc == 0 else {}
+
+
 class PhoneStream:
-    """One stream from the phone into PipeWire: the camera as a video
-    source ("Lucciola Phone Cam") or the microphone as an audio source
-    ("Lucciola Phone Mic"). We drive scrcpy's own server on the phone
-    (adb push, adb forward, adb shell app_process) in raw-stream mode, so
-    the TCP socket carries bare H.264 or bare PCM, and a GStreamer pipeline
-    decodes it into pipewiresink. No kernel module: apps that use the
-    camera portal and PipeWire (Flatpak browsers, GNOME apps, calls) see the
-    camera at once. When the v4l2loopback device is there, the video is
-    copied into it too, for apps that only speak V4L2. The preview is a
-    branch of the same pipeline, so the phone is decoded once."""
+    """One stream of the phone, camera or microphone, as a PipeWire source
+    that stays listed while the phone comes and goes.
+
+    The outlet lives as long as the stream is on: an inter source, its caps
+    pinned for the whole session, into pipewiresink, so Lucciola Phone Cam
+    keeps its node and the apps keep their picture across a change of lens
+    or a Wi-Fi hiccup. pipewiresink runs with async off: with it on, the
+    sink waits to preroll until an app links to the node, and until then
+    nothing flows. And it never lends its buffer pool upstream (identity
+    drop-allocation): with the converter writing straight into PipeWire's
+    buffers, an app got about seventeen frames and then nothing, and the
+    process could crash in the pool; pipewiresink copies each frame instead. The camera's outlet hands its frames on through two more
+    inter channels, each read by a pipeline of its own: the preview, built
+    only while the dialog shows it, and the copy into the v4l2loopback
+    device when there is one. Their trouble stays theirs: a GTK sink inside
+    the outlet held the PipeWire branch back (apps got a frame or two and
+    then nothing), and a busy device costs the V4L2 copy, never the node.
+
+    The feed is rebuilt for every connection to the phone: adb sends
+    scrcpy's server, forwards its socket and starts it in raw-stream mode;
+    the bare H.264 or PCM is decoded into the inter sink. When the feed dies
+    (the adb link drops, the cable comes out, the phone stalls) the outlet
+    goes black or silent and the phone is tried again every two seconds,
+    for RECONNECT_SECONDS, before the stream gives up.
+
+    Steps on the phone run in worker threads, one feed at a time
+    (self._lock) and one push at a time (PHONE_LOCK); stop() is quick from
+    any thread. Every start and stop is a new generation: a worker that
+    finds the generation changed undoes what it built and leaves."""
 
     def __init__(self, mode):
         self.mode = mode
-        self.server = None
-        self.pipeline = None
-        self.sock = None
-        self.port = None
         self.serial = None
         self.label = ""
         self.wireless = False
         self.facing = "back"
         self.size = ""
-        self.paintable = None
         self.on_end = None
-        self.stopping = False
+        self.on_state = None
+        self.state = "off"
+        self.note = ""
+        self.log_path = os.path.join(GLib.get_user_runtime_dir(), f"lucciola-phone-{mode}.log")
+        self._gen = 0
+        self._channel = ""
+        self._outlet = None
+        self._loopback = None
+        self._preview = None
+        self._preview_paintable = None
+        self._preview_channel = ""
+        self._feed = None
+        self._last_data = 0.0
+        self._lock = threading.Lock()
+        self._swap = threading.Lock()
+        self._releases = 0
+        self._released = threading.Condition()
 
     @property
     def running(self):
-        return self.pipeline is not None
+        return self._outlet is not None
 
     def info(self):
         if not self.running:
             return None
-        return {"size": self.size, "facing": self.facing, "wireless": self.wireless, "label": self.label, "serial": self.serial}
+        return {"size": self.size, "facing": self.facing, "wireless": self.wireless, "label": self.label,
+                "serial": self.serial, "state": self.state}
 
-    def start(self, serial, label, wireless, facing, size, on_end):
-        """Blocking for a few seconds (adb, the phone's camera): call from a thread."""
-        self.serial, self.label, self.wireless, self.facing, self.size, self.on_end = serial, label, wireless, facing, size, on_end
-        self.stopping = False
-        rc, out, err = run([ADB, "-s", serial, "push", ls.SCRCPY_SERVER, ls.SCRCPY_SERVER_ON_PHONE], timeout=30)
-        if rc != 0:
-            raise RuntimeError("could not send the server to the phone: " + ls.last_line(err or out))
-        self.port = free_port()
-        rc, out, err = run([ADB, "-s", serial, "forward", f"tcp:{self.port}", "localabstract:scrcpy"], timeout=15)
-        if rc != 0:
-            raise RuntimeError("adb could not forward the phone's socket: " + ls.last_line(err or out))
-        _, bit_rate = ls.stream_defaults(wireless)
-        command = ls.server_command(self.mode, facing=facing, size=size, bit_rate=bit_rate)
-        self.server = Gio.Subprocess.new([ADB, "-s", serial, "shell"] + command,
-                                         Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE)
-        self.server.wait_async(None, self._on_server_exit, self.server)
-        self.sock = self._connect()
-        self._build_pipeline()
+    def _take(self, name):
+        with self._swap:
+            value = getattr(self, name)
+            setattr(self, name, None)
+            return value
 
-    def _connect(self):
-        """adb forward accepts at once; the phone's server listens a moment
-        later and sends its first bytes on its own. Connect until bytes come."""
-        import socket
+    def _notify(self):
+        if self.on_state:
+            on_main(self.on_state, self.mode, self.state)
+
+    def _log(self, text):
+        # stderr reaches the journal when the app runs from the desktop.
+        print(f"lucciola-system: phone {self.mode}: {text}", file=sys.stderr, flush=True)
+
+    # ── on and off ──
+    def start(self, serial, label, wireless, facing, size, on_end, on_state=None):
+        """Blocking for a few seconds (adb, the phone's camera): call from a
+        thread. Raises RuntimeError, or Stopped when stop() came first."""
+        gen = self._gen = next(STREAM_GENERATIONS)
+        self.serial, self.label, self.wireless, self.facing, self.size = serial, label, wireless, facing, size
+        self.on_end, self.on_state = on_end, on_state
+        self.note = ""
+        self._channel = f"lucciola-{self.mode}-{os.getpid()}-{gen}"
+        if self._wait_released():
+            time.sleep(0.5)  # the camera service lets go of a lens once its client is gone
+        with self._lock:
+            if gen != self._gen:
+                raise Stopped("stopped")
+            self._open_outlet()
+            try:
+                self._open_feed(gen)
+            except RuntimeError:
+                self._close_outlet()
+                raise
+            self.state = "streaming"
+        self._notify()
+        GLib.timeout_add_seconds(2, self._watch, gen)
+
+    def stop(self, wait=False):
+        """Quick from any thread: the node goes at once and the phone's server
+        is let go in the background; wait=True lets it go here and now."""
+        self._gen = next(STREAM_GENERATIONS)
+        self.state = "off"
+        self._close_outlet()
+        feed = self._take("_feed")
+        if feed is None:
+            return
+        if wait:
+            self._drop_feed(feed)
+        else:
+            self._release_later(feed)
+
+    def set_facing(self, facing):
+        """Blocking: the feed is rebuilt with the other lens while the outlet
+        and its node stay. When the new lens fails the old one comes back;
+        when neither does, the stream goes on trying as after a drop."""
+        gen = self._gen
+        if not self.running:
+            self.facing = facing
+            return
+        if facing == self.facing:
+            return
+        old = self.facing
+        self.state = "switching"
+        self._notify()
+        error = None
+        with self._lock:
+            if gen != self._gen:
+                raise Stopped("stopped")
+            feed = self._take("_feed")
+            if feed is not None:
+                self._drop_feed(feed)
+            time.sleep(0.5)
+            for lens in (facing, old):
+                self.facing = lens
+                try:
+                    self._open_feed(gen)
+                    break
+                except Stopped:
+                    raise
+                except RuntimeError as e:
+                    error = error or e
+            if self._feed is not None:
+                self.state = "streaming"
+        if self._feed is None:
+            self.facing = old
+            self._begin_reconnect(gen, str(error))
+        else:
+            self._notify()
+        if self.facing != facing:
+            raise RuntimeError(str(error))
+
+    # ── the outlet: the PipeWire node, the preview, the copy into V4L2 ──
+    def _open_outlet(self):
+        ch = self._channel
+        device = None
+        if self.mode == "camera":
+            desc = (f"intervideosrc channel={ch} timeout={ls.STALL_SECONDS * Gst.SECOND} ! videoconvert qos=false ! videoscale qos=false "
+                    f"! capsfilter caps=\"{ls.video_caps(self.size, 'I420')}\" ! tee name=t "
+                    f"t. ! queue leaky=downstream max-size-buffers=2 ! videoconvert qos=false "
+                    f"! capsfilter caps=\"{ls.video_caps(self.size, 'YUY2')}\" ! identity drop-allocation=true ! pipewiresink name=pw mode=provide async=false qos=false "
+                    f"t. ! queue leaky=downstream max-size-buffers=2 ! intervideosink channel={ch}-preview sync=false")
+            device = find_loopback_device()
+            if device:
+                desc += f" t. ! queue leaky=downstream max-size-buffers=2 ! intervideosink channel={ch}-v4l2 sync=false"
+            props = f'props,media.class="Video/Source",node.name="{CAM_NODE}",node.description="{CAM_LABEL}",media.role="Camera"'
+        else:
+            desc = (f"interaudiosrc channel={ch} buffer-time={ls.MIC_BUFFER_NS} ! audioconvert ! audioresample "
+                    f"! capsfilter caps=\"{ls.MIC_CAPS}\" ! identity drop-allocation=true ! pipewiresink name=pw mode=provide async=false qos=false")
+            props = f'props,media.class="Audio/Source",node.name="{MIC_NODE}",node.description="{MIC_LABEL}"'
+        self._log(f"start: {self.facing} {self.size} from {self.serial}" if self.mode == "camera" else f"start: from {self.serial}")
+        try:
+            pipeline = Gst.parse_launch(desc)
+        except GLib.Error as e:
+            raise RuntimeError("GStreamer could not build the stream: " + e.message) from None
+        parsed = Gst.Structure.from_string(props)
+        pipeline.get_by_name("pw").set_property("stream-properties", parsed[0] if isinstance(parsed, tuple) else parsed)
+        bus = pipeline.get_bus()
+        bus.add_signal_watch()
+        bus.connect("message::error", self._on_outlet_error)
+        if pipeline.set_state(Gst.State.PLAYING) == Gst.StateChangeReturn.FAILURE:
+            bus.remove_signal_watch()
+            pipeline.set_state(Gst.State.NULL)
+            raise RuntimeError("PipeWire did not take the stream")
+        self._outlet = pipeline
+        if device:
+            self._open_loopback(device)
+
+    def _open_loopback(self, device):
+        desc = (f"intervideosrc channel={self._channel}-v4l2 timeout={ls.STALL_SECONDS * Gst.SECOND} ! videoconvert qos=false ! videoscale qos=false "
+                f"! capsfilter caps=\"{ls.video_caps(self.size, 'YUY2')}\" ! v4l2sink device={device} sync=false qos=false")
+        try:
+            pipeline = Gst.parse_launch(desc)
+        except GLib.Error as e:
+            self.note = f"Apps that read {device} directly get nothing this time: {e.message}"
+            return
+        bus = pipeline.get_bus()
+        bus.add_signal_watch()
+        bus.connect("message::error", self._on_loopback_error, device)
+        pipeline.set_state(Gst.State.PLAYING)
+        self._loopback = pipeline
+
+    def _on_loopback_error(self, _bus, message, device):
+        err = message.parse_error()[0].message
+        self._close_loopback()
+        self.note = f"Apps that read {device} directly get nothing this time: {err}"
+        self._log(f"the copy into {device} stopped: {err}")
+        self._notify()
+
+    def _close_loopback(self):
+        loopback = self._take("_loopback")
+        if loopback is not None:
+            loopback.get_bus().remove_signal_watch()
+            loopback.set_state(Gst.State.NULL)
+
+    def _close_outlet(self):
+        self._close_loopback()
+        outlet = self._take("_outlet")
+        if outlet is not None:
+            outlet.get_bus().remove_signal_watch()
+            outlet.set_state(Gst.State.NULL)
+        # The GTK sink is the main thread's business.
+        if threading.current_thread() is threading.main_thread():
+            self.close_preview()
+        else:
+            on_main(self.close_preview)
+
+    def preview_paintable(self):
+        """Main thread: the dialog's picture, from a pipeline of its own that
+        reads the outlet's preview channel; built on first use, rebuilt when
+        the stream started again under a new channel."""
+        if self.mode != "camera" or not self.running:
+            return None
+        channel = f"{self._channel}-preview"
+        if self._preview is not None and self._preview_channel != channel:
+            self.close_preview()
+        if self._preview is None:
+            try:
+                pipeline = Gst.parse_launch(f"intervideosrc channel={channel} timeout={ls.STALL_SECONDS * Gst.SECOND} "
+                                            f"! videoconvert qos=false ! gtk4paintablesink name=preview sync=false async=false qos=false")
+            except GLib.Error as e:
+                self._log("no preview: " + e.message)
+                return None
+            self._preview_paintable = pipeline.get_by_name("preview").get_property("paintable")
+            pipeline.set_state(Gst.State.PLAYING)
+            self._preview, self._preview_channel = pipeline, channel
+        return self._preview_paintable
+
+    def close_preview(self):
+        """Main thread: the dialog closed, or the stream stopped."""
+        preview = self._take("_preview")
+        if preview is not None:
+            preview.set_state(Gst.State.NULL)
+        self._preview_paintable = None
+
+    def _on_outlet_error(self, _bus, message):
+        self._give_up(self._gen, message.parse_error()[0].message)
+
+    # ── the feed: the server on the phone, its socket, the decoder ──
+    def _open_feed(self, gen):
+        """Under self._lock, in a worker. Raises RuntimeError, Stopped when
+        the stream was stopped meanwhile."""
+        serial = self.serial
+        feed = {"serial": serial, "port": None, "server": None, "sock": None, "pipeline": None, "live": False}
+        spawned = False
+        try:
+            with PHONE_LOCK:
+                if gen != self._gen:
+                    raise Stopped("stopped")
+                push_server(serial)
+                scid = random.getrandbits(31)
+                # tcp:0: adb picks a free port and prints it.
+                rc, out, err = run([ADB, "-s", serial, "forward", "tcp:0", "localabstract:" + ls.socket_name(scid)], timeout=15)
+                port = out.strip()
+                if rc != 0 or not port.isdigit():
+                    raise RuntimeError("adb could not forward the phone's socket: " + ls.last_line(err or out))
+                feed["port"] = int(port)
+                _, bit_rate = ls.stream_defaults(self.wireless)
+                command = ls.server_command(self.mode, facing=self.facing, size=self.size, bit_rate=bit_rate, scid=scid)
+                with open(self.log_path, "w", encoding="utf-8") as log:
+                    feed["server"] = subprocess.Popen([ADB, "-s", serial, "shell"] + command,
+                                                      stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
+                spawned = True
+            threading.Thread(target=self._wait_server, args=(feed, feed["server"]), daemon=True).start()
+            feed["sock"] = self._connect(feed, gen)
+            self._build_feed_pipeline(feed)
+        except Stopped:
+            self._drop_feed(feed)
+            raise
+        except (RuntimeError, OSError, GLib.Error) as e:
+            self._drop_feed(feed)
+            message = getattr(e, "message", None) or str(e)
+            tail = ls.last_line(read_file(self.log_path)) if spawned else ""
+            raise RuntimeError(message + (f" ({tail})" if tail and tail not in message else "")) from None
+        if gen != self._gen:
+            self._drop_feed(feed)
+            raise Stopped("stopped")
+        with self._swap:
+            old, self._feed = self._feed, feed
+        if old is not None:
+            self._release_later(old)
+
+    def _connect(self, feed, gen):
+        """adb forward accepts at once; the server on the phone listens a
+        moment later and sends its first bytes on its own: connect until
+        bytes come."""
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
-            if self.server is None:
-                break
+            if gen != self._gen:
+                raise Stopped("stopped")
+            if feed["server"].poll() is not None:
+                raise RuntimeError("the phone's server stopped at once")
+            sock = None
             try:
-                sock = socket.create_connection(("127.0.0.1", self.port), timeout=2)
+                sock = socket.create_connection(("127.0.0.1", feed["port"]), timeout=2)
                 sock.settimeout(2.5)
                 if sock.recv(1, socket.MSG_PEEK):
                     sock.settimeout(None)
-                    return sock
+                    sock, ready = None, sock
+                    return ready
+            except OSError:
+                pass
+            finally:
+                if sock is not None:
+                    sock.close()
+            time.sleep(0.4)
+        raise RuntimeError("the phone did not start the stream")
+
+    def _build_feed_pipeline(self, feed):
+        fd = feed["sock"].fileno()
+        if self.mode == "camera":
+            desc = (f"fdsrc fd={fd} ! h264parse ! decodebin ! videoconvert ! videoscale "
+                    f"! capsfilter caps=\"{ls.video_caps(self.size, 'I420', rate=False)}\" "
+                    f"! identity name=watch ! intervideosink channel={self._channel} sync=false")
+        else:
+            desc = (f"fdsrc fd={fd} do-timestamp=true ! rawaudioparse use-sink-caps=false format=pcm pcm-format=s16le "
+                    f"sample-rate={ls.MIC_RATE} num-channels={ls.MIC_CHANNELS} ! audioconvert "
+                    f"! capsfilter caps=\"{ls.MIC_CAPS}\" ! identity name=watch ! interaudiosink channel={self._channel} sync=false")
+        pipeline = Gst.parse_launch(desc)
+        pipeline.get_by_name("watch").connect("handoff", self._on_data)
+        bus = pipeline.get_bus()
+        bus.add_signal_watch()
+        bus.connect("message::error", self._on_feed_message, feed)
+        bus.connect("message::eos", self._on_feed_message, feed)
+        self._last_data = time.monotonic()
+        feed["pipeline"] = pipeline
+        feed["live"] = True
+        if pipeline.set_state(Gst.State.PLAYING) == Gst.StateChangeReturn.FAILURE:
+            raise RuntimeError("the decoder did not start")
+
+    def _on_data(self, _identity, _buffer):
+        self._last_data = time.monotonic()
+
+    def _on_feed_message(self, _bus, message, feed):
+        if message.type == Gst.MessageType.ERROR:
+            self._lost(feed, message.parse_error()[0].message)
+        else:
+            self._lost(feed, "the phone closed the stream")
+
+    def _wait_server(self, feed, proc):
+        proc.wait()
+        on_main(self._lost, feed, "the phone closed the stream")
+
+    def _drop_feed(self, feed):
+        """Blocking up to a few seconds, never on the main thread unless the
+        app is closing: the decoder, the socket, the server on the phone (the
+        lens is free only once it is gone), the forward."""
+        feed["live"] = False
+        pipeline, feed["pipeline"] = feed["pipeline"], None
+        if pipeline is not None:
+            pipeline.get_bus().remove_signal_watch()
+            pipeline.set_state(Gst.State.NULL)
+        sock, feed["sock"] = feed["sock"], None
+        if sock is not None:
+            try:
                 sock.close()
             except OSError:
                 pass
-            time.sleep(0.4)
-        raise RuntimeError("the phone did not start the stream (is the screen on and the phone unlocked?)")
+        server, feed["server"] = feed["server"], None
+        if server is not None and server.poll() is None:
+            server.send_signal(signal.SIGINT)
+            try:
+                server.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                server.kill()
+                try:
+                    server.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    pass
+        port, feed["port"] = feed["port"], None
+        if port:
+            run([ADB, "-s", feed["serial"], "forward", "--remove", f"tcp:{port}"], timeout=10)
 
-    def _build_pipeline(self):
-        fd = self.sock.fileno()
-        if self.mode == "camera":
-            desc = (f"fdsrc fd={fd} ! h264parse ! decodebin ! videoconvert ! tee name=t "
-                    f"t. ! queue ! videoconvert ! video/x-raw,format=YUY2 ! pipewiresink name=pw mode=provide "
-                    f"t. ! queue leaky=downstream max-size-buffers=2 ! videoconvert ! gtk4paintablesink name=preview")
-            device = find_loopback_device()
-            if device:
-                desc += f" t. ! queue leaky=downstream ! videoconvert ! video/x-raw,format=YUY2 ! v4l2sink device={device} sync=false"
-            props = f'props,media.class="Video/Source",node.name="{CAM_NODE}",node.description="{CAM_LABEL}",media.role="Camera"'
-        else:
-            desc = (f"fdsrc fd={fd} do-timestamp=true ! rawaudioparse use-sink-caps=false format=pcm pcm-format=s16le "
-                    f"sample-rate={ls.MIC_RATE} num-channels={ls.MIC_CHANNELS} ! audioconvert ! pipewiresink name=pw mode=provide")
-            props = f'props,media.class="Audio/Source",node.name="{MIC_NODE}",node.description="{MIC_LABEL}"'
-        pipeline = Gst.parse_launch(desc)
-        pw = pipeline.get_by_name("pw")
-        parsed = Gst.Structure.from_string(props)
-        pw.set_property("stream-properties", parsed[0] if isinstance(parsed, tuple) else parsed)
-        preview = pipeline.get_by_name("preview")
-        self.paintable = preview.get_property("paintable") if preview is not None else None
-        bus = pipeline.get_bus()
-        bus.add_signal_watch()
-        bus.connect("message::error", self._on_bus_error)
-        bus.connect("message::eos", lambda *_: self._ended("the stream ended"))
-        pipeline.set_state(Gst.State.PLAYING)
-        self.pipeline = pipeline
+    def _release_later(self, feed):
+        with self._released:
+            self._releases += 1
 
-    def _on_bus_error(self, _bus, message):
-        err, _debug = message.parse_error()
-        self._ended(err.message)
+        def work():
+            try:
+                self._drop_feed(feed)
+            finally:
+                with self._released:
+                    self._releases -= 1
+                    self._released.notify_all()
 
-    def _on_server_exit(self, proc, result, proc_ref):
-        try:
-            proc.wait_finish(result)
-        except GLib.Error:
-            pass
-        if self.server is proc_ref and not self.stopping:
-            self._ended("the phone closed the stream")
+        in_thread(work)
 
-    def _ended(self, why):
-        if self.stopping:
+    def _wait_released(self, timeout=8):
+        """True when a feed being let go had to be waited for."""
+        with self._released:
+            if self._releases == 0:
+                return False
+            self._released.wait_for(lambda: self._releases == 0, timeout)
+            return True
+
+    # ── losing the phone and getting it back ──
+    def _watch(self, gen):
+        if gen != self._gen:
+            return False
+        feed = self._feed
+        if feed is not None and time.monotonic() - self._last_data > ls.STALL_SECONDS:
+            self._lost(feed, f"no data from the phone for {ls.STALL_SECONDS} seconds")
+        return True
+
+    def _lost(self, feed, why):
+        if self._feed is not feed or not feed["live"] or self.state != "streaming":
+            return
+        feed["live"] = False
+        self._log(f"link lost: {why}")
+        self._begin_reconnect(self._gen, why)
+
+    def _begin_reconnect(self, gen, why):
+        if gen != self._gen or self.state == "reconnecting":
+            return
+        self.state = "reconnecting"
+        self._notify()
+        in_thread(self._reconnect, gen, why)
+
+    def _reconnect(self, gen, why):
+        with self._lock:
+            if gen != self._gen:
+                return
+            feed = self._take("_feed")
+        if feed is not None:
+            self._drop_feed(feed)
+        deadline = time.monotonic() + ls.RECONNECT_SECONDS
+        last = ""
+        while time.monotonic() < deadline:
+            time.sleep(2.0)
+            if gen != self._gen:
+                return
+            if not self._reach():
+                continue
+            with self._lock:
+                if gen != self._gen or self.state != "reconnecting":
+                    return
+                try:
+                    self._open_feed(gen)
+                except Stopped:
+                    return
+                except RuntimeError as e:
+                    last = str(e)
+                    self._log(f"not back yet: {last}")
+                    continue
+                self.state = "streaming"
+            self._log(f"back after {ls.RECONNECT_SECONDS - (deadline - time.monotonic()):.0f} s")
+            self._notify()
+            return
+        if gen == self._gen:
+            reason = why + "; the phone did not come back" + (f" ({last})" if last else f" in {ls.RECONNECT_SECONDS} seconds")
+            self._log("giving up: " + reason)
+            on_main(self._give_up, gen, reason)
+
+    def _reach(self):
+        """adb sees the phone again. Over Wi-Fi adb is asked to connect (it
+        reconnects by itself after a short drop, not after a long one), and
+        when wireless debugging moved to another port, the service the phone
+        advertises at the same address is followed."""
+        rc, out, err = run([ADB, "-s", self.serial, "get-state"], timeout=10)
+        if rc == 0 and out.strip() == "device":
+            return True
+        if not self.wireless:
+            return False
+        if "offline" in out + err:
+            # adb keeps a dead transport as offline and answers "already
+            # connected" to a plain connect: drop it, then dial again.
+            run([ADB, "disconnect", self.serial], timeout=10)
+        run([ADB, "connect", self.serial], timeout=10)
+        if device_present(self.serial):
+            return True
+        host = self.serial.rpartition(":")[0]
+        _, out, _ = run([ADB, "mdns", "services"], timeout=10)
+        service = ls.connect_service_for(ls.mdns_services(out), [host])
+        if service is not None:
+            serial = f"{service['host']}:{service['port']}"
+            if serial != self.serial:
+                run([ADB, "connect", serial], timeout=10)
+                if device_present(serial):
+                    self.serial = serial
+                    return True
+        return False
+
+    def _give_up(self, gen, why):
+        if gen != self._gen:
             return
         self.stop()
         if self.on_end:
-            on_main(self.on_end, self.mode, why)
-
-    def stop(self):
-        self.stopping = True
-        if self.pipeline is not None:
-            pipeline, self.pipeline = self.pipeline, None
-            pipeline.get_bus().remove_signal_watch()
-            pipeline.set_state(Gst.State.NULL)
-        self.paintable = None
-        if self.sock is not None:
-            try:
-                self.sock.close()
-            except OSError:
-                pass
-            self.sock = None
-        if self.server is not None:
-            server, self.server = self.server, None
-            server.send_signal(2)
-        if self.port and self.serial:
-            run([ADB, "-s", self.serial, "forward", "--remove", f"tcp:{self.port}"], timeout=10)
-        self.port = None
-
-
-def free_port():
-    import socket
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
+            self.on_end(self.mode, why)
 
 
 class CameraSession:
@@ -506,9 +908,9 @@ class CameraSession:
     def info(self):
         return self.camera.info()
 
-    def stop(self):
-        self.camera.stop()
-        self.mic.stop()
+    def stop(self, wait=False):
+        self.camera.stop(wait)
+        self.mic.stop(wait)
 
 
 class CameraDialog(Adw.Dialog):
@@ -523,6 +925,7 @@ class CameraDialog(Adw.Dialog):
         self._loading = False
         self._restart_id = None
         self._busy = False
+        self._sizes_by_facing = {}
         Gst.init(None)
         self.set_title("Phone Camera")
         self.set_content_width(520)
@@ -539,16 +942,17 @@ class CameraDialog(Adw.Dialog):
 
         camera = Adw.PreferencesGroup(title="Camera", description=f"Apps list it as {CAM_LABEL} while it runs.")
         page.add(camera)
+        self._camera_group = camera
         self._facing = Adw.ComboRow(title="Lens")
         self._facing.add_prefix(icon("camera-switch-symbolic"))
         self._facing.set_model(Gtk.StringList.new(["Back", "Front"]))
         self._facing.set_selected(1 if self._session.running and self._session.camera.facing == "front" else 0)
-        self._facing.connect("notify::selected", self._on_setting_changed)
+        self._facing.connect("notify::selected", self._on_facing_changed)
         camera.add(self._facing)
         self._size = Adw.ComboRow(title="Resolution", subtitle="720p over Wi-Fi, 1080p over USB; larger sizes cost bandwidth and battery")
         self._size.add_prefix(icon("view-fullscreen-symbolic"))
         self._set_sizes(list(ls.CAM_DEFAULT_SIZES))
-        self._size.connect("notify::selected", self._on_setting_changed)
+        self._size.connect("notify::selected", self._on_size_changed)
         camera.add(self._size)
 
         run_group = Adw.PreferencesGroup()
@@ -583,15 +987,31 @@ class CameraDialog(Adw.Dialog):
     def _set_sizes(self, sizes):
         self._loading = True
         self._size.set_model(Gtk.StringList.new(sizes))
-        want = self._session.camera.size if self._session.running else ls.default_size(sizes, self._target["wireless"])
+        want = self._session.camera.size if self._session.running else None
+        if want not in sizes:
+            want = ls.default_size(sizes, self._target["wireless"])
         self._size.set_selected(sizes.index(want) if want in sizes else 0)
         self._loading = False
 
     def _load_sizes(self):
-        rc, out, _ = run([SCRCPY, "-s", self._target["serial"], "--list-camera-sizes"], timeout=25)
-        sizes = ls.camera_sizes(out) if rc == 0 else []
-        if sizes:
-            on_main(self._set_sizes, sizes)
+        try:
+            by_facing = list_camera_sizes(self._target["serial"])
+        except RuntimeError:
+            by_facing = {}
+        if by_facing:
+            on_main(self._sizes_loaded, by_facing)
+
+    def _sizes_loaded(self, by_facing):
+        self._sizes_by_facing = by_facing
+        self._set_sizes(self._sizes_for(self._chosen()[0]))
+
+    def _sizes_for(self, facing):
+        """The sizes of one lens; every size seen when the lens is unknown;
+        the defaults before the phone answered."""
+        sizes = self._sizes_by_facing.get(facing)
+        if not sizes:
+            sizes = sorted({s for v in self._sizes_by_facing.values() for s in v}, key=ls.size_key, reverse=True)
+        return sizes or list(ls.CAM_DEFAULT_SIZES)
 
     def _chosen(self):
         facing = "front" if self._facing.get_selected() == 1 else "back"
@@ -601,11 +1021,20 @@ class CameraDialog(Adw.Dialog):
     # start / stop
     def _sync(self):
         running = self._session.running
-        self._button.set_label("Starting…" if self._busy else ("Stop Camera" if running else "Start Camera"))
+        state = self._session.camera.state
+        if self._busy:
+            label = "Switching…" if running else "Starting…"
+        else:
+            label = "Stop Camera" if running else "Start Camera"
+        self._button.set_label(label)
         self._button.set_sensitive(not self._busy)
+        link = "Over Wi-Fi" if self._target["wireless"] else "Over USB"
+        self._phone_row.set_subtitle(link + (": the link dropped, reconnecting…" if state == "reconnecting" else ""))
+        note = self._session.camera.note if running else ""
+        self._camera_group.set_description(f"Apps list it as {CAM_LABEL} while it runs." + (f" {note}." if note else ""))
         self._button.remove_css_class("suggested-action" if running else "destructive-action")
         self._button.add_css_class("destructive-action" if running else "suggested-action")
-        paintable = self._session.camera.paintable if running else None
+        paintable = self._session.camera.preview_paintable() if running else None
         self._picture.set_paintable(paintable)
         self._picture.set_visible(paintable is not None)
         self._mic.set_active(self._session.mic_running)
@@ -627,8 +1056,11 @@ class CameraDialog(Adw.Dialog):
 
         def worker():
             try:
-                self._session.camera.start(target["serial"], target["label"], target["wireless"], facing, size, self._win._on_stream_end)
+                self._session.camera.start(target["serial"], target["label"], target["wireless"], facing, size,
+                                           self._win._on_stream_end, self._win._on_stream_state)
                 on_main(self._started, None)
+            except Stopped:
+                on_main(self._started, "")
             except (RuntimeError, GLib.Error) as e:
                 on_main(self._started, getattr(e, "message", None) or str(e))
 
@@ -639,25 +1071,74 @@ class CameraDialog(Adw.Dialog):
         self._sync()
         if error:
             self._win._toast(f"Could not start the camera: {error}")
-        else:
+        elif error is None:
             self._win._toast(f"Camera running: pick {CAM_LABEL} in any app")
         self._win._phone_refresh_soon()
 
-    def _on_setting_changed(self, *_args):
-        # A change while streaming restarts the stream with the new parameters.
+    def _on_facing_changed(self, *_args):
+        # The other lens lists its own sizes; while streaming, the feed is
+        # rebuilt with it and the PipeWire node stays.
+        if self._loading:
+            return
+        self._set_sizes(self._sizes_for(self._chosen()[0]))
+        if self._session.running:
+            self._later(self._switch_lens)
+
+    def _on_size_changed(self, *_args):
+        # A new size is a new node: the stream restarts with it.
         if not self._session.running or self._loading:
             return
+        self._later(self._restart)
+
+    def _later(self, fn):
         if self._restart_id:
             GLib.source_remove(self._restart_id)
-        self._restart_id = GLib.timeout_add(400, self._restart)
+        self._restart_id = GLib.timeout_add(400, fn)
+
+    def _switch_lens(self):
+        self._restart_id = None
+        facing, size = self._chosen()
+        camera = self._session.camera
+        if not camera.running or facing == camera.facing:
+            return False
+        if size != camera.size:
+            # This lens lacks the size in use: a new size is a new node.
+            return self._restart()
+        self._busy = True
+        self._sync()
+
+        def worker():
+            try:
+                camera.set_facing(facing)
+                on_main(self._switched, None)
+            except Stopped:
+                on_main(self._switched, "")
+            except (RuntimeError, GLib.Error) as e:
+                on_main(self._switched, getattr(e, "message", None) or str(e))
+
+        in_thread(worker)
+        return False
+
+    def _switched(self, error):
+        self._busy = False
+        if error:
+            self._loading = True
+            self._facing.set_selected(1 if self._session.camera.facing == "front" else 0)
+            self._loading = False
+            self._win._toast(f"Could not switch the lens: {error}")
+        self._sync()
+        self._win._phone_refresh_soon()
 
     def _restart(self):
+        # A new size: the node goes and comes back with it. start() waits
+        # for the old server to let go of the lens.
         self._restart_id = None
-        if self._session.running:
-            self._session.restarting = True
-            self._session.camera.stop()
-            self._session.restarting = False
-            self._start()
+        if not self._session.running:
+            return False
+        self._session.restarting = True
+        self._session.camera.stop()
+        self._session.restarting = False
+        self._start()
         return False
 
     # microphone
@@ -668,8 +1149,11 @@ class CameraDialog(Adw.Dialog):
         if switch.get_active():
             def worker():
                 try:
-                    self._session.mic.start(target["serial"], target["label"], target["wireless"], "back", "", self._win._on_stream_end)
+                    self._session.mic.start(target["serial"], target["label"], target["wireless"], "back", "",
+                                            self._win._on_stream_end, self._win._on_stream_state)
                     on_main(self._win._toast, f"{MIC_LABEL} is available in calls")
+                except Stopped:
+                    pass
                 except (RuntimeError, GLib.Error) as e:
                     on_main(self._mic_failed, getattr(e, "message", None) or str(e))
 
@@ -711,6 +1195,8 @@ class CameraDialog(Adw.Dialog):
         if self._restart_id:
             GLib.source_remove(self._restart_id)
         self._picture.set_paintable(None)
+        self._session.camera.close_preview()
+        self._win._cam_dialog = None
 
 
 class SystemWindow(Adw.ApplicationWindow):
@@ -747,6 +1233,7 @@ class SystemWindow(Adw.ApplicationWindow):
         self._phone_refresh_pending = False
         self._phone_name_guard = False
         self._cam = CameraSession()
+        self._cam_dialog = None
         self._adb_devices = []
         self._adb_services = []
         self._cam_device = None
@@ -2773,7 +3260,8 @@ class SystemWindow(Adw.ApplicationWindow):
         if self._cam.running and self._cam.serial != target["serial"]:
             self._toast(f"The camera is already streaming from {self._cam.label}: stop it first")
             return
-        CameraDialog(self, target).present(self)
+        self._cam_dialog = CameraDialog(self, target)
+        self._cam_dialog.present(self)
 
     def _stop_camera(self):
         self._cam.restarting = False
@@ -2785,6 +3273,12 @@ class SystemWindow(Adw.ApplicationWindow):
         if not self._cam.restarting:
             self._toast(("The camera stopped: " if mode == "camera" else "The microphone stopped: ") + why)
             self._phone_refresh_soon()
+
+    def _on_stream_state(self, _mode, _state):
+        # Streaming, switching the lens, reconnecting: the card and the dialog follow.
+        self._phone_refresh_soon()
+        if self._cam_dialog is not None:
+            self._cam_dialog._sync()
 
     def _on_phone_webcam(self, device):
         """USB first; then a connection already there over the network; then
@@ -3185,6 +3679,15 @@ class SystemApp(Adw.Application):
         self.set_accels_for_action("win.refresh", ["<Control>r", "F5"])
         self.set_accels_for_action("win.help", ["F1"])
         self.set_accels_for_action("win.shortcuts", ["<Control>question"])
+
+    def do_shutdown(self):
+        # The phone's servers run under adb children of this process: let
+        # them go before leaving, or the phone keeps its camera on a while.
+        for window in self.get_windows():
+            cam = getattr(window, "_cam", None)
+            if cam is not None:
+                cam.stop(wait=True)
+        Adw.Application.do_shutdown(self)
 
     def do_activate(self):
         window = self.get_active_window()

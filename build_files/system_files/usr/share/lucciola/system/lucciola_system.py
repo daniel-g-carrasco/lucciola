@@ -650,10 +650,40 @@ def connect_service_for(services, addresses):
     return None
 
 
+def size_key(size):
+    """Pixels of a WxH size, for sorting."""
+    w, h = size.split("x")
+    return int(w) * int(h)
+
+
 def camera_sizes(text):
-    """`scrcpy --list-camera-sizes`: the WxH sizes, largest first."""
+    """The server's camera list: every WxH size in it, largest first."""
     sizes = {m.group(0) for m in re.finditer(r"\b(\d{3,5}x\d{3,5})\b", text)}
-    return sorted(sizes, key=lambda s: int(s.split("x")[0]) * int(s.split("x")[1]), reverse=True)
+    return sorted(sizes, key=size_key, reverse=True)
+
+
+def camera_sizes_by_facing(text):
+    """The server's camera list (`list_camera_sizes=true`) as {facing:
+    [WxH, largest first]}: a `--camera-id=N (back, ...)` line opens a
+    camera, `- WxH` lines belong to it; the high speed block is skipped,
+    those sizes are for 120 and 240 fps."""
+    out = {}
+    facing = None
+    skip = False
+    for line in (text or "").splitlines():
+        m = re.search(r"--camera-id=\S+\s+\((\w+)", line)
+        if m:
+            facing = m.group(1).lower()
+            skip = False
+            out.setdefault(facing, set())
+            continue
+        if "High speed" in line:
+            skip = True
+            continue
+        m = re.match(r"\s*-\s*(\d{3,5}x\d{3,5})\s*$", line)
+        if m and facing and not skip:
+            out[facing].add(m.group(1))
+    return {f: sorted(v, key=size_key, reverse=True) for f, v in out.items() if v}
 
 
 def default_size(sizes, wireless):
@@ -699,6 +729,9 @@ def webcam_status(device, stream, adb_ready, wireless_ready, service_seen=False)
     advertises wireless debugging but adb could not connect: not paired yet."""
     if device is None:
         return "Virtual camera missing: Lucciola's key must be registered for its module to load"
+    if stream and stream.get("state") == "reconnecting":
+        link = "Wi-Fi" if stream["wireless"] else "USB"
+        return f"The {link} link to the phone dropped: Lucciola Phone Cam stays listed while it reconnects, for up to {RECONNECT_SECONDS} seconds"
     if stream:
         return f"Streaming {stream['size']} from the {stream['facing']} camera to Lucciola Phone Cam" + (" over Wi-Fi" if stream["wireless"] else " over USB")
     if wireless_ready:
@@ -714,25 +747,69 @@ def webcam_status(device, stream, adb_ready, wireless_ready, service_seen=False)
 
 SCRCPY_VERSION = "5.0.1"
 SCRCPY_SERVER = "/usr/lib/margine/scrcpy/scrcpy-server"
-SCRCPY_SERVER_ON_PHONE = "/data/local/tmp/scrcpy-server.jar"
+# Our own name for the jar on the phone: a server started with cleanup on
+# (what the scrcpy client does) deletes its jar at start, so a copy under
+# scrcpy's name vanishes under us whenever scrcpy runs.
+SCRCPY_SERVER_ON_PHONE = "/data/local/tmp/lucciola-scrcpy-server.jar"
 ADB_PAIR_SERVICE_TYPE = "_adb-tls-pairing._tcp"
 MIC_RATE = 48000
 MIC_CHANNELS = 2
+MIC_CAPS = f"audio/x-raw,format=S16LE,rate={MIC_RATE},channels={MIC_CHANNELS},layout=interleaved"
+# The microphone's jitter buffer: Wi-Fi bursts up to this long play through,
+# and the delay never grows past it.
+MIC_BUFFER_NS = 200_000_000
+# How long a stream keeps its PipeWire node and tries the phone again after
+# the link drops, and after how many seconds without data it is tried again.
+RECONNECT_SECONDS = 90
+STALL_SECONDS = 6
 
 
-def server_command(mode, facing="back", size="1280x720", bit_rate=4000000, max_fps=30):
+def video_caps(size, fmt="I420", rate=True):
+    """The caps the camera's outlet keeps for the whole session, and every
+    feed converts to: one size, one format, BT.601 limited range (what apps
+    assume of a webcam; phones send full-range BT.709), progressive, square
+    pixels, a single view. Pinned, a new feed never renegotiates the node:
+    v4l2loopback refuses a format change while it streams ("device busy"),
+    and the apps linked to the PipeWire node would start over. The feed
+    side leaves the frame rate out, the phone's raw stream carries none."""
+    try:
+        w, h = (int(x) for x in size.split("x"))
+    except (AttributeError, ValueError):
+        w, h = 1280, 720
+    caps = (f"video/x-raw,format={fmt},width={w},height={h},pixel-aspect-ratio=1/1,"
+            "interlace-mode=progressive,colorimetry=bt601,chroma-site=mpeg2,multiview-mode=mono")
+    return caps + (",framerate=30/1" if rate else "")
+
+
+def socket_name(scid=None):
+    """The abstract socket the server listens on: scrcpy, or scrcpy_<scid>
+    with a stream id, so two streams starting at once never share one."""
+    return "scrcpy" if scid is None else f"scrcpy_{scid:08x}"
+
+
+def server_command(mode, facing="back", size="1280x720", bit_rate=4000000, max_fps=30, scid=None):
     """The command run on the phone through `adb shell` for one stream:
     scrcpy's own server, in raw-stream mode (no headers, no control), so a
     plain TCP socket carries bare H.264 (camera) or bare PCM (mic) that
-    GStreamer reads straight. Versions must match the bundled jar."""
+    GStreamer reads straight. Versions must match the bundled jar; cleanup
+    stays off or the server deletes the jar."""
     base = ["CLASSPATH=" + SCRCPY_SERVER_ON_PHONE, "app_process", "/", "com.genymobile.scrcpy.Server", SCRCPY_VERSION,
             "tunnel_forward=true", "raw_stream=true", "send_frame_meta=false", "control=false", "cleanup=false", "log_level=info"]
+    if scid is not None:
+        base.append(f"scid={scid:08x}")
     if mode == "camera":
         return base + ["video_source=camera", f"camera_facing={facing}", f"camera_size={size}",
                        f"video_bit_rate={int(bit_rate)}", f"max_fps={int(max_fps)}", "audio=false"]
     if mode == "mic":
         return base + ["video=false", "audio=true", "audio_source=mic", "audio_codec=raw"]
     raise ValueError(mode)
+
+
+def list_command(what="camera_sizes"):
+    """The same server in list mode: it prints the cameras and their sizes
+    and exits, no client needed."""
+    return ["CLASSPATH=" + SCRCPY_SERVER_ON_PHONE, "app_process", "/", "com.genymobile.scrcpy.Server", SCRCPY_VERSION,
+            "cleanup=false", f"list_{what}=true"]
 
 
 def qr_pairing_payload(name, password):

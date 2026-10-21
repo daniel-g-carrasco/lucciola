@@ -15,7 +15,23 @@ stable release is cut.
   that the camera portal, Flatpak browsers, GNOME apps and calls see at
   once, with no kernel module in the way; when the v4l2loopback device is
   there the video is copied into it too, for apps that only speak V4L2.
-  The preview is a branch of the same pipeline. In the phone's card: the
+  The node outlives the phone: a change of lens or a dropped link keeps
+  Lucciola Phone Cam listed while the phone is picked up again, for a
+  minute and a half, before the stream gives up; the apps see a few
+  seconds of black and then the picture again, without picking the camera
+  anew. The sizes come from the server's own list, per lens, under a jar
+  name of Lucciola's: a server run with cleanup on, which is how the
+  scrcpy client runs it, deletes its jar at start, and it took ours with
+  it (the front camera "was not found"). Found on a real Pixel 8 while
+  rebuilding it: the node now flows with no app linked (pipewiresink with
+  async off: before, nothing moved until an app opened the camera, the
+  preview included), keeps flowing once an app links (pipewiresink no
+  longer lends its buffer pool upstream: apps got about seventeen frames
+  and then a frozen or black picture), never renegotiates its format (one
+  set of caps for the session: a mid-stream change made v4l2loopback
+  answer "device busy" and took the node down), and the preview and the
+  V4L2 copy run as pipelines of their own, so neither can hold the node
+  back. In the phone's card: the
   Camera row with the real state, Use as a Webcam (lens, resolution, Start,
   preview), Stop while streaming. A Camera Over USB group covers a phone on
   the cable with or without KDE Connect. The Phone Camera launcher stays and
