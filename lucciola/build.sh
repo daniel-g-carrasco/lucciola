@@ -17,13 +17,19 @@
 #   the closing dnf clean repeats what 99-cleanup.sh does anyway.
 set -euo pipefail
 
+# Shared helpers (dnf_install_pinned and the signed-RPM checks, FEDORA_VER,
+# SOURCE_DATE_EPOCH), mounted next to this script by the Containerfile.
+# log/err are re-defined right after to keep this script's prefix.
+. /ctx/00-common.sh
+
 log() { echo "[lucciola-build] $*"; }
+err() { echo "[lucciola-build] ERROR: $*" >&2; }
 
 : "${NOCTALIA_VR:?NOCTALIA_VR must be set (the pinned noctalia version-release)}"
 : "${NOCTALIA_GREETER_VERSION:?NOCTALIA_GREETER_VERSION must be set (the Noctalia Greeter tag the greeter-rpm stage built)}"
 # The Fedora tag comes from the base, so the pin holds across a Fedora
 # release: the same version-release, built for the release underneath.
-NOCTALIA_EVR="${NOCTALIA_VR}.fc$(rpm -E %fedora)"
+noctalia_vr="${NOCTALIA_VR}.fc${FEDORA_VER}"
 
 # 1. Packages. Weak dependencies off: niri's package recommends waybar,
 #    fuzzel, alacritty and swaylock, a second bar, launcher, terminal and
@@ -33,18 +39,28 @@ NOCTALIA_EVR="${NOCTALIA_VR}.fc$(rpm -E %fedora)"
 #    Noctalia is pinned: upstream supports only its latest release and Fedora
 #    ships every one within a day, so a new version arrives only through a
 #    reviewed change of NOCTALIA_VR, never by itself. The other side of the
-#    pin: Fedora's updates repository keeps only the newest build, so a
-#    version that came as an update stops being installable the day the
-#    next one goes stable (5.2.1-1 left Fedora 44 on 2026-10-17), and this
-#    install fails until NOCTALIA_VR follows.
+#    pin: the repositories do not keep a build for long (updates keeps only
+#    the newest, 5.2.1-1 left Fedora 44 on 2026-10-17; a pre-release's
+#    updates-testing, where 5.3.0-1 sat in Fedora 45, goes away at the
+#    release), and until 2026-10-20 this install failed from that day until
+#    NOCTALIA_VR followed. Now dnf_install_pinned (00-common.sh) asks the
+#    repositories for the exact build and, when they no longer have it,
+#    installs Koji's copy of the same build, signed by Fedora and checked
+#    against the release key in the image, in the same transaction as the
+#    other packages. The log says which path it took. Noctalia is a compiled
+#    package, so its arch is the image's (x86_64; a noarch build would make
+#    the Koji URL wrong, and the build fails naming it).
 #    ddcutil: Noctalia's brightness slider drives external monitors over
 #    DDC/CI when it finds it (GNOME has no such path, so Margine itself
 #    does not carry it). The Fedora package brings the udev rule that
 #    opens /dev/i2c-* to the logged-in user and the modules-load entry
 #    for i2c-dev.
-log "installing niri, xwayland-satellite, noctalia-${NOCTALIA_EVR}, ddcutil"
-dnf5 -y --setopt=install_weak_deps=False install \
-  niri xwayland-satellite "noctalia-${NOCTALIA_EVR}" ddcutil
+log "installing niri, xwayland-satellite, noctalia-${noctalia_vr}, ddcutil"
+dnf_install_pinned noctalia "$noctalia_vr" "$(rpm -E %_arch)" \
+  --setopt=install_weak_deps=False niri xwayland-satellite ddcutil
+installed_vr="$(rpm -q --qf '%{VERSION}-%{RELEASE}\n' noctalia)"
+[[ "$installed_vr" == "$noctalia_vr" ]] \
+  || { echo "ERROR: noctalia is ${installed_vr}, not the pinned ${noctalia_vr}" >&2; exit 1; }
 for f in /usr/lib/udev/rules.d/60-ddcutil-i2c.rules /usr/lib/modules-load.d/ddcutil.conf; do
   [[ -f "$f" ]] || { echo "ERROR: $f missing: the ddcutil package layout changed, external-monitor brightness would need a rule of our own" >&2; exit 1; }
 done
