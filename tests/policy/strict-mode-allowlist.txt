@@ -54,3 +54,4 @@ lucciola/system_files/usr/libexec/lucciola/lock                       a pgrep wi
 lucciola/system_files/usr/libexec/lucciola/session-start              session start: must reach the exec of the shell whatever the seeding steps before it meet
 lucciola/system_files/usr/lib/systemd/user-environment-generators/90-lucciola-drop-missing-preload  environment generator: must always exit 0 with its output, every path handled
 build_files/system_files/usr/bin/lucciola-fetch                       one exec line, no shell logic to be strict about (margine-fetch is a link to it)
+build_files/system_files/usr/libexec/margine/system-report             writes every section of the bug report even when one command fails (set -u, pipefail): -e would hand over the first section only

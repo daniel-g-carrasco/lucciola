@@ -21,7 +21,7 @@
 # /usr/libexec/lucciola/admin; the Hardware page of Lucciola System does
 # the same through pkexec.
 
-set -uo pipefail
+set -euo pipefail
 
 stale() { lpstat -v 2>/dev/null | awk '/implicitclass:/ {sub(/:$/, "", $3); print $3}'; }
 
@@ -45,6 +45,6 @@ if systemctl is-enabled cups-browsed >/dev/null 2>&1; then
   systemctl disable --now cups-browsed || rc=1
 fi
 echo "printers CUPS can see now:"
-lpstat -e 2>/dev/null | sed 's/^/  /'
+lpstat -e 2>/dev/null | sed 's/^/  /' || true  # CUPS may be down: the verdict below still counts
 echo "reopen any app that was already running: print dialogs cache this list"
 exit "$rc"
