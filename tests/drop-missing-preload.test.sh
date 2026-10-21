@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The user environment generator that drops LD_PRELOAD entries whose library
 # is gone (a stale Wayland Scroll Factor line after moving from Margine).
-set -u
+set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 gen="$here/lucciola/system_files/usr/lib/systemd/user-environment-generators/90-lucciola-drop-missing-preload"
 fail=0

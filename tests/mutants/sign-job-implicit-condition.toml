@@ -1,0 +1,9 @@
+# 2026-10-06: the sign job with the implicit success() condition was
+# skipped on main and two unsigned images were promoted. The job-condition
+# lint must refuse the implicit condition on a job whose ancestor can skip.
+name = "sign-job-implicit-condition"
+file = ".github/workflows/build.yml"
+old = '''    if: ${{ !cancelled() && needs.build_push.result == 'success' }}
+'''
+new = ''
+must_fail = "python3 .github/scripts/check-job-conditions.py .github/workflows/build.yml"

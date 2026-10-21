@@ -1,0 +1,11 @@
+# Review R3: an absolute symlink in the image (/etc/pam.d/system-auth ->
+# /etc/authselect/...) must resolve inside the image, never on the runner.
+name = "scanner-host-symlinks"
+file = ".github/scripts/scan-image-security.py"
+old = '''            if target.startswith("/"):
+                resolved = []
+'''
+new = '''            if target.startswith("/"):
+                return os.path.realpath(path)
+'''
+must_fail = "bash tests/scan-image-security.test.sh"

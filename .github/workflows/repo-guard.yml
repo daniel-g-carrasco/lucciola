@@ -1,0 +1,87 @@
+# Is main still protected? Weekly, because nothing else would notice: the
+# review of 2026-10-20 could not see the repository's settings at all, and a
+# protection turned off by hand stays off in silence. The workflow token can
+# read the public `protected` field of the branch; the protection itself
+# (required checks, reviews, force-push) needs an admin token, so the full
+# comparison, tools/repo-guard.sh check, is run locally (`just repo-guard`)
+# and here only to the point of saying it cannot read. An unprotected main,
+# or a drift when the token can read it, notifies ntfy and fails the run.
+name: Branch protection
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # Monday 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repo-guard
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: main is protected
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Is main protected at all? (the public field)
+        id: protected
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          p="$(gh api "repos/${{ github.repository }}/branches/main" --jq .protected)"
+          echo "protected=$p" >> "$GITHUB_OUTPUT"
+          echo "main protected: $p"
+
+      - name: The policy itself (needs an admin token; here it may only say so)
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO_GUARD_REPO: ${{ github.repository }}
+        run: |
+          rc=0
+          tools/repo-guard.sh check || rc=$?
+          case "$rc" in
+            0) state=ok ;;
+            1) state=drift ;;
+            2) state=unreadable; echo "The full comparison runs locally: just repo-guard" ;;
+            *) state=error ;;
+          esac
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+
+      - name: Notify ntfy (main is unprotected, or drifted)
+        if: steps.protected.outputs.protected != 'true' || steps.guard.outputs.state == 'drift' || steps.guard.outputs.state == 'error'
+        env:
+          NTFY_URL: ${{ secrets.NTFY_TOPIC_URL }}
+          PROTECTED: ${{ steps.protected.outputs.protected }}
+          STATE: ${{ steps.guard.outputs.state }}
+        run: |
+          if [[ -z "${NTFY_URL:-}" ]]; then
+            echo "NTFY_TOPIC_URL secret not set, skipping notification."
+            exit 0
+          fi
+          if [[ "$PROTECTED" != true ]]; then
+            MSG="main has no branch protection: anything can be pushed or merged without the checks. Apply it: just repo-guard apply"
+          else
+            MSG="main's protection differs from tools/repo-guard.sh (state: ${STATE}). Compare locally: just repo-guard"
+          fi
+          curl --silent --show-error --fail \
+            -H "Title: Branch protection on main" \
+            -H "Priority: high" \
+            -H "Tags: warning,shield" \
+            -H "Click: ${{ github.server_url }}/${{ github.repository }}/settings/branches" \
+            -d "$MSG" \
+            "$NTFY_URL" || echo "ntfy notify failed (non-fatal)"
+
+      - name: Fail while main is unprotected or drifted
+        if: steps.protected.outputs.protected != 'true' || steps.guard.outputs.state == 'drift' || steps.guard.outputs.state == 'error'
+        run: |
+          echo "::error::main protected=${{ steps.protected.outputs.protected }}, policy state=${{ steps.guard.outputs.state }} (see tools/repo-guard.sh)"
+          exit 1

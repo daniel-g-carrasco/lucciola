@@ -1,0 +1,9 @@
+# The register lint exists so that "the image scan" is not a proof: a lint
+# that accepts a row with no path and no step is the register of 2026-10-19.
+name = "claims-accept-words-as-proof"
+file = ".github/scripts/check-claims.py"
+old = '''            if not good:
+                problems.append'''
+new = '''            if not good and paths:
+                problems.append'''
+must_fail = "bash tests/check-claims.test.sh"
