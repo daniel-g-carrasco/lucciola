@@ -7,6 +7,13 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (2026-10-21, guide)
+- **The guide points to Lucciola System first.** Registering the key,
+  trimming the apps, the developer layer, updating, the kernel switch, the
+  disk unlock, the boot menu lock, the system check and the problem report
+  name the page and the button; the terminal commands stay, after, for who
+  prefers them.
+
 ### Added (2026-10-21, Lucciola System: Features and Apps)
 - **Two more pages in Lucciola System: Features and Apps.** Features
   installs and removes the optional layers with a button each, the state

@@ -661,15 +661,13 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
       <li>
         <h3>Register Lucciola’s key</h3>
         <p>Restart once more. Before Lucciola starts, a blue screen appears: press a key within 10 seconds, choose Enroll MOK, Continue, and Yes, type the password <code>margine</code>, and choose Reboot. That screen uses a US keyboard layout.</p>
-        <p>If you miss it, the screen comes back at the next restart. This command makes it wait for you:</p>
-        <div class="cmd"><pre>ujust lucciola-secureboot enroll</pre><button type="button">Copy</button></div>
+        <p>If you miss it, the screen comes back at the next restart. Lucciola System, in Startup &amp; Security, makes it wait for you with Register the Key at the Next Restart; in a terminal, <code>ujust lucciola-secureboot enroll</code> does the same.</p>
       </li>
       <li>
         <h3>Turn Secure Boot back on</h3>
-        <p>This command tells you whether the key is in place and what to do next:</p>
-        <div class="cmd"><pre>ujust lucciola-secureboot</pre><button type="button">Copy</button></div>
+        <p>The same page of Lucciola System tells you whether the key is in place; in a terminal, <code>ujust lucciola-secureboot</code> says the same and what to do next.</p>
         <p>Then restart into the firmware settings with <code>systemctl reboot --firmware-setup</code> and turn Secure Boot on. Leave the factory keys as they are.</p>
-        <p class="note">If you prefer to keep Secure Boot off, <code>ujust lucciola-secureboot never</code> stops the reminders.</p>
+        <p class="note">If you prefer to keep Secure Boot off, Stop Reminding Me on that page, or <code>ujust lucciola-secureboot never</code>, stops the reminders.</p>
       </li>
     </ol>
   </section>
@@ -708,23 +706,22 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
   <section id="g-apps" aria-labelledby="g-h-apps">
     <h2 id="g-h-apps">apps</h2>
     <p>Bazaar, the app store, installs apps from Flathub. They update on their own twice a day, except when the battery is low or the connection is metered.</p>
-    <p>A preinstalled app you remove stays removed: Lucciola remembers it and does not install it again. An app that leaves Lucciola’s default set stays on your PC. <code>ujust lucciola-slim</code> removes some of the larger apps in one go: it lists what it removes and asks before doing anything. <code>ujust lucciola-slim-restore</code> brings back the default apps you removed.</p>
+    <p>A preinstalled app you remove stays removed: Lucciola remembers it and does not install it again. An app that leaves Lucciola’s default set stays on your PC. The Apps page of Lucciola System trims the set in one go, to Slim or to Naked, and brings it back: it says what goes before doing anything. In a terminal, <code>ujust lucciola-slim</code> and <code>ujust lucciola-slim-restore</code> do the same.</p>
     <p>For developer tools, use a Toolbox: a Fedora container with its own <code>dnf</code>, where you install anything without touching the system.</p>
     <div class="cmd"><pre>toolbox create</pre><button type="button">Copy</button></div>
     <div class="cmd"><pre>toolbox enter</pre><button type="button">Copy</button></div>
     <p>Distrobox does the same with other distributions, such as Ubuntu or Arch.</p>
-    <p>One command adds the developer tools: VS Code, a C compiler, and Homebrew for command-line tools. It lists what it installs and asks first. Restart when it is done.</p>
-    <div class="cmd"><pre>ujust lucciola-devmode</pre><button type="button">Copy</button></div>
-    <p>Add <code>status</code> to see what is in place, or <code>remove</code> to take it away.</p>
+    <p>The Features page of Lucciola System adds the developer layer: VS Code, a C compiler, and Homebrew for command-line tools. Docker, Tailscale, virtual machines, the gaming apps, and Alpaca for local AI are on the same page. Each says what it installs and asks first; restart when it is done, and the same row takes it away.</p>
+    <p>In a terminal, <code>ujust lucciola-devmode</code> does the same; add <code>status</code> to see what is in place, or <code>remove</code> to take it away.</p>
   </section>
 
   <section id="g-updates" aria-labelledby="g-h-updates">
     <h2 id="g-h-updates">updates</h2>
     <p>Lucciola checks for updates every day. It downloads them in the background and prepares the new version next to the running one; a notification tells you when it is ready. The new version starts at your next restart, and Lucciola never restarts on its own.</p>
-    <p>To update now, run:</p>
+    <p>To update now, open Lucciola System: the Overview says which version you run and whether a newer one is waiting, and one button downloads it; then restart. In a terminal:</p>
     <div class="cmd"><pre>ujust lucciola-update</pre><button type="button">Copy</button></div>
     <div class="cmd"><pre>systemctl reboot</pre><button type="button">Copy</button></div>
-    <p><code>ujust lucciola-status</code> shows which version you run and whether a newer one is waiting.</p>
+    <p><code>ujust lucciola-status</code> shows the same as the Overview.</p>
   </section>
 
   <section id="g-back" aria-labelledby="g-h-back">
@@ -743,11 +740,11 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
   <section id="g-kernel" aria-labelledby="g-h-kernel">
     <h2 id="g-h-kernel">fedora’s kernel</h2>
     <p>Lucciola runs the CachyOS kernel. A second version, the same in everything else, runs Fedora’s own kernel: it starts on processors without x86-64-v3, and it is the way out if a CachyOS kernel update misbehaves on your PC. It is rebuilt with every update of the usual version.</p>
-    <p>To switch to it, run this command and restart:</p>
+    <p>To switch to it, open Lucciola System, Startup &amp; Security, press Switch to Fedora’s Kernel, and restart when the download is done. The same page shows which kernel you run and brings the CachyOS kernel back. In a terminal:</p>
     <div class="cmd"><pre>ujust lucciola-kernel fedora</pre><button type="button">Copy</button></div>
     <div class="cmd"><pre>systemctl reboot</pre><button type="button">Copy</button></div>
     <p><code>ujust lucciola-kernel</code> shows which kernel you run, and <code>ujust lucciola-kernel cachyos</code> brings the CachyOS kernel back. Your files, settings, and apps stay either way.</p>
-    <p class="note">If your disk unlocks through the TPM, the first start after a switch asks for the passphrase. Once it has started, run <code>ujust lucciola-tpm-unlock enable</code> and the TPM unlocks it again.</p>
+    <p class="note">If your disk unlocks through the TPM, the first start after a switch asks for the passphrase. Once it has started, let the TPM in again from Disk Unlock on that page, or run <code>ujust lucciola-tpm-unlock enable</code>.</p>
     <p>On a processor without x86-64-v3, switch to Lucciola straight onto Fedora’s kernel: in step 2 of <a href="#g-install">switch to lucciola</a>, write <code>lucciola:fedora-kernel</code> in place of <code>lucciola:stable</code>. Fedora signs its own kernel, so it starts with Secure Boot on, and you can skip step 1.</p>
     <p class="note">This version is published together with the first <code>:stable</code>, planned for 27 October 2026. Until then there is none to switch to, and <code>ujust lucciola-kernel fedora</code> changes nothing.</p>
   </section>
@@ -763,19 +760,17 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
 
   <section id="g-unlock" aria-labelledby="g-h-unlock">
     <h2 id="g-h-unlock">disk unlock</h2>
-    <p>If your disk is encrypted, the TPM security chip can unlock it at startup, and you type only your login password. This needs Secure Boot on and Lucciola’s key registered.</p>
+    <p>If your disk is encrypted, the TPM security chip can unlock it at startup, and you type only your login password. This needs Secure Boot on and Lucciola’s key registered. In Lucciola System, Startup &amp; Security, press Let the TPM Unlock the Disk and type the disk passphrase once. In a terminal:</p>
     <div class="cmd"><pre>ujust lucciola-tpm-unlock enable</pre><button type="button">Copy</button></div>
-    <p>Then lock the boot menu, so that changing how the system starts takes a password. You choose it, at least eight letters and digits; the user name is <code>root</code>. Normal starts need no password, and neither does going back to a previous version.</p>
+    <p>Then lock the boot menu, so that changing how the system starts takes a password. You choose it, at least eight letters and digits; the user name is <code>root</code>. Normal starts need no password, and neither does going back to a previous version. On the same page, Lock the Boot Menu; in a terminal:</p>
     <div class="cmd"><pre>ujust lucciola-grub-lock on</pre><button type="button">Copy</button></div>
-    <p>Replace <code>enable</code> or <code>on</code> with <code>status</code> to see where you are, or with <code>disable</code> or <code>off</code> to undo. The disk passphrase keeps working throughout.</p>
+    <p>The page shows where you are and undoes both. In a terminal, replace <code>enable</code> or <code>on</code> with <code>status</code> to see where you are, or with <code>disable</code> or <code>off</code> to undo. The disk passphrase keeps working throughout.</p>
   </section>
 
   <section id="g-help" aria-labelledby="g-h-help">
     <h2 id="g-h-help">help</h2>
-    <p>This command checks the system and lists anything out of place:</p>
-    <div class="cmd"><pre>ujust lucciola-doctor</pre><button type="button">Copy</button></div>
-    <p>To report a problem, run the command below. It writes a summary of your system to <code>lucciola-report.txt</code> in your home folder and opens the page for a new issue, where you attach the file.</p>
-    <div class="cmd"><pre>ujust lucciola-report</pre><button type="button">Copy</button></div>
+    <p>Run System Check, in the Overview of Lucciola System, checks the system and lists anything out of place; in a terminal, <code>ujust lucciola-doctor</code> does the same.</p>
+    <p>To report a problem, choose Report a Problem from the menu of Lucciola System. It writes a summary of your system to <code>lucciola-report.txt</code> in your home folder and opens the page for a new issue, where you attach the file. In a terminal, <code>ujust lucciola-report</code> does the same.</p>
     <p>Things to know:</p>
     <ul class="plain">
       <li>niri has no color management yet. Lucciola loads your screens’ calibration curves instead, so the night light cannot change a calibrated screen.</li>
