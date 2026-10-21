@@ -7,6 +7,19 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-21, build)
+- **A build no longer fails at random on a package the mirrors have
+  dropped.** While Fedora 45 is a pre-release, metadata can still list a
+  build every mirror has already removed: on 2026-10-21 expat-2.8.5, gone
+  after 2.9.0, failed image builds with "All mirrors were tried" and a 404
+  on each mirror, five retries in a row on the same metadata. The gaming
+  alignment now works in rounds, each on one view of the repositories (the
+  plan and the installs it picks, as before); a round whose downloads fail
+  is thrown away and the next plans again on fresh metadata, four rounds at
+  most. The logic lives in `build_files/custom-kernel/gaming-align.sh`,
+  tested with a fake dnf in `tests/gaming-align.test.sh`, with a mutant that
+  keeps one view only.
+
 ### Fixed (2026-10-20, welcome window)
 - **The welcome window no longer redraws all day.** The firefly's glow is a
   CSS animation, which has GTK redraw the window on every frame: left open

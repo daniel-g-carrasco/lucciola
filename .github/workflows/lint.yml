@@ -146,6 +146,13 @@ jobs:
         # opened lid gives the profile back; on fake systemd-run, gdbus and
         # niri. See tests/keep-awake.test.sh.
         run: bash tests/keep-awake.test.sh
+      - name: Gaming alignment takes a new view of the repositories
+        # build_files/custom-kernel/gaming-align.sh on a fake dnf: a view that
+        # names a build no mirror holds is thrown away and planned again on
+        # fresh metadata (expat-2.8.5, 2026-10-21); a layer that does not
+        # resolve stops at once; only x86_64 and noarch replacements are
+        # aligned, never the i686 chain. See tests/gaming-align.test.sh.
+        run: bash tests/gaming-align.test.sh
 
       - name: Stale LD_PRELOAD guard
         # The user environment generator drops LD_PRELOAD entries whose
