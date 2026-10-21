@@ -1,0 +1,8 @@
+# Review R6, the other call site: the guest commands of the upgrade test
+# (layer, rebase, gaming dry run) must report the command's own status,
+# not the status of the tail that shortens its output.
+name = "upgrade-smoke-tail-status"
+file = ".github/scripts/upgrade-smoke.py"
+old = "(exit $__r)')"
+new = "true')"
+must_fail = "bash tests/pipeline-status.test.sh"
