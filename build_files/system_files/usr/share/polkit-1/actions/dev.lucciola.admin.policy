@@ -208,4 +208,329 @@
     <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
     <annotate key="org.freedesktop.policykit.exec.argv1">scheduler-off</annotate>
   </action>
+
+  <action id="dev.lucciola.admin.gaming-on">
+    <description>Install the gaming apps and helpers</description>
+    <message>Authentication is required to install the gaming apps (Steam, Lutris, Heroic, Bottles, RetroArch and the Proton tools) and the host helpers (gamescope, MangoHud, vkBasalt, GOverlay).</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">gaming-on</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.gaming-off">
+    <description>Remove the gaming apps and helpers</description>
+    <message>Authentication is required to remove the gaming apps and the host helpers. Games and saves in your home folder stay.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">gaming-off</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.gaming-native-on">
+    <description>Install the native gaming layer</description>
+    <message>Authentication is required to install Steam, Lutris and RetroArch as system packages, with the host helpers, and Heroic, Bottles and the Proton tools as apps.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">gaming-native-on</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.gaming-native-off">
+    <description>Remove the native gaming layer</description>
+    <message>Authentication is required to remove the native gaming packages and apps. Games and saves in your home folder stay.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">gaming-native-off</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.ai-on">
+    <description>Install Alpaca, the local AI chat</description>
+    <message>Authentication is required to install Alpaca, which runs language models on this machine.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">ai-on</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.ai-off">
+    <description>Remove Alpaca</description>
+    <message>Authentication is required to remove Alpaca. Downloaded models stay in your home folder until you delete them.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">ai-off</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.devmode-on">
+    <description>Install the developer layer</description>
+    <message>Authentication is required to install VS Code from Microsoft's repository, a C and C++ compiler and flatpak-builder as system packages.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">devmode-on</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.devmode-off">
+    <description>Remove the developer layer</description>
+    <message>Authentication is required to remove the developer packages and Microsoft's repository. Homebrew and your VS Code settings stay.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">devmode-off</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.brew-remove">
+    <description>Delete Homebrew and its packages</description>
+    <message>Authentication is required to delete Homebrew and every package installed with it from /home/linuxbrew.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">brew-remove</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.vscode-on">
+    <description>Install VS Code as a system package</description>
+    <message>Authentication is required to install VS Code from Microsoft's repository as a system package.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">vscode-on</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.vscode-off">
+    <description>Remove the VS Code system package</description>
+    <message>Authentication is required to remove the VS Code system package. A Flatpak VS Code and your settings stay.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">vscode-off</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.devtools-on">
+    <description>Install the developer tools</description>
+    <message>Authentication is required to install the eBPF tracing tools, sysprof, igt-gpu-tools and a C toolchain as system packages.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">devtools-on</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.devtools-off">
+    <description>Remove the developer tools</description>
+    <message>Authentication is required to remove the developer tools from the system.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">devtools-off</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.docker-on">
+    <description>Install Docker CE</description>
+    <message>Authentication is required to add Docker's repository, install Docker CE in place of podman-docker and enable its socket.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">docker-on</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.docker-off">
+    <description>Remove Docker CE</description>
+    <message>Authentication is required to remove Docker CE and its repository and put podman-docker back.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">docker-off</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.tailscale-on">
+    <description>Install Tailscale</description>
+    <message>Authentication is required to add Tailscale's repository, install Tailscale and enable its service.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">tailscale-on</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.tailscale-off">
+    <description>Remove Tailscale</description>
+    <message>Authentication is required to remove Tailscale and its repository.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">tailscale-off</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.vm-on">
+    <description>Install the virtual machine tools</description>
+    <message>Authentication is required to install libvirt, QEMU/KVM, virt-manager, the UEFI firmware and the software TPM, and to enable their sockets.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">vm-on</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.vm-off">
+    <description>Remove the virtual machine tools</description>
+    <message>Authentication is required to remove the virtual machine tools. Your virtual machines' disks stay.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">vm-off</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.sunshine-on">
+    <description>Set up Sunshine, the streaming host</description>
+    <message>Authentication is required to install Sunshine, allow it to create virtual input devices and open its streaming ports in the firewall.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">sunshine-on</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.sunshine-off">
+    <description>Remove Sunshine</description>
+    <message>Authentication is required to remove Sunshine, its input rule and its firewall ports.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">sunshine-off</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.apps-slim">
+    <description>Trim the default apps to the slim set</description>
+    <message>Authentication is required to remove the larger default apps and to stop the first-boot installer from bringing them back.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">apps-slim</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.apps-naked">
+    <description>Trim the default apps to the naked set</description>
+    <message>Authentication is required to remove the default apps except the browser, the viewers and the system utilities, and to stop the first-boot installer from bringing them back.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">apps-naked</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.apps-restore">
+    <description>Bring the default apps back</description>
+    <message>Authentication is required to install the default apps again, in the background.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">apps-restore</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.printers-repair">
+    <description>Remove the duplicate printer queues</description>
+    <message>Authentication is required to remove the printer queues cups-browsed left behind. The printers stay; CUPS finds them again by itself.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">printers-repair</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.dock-wake">
+    <description>Wake a dock's display</description>
+    <message>Authentication is required to re-initialise the USB-C controller so a dock's display comes up. Everything on the dock drops for about a second.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">dock-wake</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.dock-rescue">
+    <description>Turn the automatic dock display rescue on or off</description>
+    <message>Authentication is required to change whether Lucciola re-initialises the USB-C controller by itself when a dock reports no display.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">dock-rescue</annotate>
+  </action>
+
 </policyconfig>

@@ -7,6 +7,37 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Added (2026-10-21, Lucciola System: Features and Apps)
+- **Two more pages in Lucciola System: Features and Apps.** Features
+  installs and removes the optional layers with a button each, the state
+  read from the system every time: Gaming (with the native variant as an
+  option), Sunshine, the Developer Layer (Homebrew included, installed as
+  you), VS Code, Docker CE, Tailscale, Virtual Machines, Developer Tools
+  and Alpaca (with the AMD GPU plugin when there is an AMD GPU). A banner
+  offers the restart when system packages wait for one. Apps trims the
+  default app set to Slim or Naked and brings the stock set back, shows the
+  apps excluded from automatic updates, removes unused runtimes, installs
+  Spola, and turns the per-app tweaks on and off (Netflix in 1080p in Zen,
+  darktable and Blender on an AMD GPU through ROCm). Hardware gained the
+  automatic dock display rescue switch, Wake a Dock Display, Repair Printer
+  Queues (shown with the leftover queues) and, on a home with Margine's
+  folder layout, Use the Standard Home Folders.
+- **One definition per feature**: `/usr/libexec/lucciola/feature` (status,
+  install, remove, for gaming, gaming-native, ai, devmode, vscode, devtools,
+  docker, tailscale, vm, sunshine, slim and naked) and
+  `/usr/libexec/lucciola/printers-repair`. The ujust recipes keep their
+  explanations and their one question, then call the same verbs of the
+  privileged helper the window calls (`<feature>-on`/`-off`, `apps-slim`,
+  `apps-naked`, `apps-restore`, `brew-remove`, `printers-repair`,
+  `dock-wake`, `dock-rescue`, 27 new polkit actions, one each). No recipe
+  layers packages or installs system Flatpaks on its own any more;
+  `lucciola-update-unblock` goes through `flatpak-unblock` too.
+- Tests: the dispatcher's plans for every new verb, the helper's shape (no
+  prompts, root checked, every feature known), each recipe reaching the
+  dispatcher, and the pure functions behind the pages (feature states,
+  the gaming variants, the app profiles, the dock switch, the printer
+  queues, the home layout, the tweaks).
+
 ### Added (2026-10-21, Lucciola System pages)
 - **Lucciola System has pages now: Overview, Startup & Security, Login,
   Hardware**, behind a sidebar that folds on a narrow window. Startup &

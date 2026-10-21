@@ -46,7 +46,22 @@ plan secureboot-never;            check "secureboot-never: writes off, revokes (
 plan scheduler lavd Gaming;       check "scheduler: one mode, both spellings (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/margine/scheduler-apply lavd Gaming gaming' '$T/out'"
 plan scheduler lavd;              check "scheduler: Auto by default (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/margine/scheduler-apply lavd Auto auto' '$T/out'"
 plan scheduler-off;               check "scheduler-off (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/margine/scheduler-apply off' '$T/out'"
-for bad in "flatpak-unblock" "flatpak-unblock a b" "flatpak-unblock 'x; rm -rf /'" "flatpak-unblock ../etc" "flatpak-unblock -y" \
+# The optional features, the app profiles and the maintenance verbs: one
+# definition in /usr/libexec/lucciola/feature (and printers-repair), reached
+# through fixed argument vectors.
+for f in gaming gaming-native ai devmode vscode devtools docker tailscale vm sunshine; do
+  plan "$f-on";  check "$f-on plans the feature helper (rc $RC)"  bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/lucciola/feature $f install' '$T/out'"
+  plan "$f-off"; check "$f-off plans the feature helper (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/lucciola/feature $f remove' '$T/out'"
+done
+plan ai-on amd;                   check "ai-on amd: the ROCm plugin as the one option (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/lucciola/feature ai install amd' '$T/out'"
+plan apps-slim;                   check "apps-slim (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/lucciola/feature slim install' '$T/out'"
+plan apps-naked;                  check "apps-naked (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/lucciola/feature naked install' '$T/out'"
+plan apps-restore;                check "apps-restore brings the stock set back (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/lucciola/feature slim remove' '$T/out'"
+plan brew-remove;                 check "brew-remove runs devmode without sudo inside (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx 'MARGINE_SUDO= /usr/libexec/margine/devmode brew-remove' '$T/out'"
+plan printers-repair;             check "printers-repair (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/lucciola/printers-repair' '$T/out'"
+plan dock-wake;                   check "dock-wake forces the rescue (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/margine/dock-dp-rescue --force' '$T/out'"
+plan dock-rescue off;             check "dock-rescue off writes the switch (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -q \"write '/etc/margine/dock-dp-rescue': 'off\" '$T/out'"
+for bad in "ai-on nvidia" "gaming-on now" "dock-rescue maybe" "apps-slim please" "flatpak-unblock" "flatpak-unblock a b" "flatpak-unblock 'x; rm -rf /'" "flatpak-unblock ../etc" "flatpak-unblock -y" \
            "update now" "rollback --force" "reboot" "--check" "kernel" "kernel foo" "kernel fedora now" \
            "tpm-unlock-enable '7;8'" "tpm-unlock-enable 7 8" "tpm-unlock-enable ../x" "grub-lock-on pw" "grub-lock-off x" \
            "autologin-on bob" "autologin-off x" "secureboot-enroll x" "scheduler" "scheduler lavd Turbo" "scheduler 'x;y' Auto" "scheduler LAVD" "scheduler-off x"; do
@@ -93,6 +108,34 @@ check "kernel-switch honours CONFIRM=yes" grep -q 'CONFIRM:-}" == yes' "$SF/usr/
 check "tpm-unlock takes the passphrase from a key file" grep -q 'LUCCIOLA_UNLOCK_KEY_FILE' "$SF/usr/bin/lucciola-tpm-unlock"
 check "grub-lock reads the password from stdin when not a terminal" grep -q 'read -r p1; read -r p2' "$SF/usr/libexec/margine/grub-lock"
 check "lucciola-keyring reads the password from stdin when not a terminal" grep -q 'IFS= read -r pw1' "$SF/usr/bin/lucciola-keyring"
+# The feature helper: no prompt, no advice, root checked, every feature known.
+FEAT="$SF/usr/libexec/lucciola/feature"
+check "feature helper never prompts" bash -c "! grep -qE 'read -r?p' '$FEAT'"
+check "feature helper refuses install/remove without root" bash -c "grep -q 'need_root' '$FEAT'"
+bash -n "$FEAT" > "$T/out" 2>&1 && RC=0 || RC=$?
+check "feature helper parses (rc $RC)" [ "$RC" = 0 ]
+for f in gaming gaming-native ai devmode vscode devtools docker tailscale vm sunshine slim naked; do
+  check "feature helper knows $f" bash -c "grep -qE '^${f//-/_}_status\(\)' '$FEAT'"
+done
+"$FEAT" nothing status > "$T/out" 2>&1 && RC=0 || RC=$?
+check "feature helper refuses an unknown feature (rc $RC)" [ "$RC" != 0 ]
+check "printers-repair never prompts" bash -c "! grep -qE 'read -r?p' '$SF/usr/libexec/lucciola/printers-repair'"
+# The recipes explain and ask, then go through the dispatcher: no second definition.
+JUST="$ROOT/build_files/60-custom.just"
+recipe_body() { awk -v r="$1" '$0 ~ "^" r "( |:)" {on=1; next} on && /^[^ \t]/ {on=0} on' "$JUST"; }
+for pair in "lucciola-gaming:gaming-on" "lucciola-gaming-remove:gaming-off" "lucciola-gaming-native:gaming-native-on" "lucciola-gaming-native-remove:gaming-native-off" \
+            "lucciola-ai:ai-on" "lucciola-ai-remove:ai-off" "lucciola-slim:apps-slim" "lucciola-naked:apps-naked" "lucciola-slim-restore:apps-restore" \
+            "lucciola-printers-repair:printers-repair" "lucciola-dock-wake:dock-wake" "lucciola-dock-rescue:dock-rescue" \
+            "lucciola-docker:docker-on" "lucciola-tailscale:tailscale-on" "lucciola-vscode:vscode-on" "lucciola-devtools:devtools-on" "lucciola-vm:vm-on" \
+            "lucciola-devmode:devmode-on" "lucciola-sunshine:sunshine-on" "lucciola-sunshine-remove:sunshine-off" "lucciola-update-unblock:flatpak-unblock"; do
+  recipe="${pair%%:*}"; verb="${pair##*:}"
+  recipe_body "$recipe" > "$T/out"
+  check "recipe $recipe goes through the dispatcher ($verb)" grep -q "lucciola/admin $verb" "$T/out"
+done
+check "no recipe layers or unlayers packages on its own any more" \
+  bash -c "! grep -nE '^\s+sudo rpm-ostree (install|uninstall|override)' '$JUST' | grep -q ."
+check "no recipe installs or removes system Flatpaks on its own any more" \
+  bash -c "! grep -nE '^\s+sudo flatpak (install|uninstall)' '$JUST' | grep -q ."
 check "the ujust scheduler recipe goes through the dispatcher" bash -c "grep -q 'lucciola/admin scheduler \"\$MODE\" Auto' '$ROOT/build_files/60-custom.just' && grep -q 'lucciola/admin scheduler-off' '$ROOT/build_files/60-custom.just' && ! grep -q 'sudo /usr/libexec/margine/scheduler-apply' '$ROOT/build_files/60-custom.just'"
 
 # The window's script: compiles, imports the module from its installed path, no long dashes, no commands in its strings.
@@ -104,7 +147,11 @@ check "no long dash in the window's strings" bash -c "! grep -q \$'\\u2014' '$GU
 check "no terminal command in the window's strings" bash -c "! grep -E '\"[^\"]*(ujust |rpm-ostree |flatpak |systemctl |scxctl )[^\"]*\"' '$GUI' | grep -vE '^\s*#|\[\"|subprocess|argv|run\(' | grep -q ."
 check "no deprecated dim-label style" bash -c "! grep -q 'dim-label' '$GUI'"
 check "Help, shortcuts and Report a Problem are in the menu" bash -c "grep -q '\"win.help\"' '$GUI' && grep -q '\"win.shortcuts\"' '$GUI' && grep -q '\"win.report\"' '$GUI'"
-check "the pages exist" bash -c "grep -q '\"startup\"' '$GUI' && grep -q '\"login\"' '$GUI' && grep -q '\"hardware\"' '$GUI'"
+check "the pages exist" bash -c "grep -q '\"startup\"' '$GUI' && grep -q '\"login\"' '$GUI' && grep -q '\"hardware\"' '$GUI' && grep -q '\"features\"' '$GUI' && grep -q '\"apps\"' '$GUI'"
+for k in $(grep -oE '"key": "[a-z-]+"' "$GUI" | cut -d'"' -f4); do
+  check "the window's feature '$k' has its verbs in the helper" bash -c "echo \"$verbs\" | grep -qx '$k-on' && echo \"$verbs\" | grep -qx '$k-off'"
+done
+check "the window runs the user-level recipes through ujust by path, never a shell" bash -c "grep -q 'UJUST = \"/usr/bin/ujust\"' '$GUI' && ! grep -q 'shell=True' '$GUI'"
 check "the scheduler page never asks scxctl for the status" bash -c "! grep -E '\"scxctl\", *\"get\"' '$GUI' | grep -q ."
 check "the old scheduler picker is gone, its launcher opens the page" \
   bash -c "[ ! -e '$SF/usr/libexec/margine/scheduler-picker' ] && grep -q 'system-gui --page hardware' '$SF/usr/share/applications/margine-scheduler.desktop'"

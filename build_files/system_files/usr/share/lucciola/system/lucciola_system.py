@@ -352,3 +352,119 @@ def grub_password_ok(password):
 
 def pcrs_ok(pcrs):
     return bool(re.match(r"^[0-9]{1,2}(\+[0-9]{1,2})*$", pcrs or ""))
+
+
+# ── optional features, app profiles, hardware helpers (the Features, Apps
+# and Hardware pages) ──────────────────────────────────────────────────
+
+FEATURE_STATES = ("installed", "absent", "pending", "partial")
+FEATURE_STATE_LABELS = {
+    "installed": "Installed",
+    "absent": "Not installed",
+    "pending": "Installed, working after a restart",
+    "partial": "Partly installed",
+    "unknown": "Could not read the state",
+}
+
+
+def feature_status(text):
+    """The first lines of `feature NAME status`: {"state", "detail"}. An
+    unknown or missing state word reads as unknown, never as absent."""
+    st = {"state": "unknown", "detail": ""}
+    for line in text.splitlines():
+        if line.startswith("state="):
+            st["state"] = line[len("state="):].strip()
+        elif line.startswith("detail="):
+            st["detail"] = line[len("detail="):].strip()
+    if st["state"] not in FEATURE_STATES:
+        st["state"] = "unknown"
+    return st
+
+
+def feature_statuses(text):
+    """`feature all status`: a [name] block per feature, each with its
+    state and detail lines; a feature the helper did not print is unknown."""
+    out = {}
+    name, block = None, []
+    for line in text.splitlines() + ["[end]"]:
+        if line.startswith("[") and line.endswith("]"):
+            if name is not None:
+                out[name] = feature_status("\n".join(block))
+            name, block = line[1:-1], []
+        else:
+            block.append(line)
+    return out
+
+
+def gaming_state(flatpak_variant, native_variant):
+    """One Gaming row for two variants: the native one wins when it is
+    there, so the row never calls the Flatpak set partial because the
+    native set shares four apps with it."""
+    if native_variant["state"] in ("installed", "pending"):
+        return dict(native_variant, variant="native")
+    return dict(flatpak_variant, variant="flatpak")
+
+
+def apps_profile(slim_state, naked_state):
+    """stock, slim, naked or mixed (a profile applied and some of its apps
+    put back by hand) from the two profiles' states."""
+    if naked_state == "installed":
+        return "naked"
+    if slim_state == "installed":
+        return "slim"
+    if slim_state == "partial" or naked_state == "partial":
+        return "mixed"
+    return "stock"
+
+
+def dock_rescue_on(switch_text):
+    """/etc/margine/dock-dp-rescue: off turns the automatic rescue off;
+    absent, empty or anything else is the default, on."""
+    return switch_text.strip() != "off"
+
+
+def stale_queues(listing):
+    """Queues cups-browsed created, from `printers-repair --list` or from
+    `lpstat -v` (device for NAME: implicitclass://...)."""
+    names = []
+    for line in listing.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        m = re.match(r"^device for ([^:]+): implicitclass:", line)
+        if m:
+            names.append(m.group(1))
+        elif "implicitclass:" not in line and " " not in line:
+            names.append(line)
+    return names
+
+
+def home_layout_stock(dry_run_text):
+    """restore-stock-home without --apply: says [no change] when the home
+    already has the stock folders, else lists what it would do."""
+    return "[no change]" in dry_run_text
+
+
+def amd_gpu(lspci_text):
+    """An AMD GPU in lspci's output: the vendor as lspci prints it, as a
+    word (a case-blind ATI would match "Corporation")."""
+    return bool(re.search(r"(VGA|3D|Display)[^\n]*(\bAMD\b|\bATI\b|Radeon|Advanced Micro Devices)", lspci_text))
+
+
+def override_set(show_text, marker):
+    """`flatpak override --user --show APP` has a line that carries the
+    marker (an environment key, a path): the tweak is on."""
+    return any(marker in line for line in show_text.splitlines())
+
+
+def netflix_state(status_text, rc):
+    """`ujust lucciola-netflix-1080p status`: the extension line, or why
+    there is nothing to say (no Zen, no profile yet)."""
+    if rc != 0:
+        return "no-browser"
+    for line in status_text.splitlines():
+        if line.startswith("Profile:") and "none yet" in line:
+            return "no-profile"
+        if line.startswith("Extension:"):
+            return "installed" if "not" not in line else "absent"
+    return "unknown"

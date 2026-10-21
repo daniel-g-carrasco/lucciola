@@ -163,7 +163,49 @@ check("scheduler: config without the service counts as no boot default", sc["run
 check("scheduler: enabled state without ops reads unknown", ls.scheduler_state("enabled", "", "", "", "")["running"] == "unknown")
 check("scheduler modes table", [m for m, _ in ls.SCHED_MODES] == ["Auto", "Gaming", "LowLatency", "PowerSave", "Server"])
 
-if fails:
-    print(f"system-logic: {fails} failed")
-    sys.exit(1)
-print("system-logic: all checks passed")
+
+# feature_status / feature_statuses: the helper's state lines, unknown never reads as absent
+check("feature_status reads state and detail", ls.feature_status("state=pending\ndetail=works after a restart\n") == {"state": "pending", "detail": "works after a restart"})
+check("feature_status: a bad state word is unknown", ls.feature_status("state=broken\ndetail=x\n")["state"] == "unknown")
+check("feature_status: empty output is unknown", ls.feature_status("")["state"] == "unknown")
+multi = "[gaming]\nstate=absent\ndetail=a\n[gaming-native]\nstate=installed\ndetail=b\n[vm]\nstate=partial\ndetail=c\n"
+sts = ls.feature_statuses(multi)
+check("feature_statuses splits the blocks", sorted(sts) == ["gaming", "gaming-native", "vm"] and sts["vm"]["state"] == "partial")
+check("feature_statuses: a missing feature is simply absent from the dict", "docker" not in sts)
+
+# gaming_state: the native variant wins when present
+check("gaming_state prefers the native variant", ls.gaming_state(sts["gaming"], sts["gaming-native"])["variant"] == "native")
+check("gaming_state falls back to the Flatpak variant", ls.gaming_state({"state": "installed", "detail": ""}, {"state": "absent", "detail": ""})["variant"] == "flatpak")
+check("gaming_state: a pending native layer counts as native", ls.gaming_state({"state": "partial", "detail": ""}, {"state": "pending", "detail": ""})["state"] == "pending")
+
+# apps_profile
+check("apps_profile stock", ls.apps_profile("absent", "absent") == "stock")
+check("apps_profile slim", ls.apps_profile("installed", "absent") == "slim")
+check("apps_profile naked wins over slim", ls.apps_profile("installed", "installed") == "naked")
+check("apps_profile mixed when apps came back", ls.apps_profile("partial", "absent") == "mixed")
+check("apps_profile unknown reads as stock", ls.apps_profile("unknown", "unknown") == "stock")
+
+# dock_rescue_on: only an explicit off turns it off
+check("dock rescue on by default", ls.dock_rescue_on("") is True)
+check("dock rescue off", ls.dock_rescue_on("off\n") is False)
+check("dock rescue on with junk", ls.dock_rescue_on("maybe") is True)
+
+# stale_queues: lpstat lines and the helper's plain list
+check("stale_queues from lpstat -v", ls.stale_queues("device for HP_X: implicitclass://HP_X/\ndevice for Mine: ipp://1.2.3.4/\n") == ["HP_X"])
+check("stale_queues from the helper's list", ls.stale_queues("HP_X\nBrother_2\n") == ["HP_X", "Brother_2"])
+check("stale_queues empty", ls.stale_queues("\n") == [])
+
+# home_layout_stock, amd_gpu, override_set, netflix_state
+check("home layout stock when the script says no change", ls.home_layout_stock("Home layout is already the stock one [no change]\n") is True)
+check("home layout needs restore when it lists changes", ls.home_layout_stock("This will restore the stock Linux home layout:\n  rewrite x\n") is False)
+check("amd_gpu detects an AMD VGA line", ls.amd_gpu("00:01.0 VGA compatible controller: Advanced Micro Devices, Inc. [AMD/ATI] Phoenix3") is True)
+check("amd_gpu ignores an Intel GPU", ls.amd_gpu("00:02.0 VGA compatible controller: Intel Corporation Raptor Lake") is False)
+check("override_set finds the marker", ls.override_set("[Environment]\nOCL_ICD_VENDORS=/run/host/x\n", "OCL_ICD_VENDORS") is True)
+check("override_set without the marker", ls.override_set("[Environment]\nLD_LIBRARY_PATH=/x\n", "OCL_ICD_VENDORS") is False)
+check("netflix installed", ls.netflix_state("Zen:       installed\nProfile:   /p\nExtension: installed\n", 0) == "installed")
+check("netflix absent", ls.netflix_state("Zen:       installed\nProfile:   /p\nExtension: not installed\n", 0) == "absent")
+check("netflix no profile yet", ls.netflix_state("Zen:       installed\nProfile:   none yet (launch Zen once)\n", 0) == "no-profile")
+check("netflix no browser", ls.netflix_state("Zen Browser is not installed.\n", 1) == "no-browser")
+
+print("system-logic: all checks passed" if fails == 0 else f"system-logic: {fails} failed")
+sys.exit(1 if fails else 0)

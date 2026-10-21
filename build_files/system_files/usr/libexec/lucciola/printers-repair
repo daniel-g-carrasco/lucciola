@@ -1,0 +1,50 @@
+#!/usr/bin/bash
+# lucciola printers-repair: remove the duplicate printer queues cups-browsed
+# left behind.
+#
+#   /usr/libexec/lucciola/printers-repair --list   any user: the queues it
+#                                                   would remove, one per line
+#   /usr/libexec/lucciola/printers-repair          root: remove them
+#
+# Until 2026-08-22 Margine OS, the system Lucciola grew from, enabled
+# cups-browsed, which created its own local queue for every network printer
+# CUPS had already discovered by itself. The result was the same printer
+# listed twice, and the extra one stops printing the moment cups-browsed
+# loses track of where the printer is ("No destination host name supplied
+# by cups-browsed"). Neither Margine nor Lucciola enables that service now.
+# Only the implicitclass:// queues are touched: the printer itself does not
+# disappear, CUPS discovers it on its own and makes a queue when you print;
+# queues the user added by hand are left alone. If cups-browsed is still
+# enabled it would recreate them, so it is disabled too.
+#
+# `ujust lucciola-printers-repair` lists, asks and calls this through
+# /usr/libexec/lucciola/admin; the Hardware page of Lucciola System does
+# the same through pkexec.
+
+set -uo pipefail
+
+stale() { lpstat -v 2>/dev/null | awk '/implicitclass:/ {sub(/:$/, "", $3); print $3}'; }
+
+if [[ "${1:-}" == --list ]]; then
+  stale
+  exit 0
+fi
+[[ $EUID -eq 0 ]] || { echo "printers-repair: run as root (through /usr/libexec/lucciola/admin)" >&2; exit 1; }
+
+mapfile -t STALE < <(stale)
+if (( ${#STALE[@]} == 0 )); then
+  echo "nothing to repair: no cups-browsed queues on this machine"
+  exit 0
+fi
+rc=0
+for q in "${STALE[@]}"; do
+  if lpadmin -x "$q"; then echo "removed $q"; else echo "could not remove $q"; rc=1; fi
+done
+if systemctl is-enabled cups-browsed >/dev/null 2>&1; then
+  echo "cups-browsed is still enabled and would recreate them: disabling it"
+  systemctl disable --now cups-browsed || rc=1
+fi
+echo "printers CUPS can see now:"
+lpstat -e 2>/dev/null | sed 's/^/  /'
+echo "reopen any app that was already running: print dialogs cache this list"
+exit "$rc"

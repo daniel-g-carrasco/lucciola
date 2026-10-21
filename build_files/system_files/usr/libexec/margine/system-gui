@@ -1,12 +1,15 @@
 #!/usr/bin/python3
 # Lucciola System: the one place for what is Lucciola's and not the
-# desktop's. (Margine System until 2026-10-18.) Four pages behind a
-# sidebar: Overview (is my machine current and healthy?), Startup &
-# Security (Secure Boot, the disk unlock, the boot menu, the kernel),
-# Login (fingerprint, keyring, automatic login) and Hardware (the CPU
-# scheduler). Noctalia keeps the look of the desktop, GNOME Settings the
-# standard panels that work under niri; this app never duplicates them, at
-# most a row opens the right one.
+# desktop's. (Margine System until 2026-10-18.) Six pages behind a
+# sidebar: Overview (is my machine current and healthy?), Features (the
+# optional layers: gaming, developer tools, Docker, Tailscale, virtual
+# machines, Sunshine, Alpaca), Apps (the default set, trimmed or restored,
+# Spola, per-app tweaks), Startup & Security (Secure Boot, the disk unlock,
+# the boot menu, the kernel), Login (fingerprint, keyring, automatic login)
+# and Hardware (the CPU scheduler, docks, printers, the home folders).
+# Noctalia keeps the look of the desktop, GNOME Settings the standard
+# panels that work under niri; this app never duplicates them, at most a
+# row opens the right one.
 #
 # Everything here already existed as CLI (lucciola-status, ujust
 # lucciola-update, -doctor, -kernel, -tpm-unlock, -grub-lock, -autologin,
@@ -65,15 +68,142 @@ SCX_STATE = "/sys/kernel/sched_ext/state"
 SCX_OPS = "/sys/kernel/sched_ext/root/ops"
 SCX_CONFIG = "/etc/scx_loader/config.toml"
 SCX_SERVICE = "scx_loader.service"
+FEATURE = "/usr/libexec/lucciola/feature"
+PRINTERS_REPAIR = "/usr/libexec/lucciola/printers-repair"
+DEVMODE = "/usr/libexec/margine/devmode"
+DOCK_SWITCH = "/etc/margine/dock-dp-rescue"
+HOME_RESTORE = "/usr/bin/lucciola-restore-stock-home"
+# The per-app tweaks and Spola are user-level recipes without prompts in
+# their install/remove/status actions: the window runs the recipe itself,
+# so there is one definition and nothing to keep in step.
+UJUST = "/usr/bin/ujust"
+SPOLA_APP = "io.github.daniel_g_carrasco.spola"
+SUNSHINE_APP = "dev.lizardbyte.app.Sunshine"
+ZEN_APP = "app.zen_browser.zen"
+DARKTABLE_APP = "org.darktable.Darktable"
+BLENDER_APP = "org.blender.Blender"
 REFRESH_EVERY = 10 * 60   # seconds between unasked refreshes
 REFRESH_ON_FOCUS = 5 * 60  # refresh when the window comes back after this long
 
 PAGES = (
     ("overview", "Overview", "computer-symbolic"),
+    ("features", "Features", "application-x-addon-symbolic"),
+    ("apps", "Apps", "view-grid-symbolic"),
     ("startup", "Startup & Security", "security-high-symbolic"),
     ("login", "Login", "avatar-default-symbolic"),
     ("hardware", "Hardware", "preferences-system-symbolic"),
 )
+
+# The optional features: what the Features page says about each. The work
+# itself is /usr/libexec/lucciola/feature, reached through the helper's
+# <key>-on and <key>-off verbs; "restart" marks the ones that add system
+# packages, which work after a restart. The words match the ujust recipes.
+FEATURE_SPECS = (
+    {"key": "gaming", "group": "Gaming", "title": "Gaming", "icon": "applications-games-symbolic", "restart": True,
+     "explain": "Steam, Lutris, Heroic, Bottles, Protontricks, ProtonPlus and RetroArch come from Flathub and work at once. "
+                "gamescope, MangoHud, vkBasalt and GOverlay are added to the system and work after a restart. A few GB of downloads.",
+     "native": "Steam, Lutris and RetroArch as system packages instead of apps: anti-cheat games, VR, Steam Link and controllers "
+               "work without sandbox limits; system updates take a minute longer, and Steam brings about 200 32-bit packages.",
+     "working": "Installing the gaming apps from Flathub and adding the host helpers to the system. This takes a while.",
+     "done": "Gaming is installed: restart to finish the host helpers",
+     "remove": "The gaming apps and the host helpers are removed. Games, saves and settings in your home folder stay."},
+    {"key": "sunshine", "group": "Gaming", "title": "Sunshine", "icon": "display-projector-symbolic", "restart": False, "experimental": True,
+     "explain": "The host side of Moonlight: stream games or the whole desktop to another device. Sunshine comes from Flathub; "
+                "the system lets it create virtual input devices and opens its ports, 47984 to 48010, in the firewall. "
+                "A first cut, not validated end to end.",
+     "working": "Installing Sunshine and preparing virtual input and the firewall.",
+     "done": "Sunshine is set up: log out and back in once, then pair your Moonlight client from its web page",
+     "remove": "Sunshine, its input rule and its firewall ports are removed."},
+    {"key": "devmode", "group": "Developer", "title": "Developer Layer", "icon": "utilities-terminal-symbolic", "restart": True,
+     "explain": "VS Code from Microsoft's repository, a C and C++ compiler and flatpak-builder as system packages, working after a restart; "
+                "Homebrew in /home/linuxbrew, owned by you and ready at once, its packages upgraded weekly. "
+                "Podman, Toolbox, Distrobox, git and just are already in Lucciola.",
+     "working": "Adding Microsoft's repository and the packages to the system.",
+     "done": "Developer layer installed: restart to use the system packages",
+     "remove": "The developer packages and Microsoft's repository are removed. The Flatpak VS Code, if you have it, and your VS Code settings stay."},
+    {"key": "vscode", "group": "Developer", "title": "VS Code", "icon": "text-editor-symbolic", "restart": True,
+     "explain": "VS Code as a system package from Microsoft's repository, for the extensions that run tools on the host. "
+                "The Flatpak VS Code in Bazaar needs none of this.",
+     "working": "Adding Microsoft's repository and VS Code to the system.", "done": "VS Code added: restart to use it",
+     "remove": "The VS Code system package is removed. A Flatpak VS Code and your settings stay."},
+    {"key": "docker", "group": "Developer", "title": "Docker CE", "icon": "package-x-generic-symbolic", "restart": True,
+     "explain": "Docker's own engine from Docker's repository, in place of podman-docker, for the tools wired to Docker's daemon. "
+                "Its socket is enabled and, after the restart, administrators join the docker group.",
+     "working": "Adding Docker's repository and Docker CE to the system.", "done": "Docker CE added: restart to use it",
+     "remove": "Docker CE and its repository are removed and podman-docker comes back."},
+    {"key": "tailscale", "group": "Developer", "title": "Tailscale", "icon": "network-workgroup-symbolic", "restart": True,
+     "explain": "Your devices on one private network, wherever they are. Tailscale comes from its own repository with its service "
+                "enabled; after the restart, sign in from Trayscale (in Bazaar) or from a terminal.",
+     "working": "Adding Tailscale's repository and Tailscale to the system.", "done": "Tailscale added: restart, then sign in",
+     "remove": "Tailscale and its repository are removed."},
+    {"key": "vm", "group": "Developer", "title": "Virtual Machines", "icon": "computer-symbolic", "restart": True,
+     "explain": "libvirt, QEMU/KVM, virt-manager, the UEFI firmware and a software TPM, about 290 MB. "
+                "After the restart the libvirt sockets start and administrators join the libvirt group.",
+     "working": "Adding the virtual machine tools to the system.", "done": "Virtual machine tools added: restart to use them",
+     "remove": "The virtual machine tools are removed. Your virtual machines' disks stay."},
+    {"key": "devtools", "group": "Developer", "title": "Developer Tools", "icon": "applications-engineering-symbolic", "restart": True,
+     "explain": "eBPF tracing (bcc, bpftrace, bpftop), sysprof, igt-gpu-tools and a C toolchain as system packages, for whoever debugs the system itself.",
+     "working": "Adding the developer tools to the system.", "done": "Developer tools added: restart to use them",
+     "remove": "The developer tools are removed from the system."},
+    {"key": "ai", "group": "AI", "title": "Alpaca", "icon": "applications-science-symbolic", "restart": False,
+     "explain": "Chat with language models that run on this machine, in a sandbox: Alpaca from Flathub bundles its own Ollama. "
+                "The first start asks which model to download, a few GB each; 8 GB of video memory is the comfortable floor for the 7B models.",
+     "amd": "Adds the ROCm plugin so Alpaca uses the AMD GPU; a sizeable download. Without it, Alpaca uses Vulkan or the CPU.",
+     "working": "Installing Alpaca from Flathub.", "done": "Alpaca is installed: find it in the launcher",
+     "remove": "Alpaca is removed. Downloaded models stay in your home folder until you delete them."},
+)
+FEATURE_GROUPS = (
+    ("Gaming", ""),
+    ("Developer", "System packages work after a restart; apps work at once. Layered packages are reapplied with every system update."),
+    ("AI", ""),
+)
+
+# Per-app tweaks and Spola: a recipe each, run as the user.
+TWEAKS = {
+    "spola": {
+        "title": "Spola", "on_label": "Install…", "off_label": "Remove…",
+        "argv_on": [UJUST, "install-spola", "install"], "argv_off": [UJUST, "install-spola", "remove"],
+        "heading_on": "Install Spola?", "verb_on": "Install",
+        "explain_on": "Spola keeps folders in step with Koofr and shows the sync state in Files. It is installed for you alone, from Lucciola's own repository.",
+        "working_on": "Installing Spola.", "done_on": "Spola is installed: open it and sign in with a Koofr app password",
+        "heading_off": "Remove Spola?", "verb_off": "Remove",
+        "explain_off": "Spola is removed. Its settings and the synced folders stay.",
+        "working_off": "Removing Spola.", "done_off": "Spola removed",
+    },
+    "netflix": {
+        "title": "Netflix in 1080p", "on_label": "Turn On…", "off_label": "Turn Off…",
+        "argv_on": [UJUST, "lucciola-netflix-1080p", "install"], "argv_off": [UJUST, "lucciola-netflix-1080p", "remove"],
+        "heading_on": "Netflix in 1080p?", "verb_on": "Turn On",
+        "explain_on": "Netflix keeps Linux browsers at 720p unless they look like Opera. A reviewed extension from Mozilla's add-on site "
+                      "makes Zen look so to Netflix alone; DRM stays as it is. Quit Zen first: it rewrites its settings on exit.",
+        "working_on": "Downloading the extension and adding it to Zen.", "done_on": "On: start Zen and check with Ctrl+Shift+Alt+D during playback",
+        "heading_off": "Back to the Normal User Agent?", "verb_off": "Turn Off",
+        "explain_off": "The extension is removed from Zen. Quit Zen first.",
+        "working_off": "Removing the extension.", "done_off": "Off: Zen looks like itself to Netflix again",
+    },
+    "darktable": {
+        "title": "darktable on the GPU", "on_label": "Turn On…", "off_label": "Turn Off…",
+        "argv_on": [UJUST, "lucciola-darktable-opencl", "enable"], "argv_off": [UJUST, "lucciola-darktable-opencl", "disable"],
+        "heading_on": "darktable on the GPU?", "verb_on": "Turn On",
+        "explain_on": "darktable's own OpenCL cannot build some of its kernels with the current Mesa, so it runs on the CPU. "
+                      "This points it at the host's ROCm OpenCL instead and checks that the GPU answers, about a minute. Quit darktable first.",
+        "working_on": "Pointing darktable at the host's ROCm and checking the GPU. About a minute.", "done_on": "darktable uses the GPU",
+        "heading_off": "darktable Back on the CPU?", "verb_off": "Turn Off",
+        "explain_off": "darktable goes back to the Flatpak's own OpenCL, which means the CPU with the current Mesa.",
+        "working_off": "Removing the override.", "done_off": "darktable is back on the CPU",
+    },
+    "blender": {
+        "title": "Blender on the GPU", "on_label": "Turn On…", "off_label": "Turn Off…",
+        "argv_on": [UJUST, "lucciola-blender-gpu", "enable"], "argv_off": [UJUST, "lucciola-blender-gpu", "disable"],
+        "heading_on": "Blender on the GPU?", "verb_on": "Turn On",
+        "explain_on": "Cycles renders on the AMD GPU through the host's ROCm (HIP). Only the ROCm libraries are exposed to the app, "
+                      "and HIP is selected in Blender's preferences. Quit Blender first.",
+        "working_on": "Exposing ROCm to Blender and selecting HIP.", "done_on": "Blender renders on the GPU: set Device to GPU Compute in each project",
+        "heading_off": "Blender Back on the CPU?", "verb_off": "Turn Off",
+        "explain_off": "The ROCm libraries and the override are removed; Blender renders on the CPU again.",
+        "working_off": "Removing the override.", "done_off": "Blender is back on the CPU",
+    },
+}
 
 
 def run(argv, timeout=30, env=None, stdin=None):
@@ -163,6 +293,10 @@ class SystemWindow(Adw.ApplicationWindow):
         self._page_generation = {}
         self._sched_mode = 0
         self._autologin_guard = False
+        self._dock_guard = False
+        self._features = {}
+        self._amd_gpu = False
+        self._profile = "stock"
         self._current_page = "overview"
 
         for name, cb in (
@@ -238,6 +372,8 @@ class SystemWindow(Adw.ApplicationWindow):
         self._split.set_content(self._content_page)
 
         self._stack.add_named(self._build_overview(), "overview")
+        self._stack.add_named(self._build_features(), "features")
+        self._stack.add_named(self._build_apps(), "apps")
         self._stack.add_named(self._build_startup(), "startup")
         self._stack.add_named(self._build_login(), "login")
         self._stack.add_named(self._build_hardware(), "hardware")
@@ -269,6 +405,10 @@ class SystemWindow(Adw.ApplicationWindow):
     def _refresh_page(self, page_id):
         if page_id == "overview":
             self._refresh_overview()
+        elif page_id == "features":
+            self._refresh_features()
+        elif page_id == "apps":
+            self._refresh_apps()
         elif page_id == "startup":
             self._refresh_startup()
         elif page_id == "login":
@@ -1193,6 +1333,34 @@ class SystemWindow(Adw.ApplicationWindow):
         self._sched_choose_button = button_row(sched, "Choose a Scheduler…", "preferences-system-symbolic", self._on_choose_scheduler, "suggested-action")
         self._sched_off_button = button_row(sched, "Use the Kernel's Own Scheduler", "edit-undo-symbolic", self._on_scheduler_off)
 
+        docks = Adw.PreferencesGroup(
+            title="Docks and Displays",
+            description="Some USB-C docks come up with everything but the screen. Re-initialising the USB-C controller makes the port negotiate again; everything on the dock drops for about a second.",
+        )
+        page.add(docks)
+        self._dock_switch = Adw.SwitchRow(title="Automatic Dock Display Rescue", subtitle="When a dock reports no display, do it without asking")
+        self._dock_switch.connect("notify::active", self._on_dock_toggled)
+        docks.add(self._dock_switch)
+        self._dock_wake_button = button_row(docks, "Wake a Dock Display…", "video-display-symbolic", self._on_dock_wake)
+
+        printers = Adw.PreferencesGroup(
+            title="Printers",
+            description="A printer listed twice, one copy never printing: queues an old service left behind. The printer itself stays; CUPS finds it again on its own.",
+        )
+        page.add(printers)
+        self._queues_row = info_row(printers, "Leftover Queues", "printer-symbolic")
+        self._set_loading(self._queues_row, True)
+        self._printers_button = button_row(printers, "Repair Printer Queues…", "printer-symbolic", self._on_printers_repair)
+        self._printers_button.set_sensitive(False)
+
+        self._home_group = Adw.PreferencesGroup(
+            title="Home Folders",
+            description="This home has Margine's folder layout (data, dev, scratch). Lucciola uses the standard folders; this points apps at them again and never moves or deletes a file.",
+        )
+        page.add(self._home_group)
+        self._home_button = button_row(self._home_group, "Use the Standard Home Folders…", "user-home-symbolic", self._on_home_stock)
+        self._home_group.set_visible(False)
+
         tools = Adw.PreferencesGroup(title="More Tools")
         page.add(tools)
         cam = Adw.ActionRow(title="Phone Camera", subtitle="Use an Android phone as a webcam")
@@ -1214,6 +1382,10 @@ class SystemWindow(Adw.ApplicationWindow):
             _, active, _ = run(["systemctl", "is-active", SCX_SERVICE])
             st = ls.scheduler_state(read_file(SCX_STATE), read_file(SCX_OPS), read_file(SCX_CONFIG), enabled, active)
             on_main(self._set_scheduler, gen, st)
+            _, queues_out, _ = run([PRINTERS_REPAIR, "--list"])
+            rc_home, home_out, _ = run([HOME_RESTORE], timeout=30)
+            on_main(self._set_hardware_extras, gen, ls.dock_rescue_on(read_file(DOCK_SWITCH)), ls.stale_queues(queues_out),
+                    rc_home == 0 and not ls.home_layout_stock(home_out))
 
         in_thread(worker)
 
@@ -1319,6 +1491,415 @@ class SystemWindow(Adw.ApplicationWindow):
         except GLib.Error as e:
             self._toast(f"Could not start it: {e.message}")
 
+    def _set_hardware_extras(self, gen, dock_on, queues, home_needs):
+        if not self._current("hardware", gen):
+            return
+        self._dock_guard = True
+        self._dock_switch.set_active(dock_on)
+        self._dock_guard = False
+        self._dock_switch.set_sensitive(not self._busy)
+        self._dock_wake_button.set_sensitive(not self._busy)
+        self._set_loading(self._queues_row, False)
+        self._queues_row.set_subtitle(", ".join(queues) if queues else "None")
+        self._printers_button.set_sensitive(bool(queues) and not self._busy)
+        self._home_group.set_visible(home_needs)
+        self._home_button.set_sensitive(not self._busy)
+
+    def _on_dock_toggled(self, switch, _pspec):
+        if self._dock_guard:
+            return
+        want = "on" if switch.get_active() else "off"
+        self._run_operation(
+            ["pkexec", ADMIN, "dock-rescue", want], title="Dock Display Rescue", working="Saving the choice.",
+            done="Automatic dock display rescue is on" if want == "on" else "Automatic dock display rescue is off; Wake a Dock Display still works",
+        )
+
+    def _on_dock_wake(self, _row):
+        self._confirm(
+            "Wake the Dock Display?",
+            "Everything on the dock drops and comes back in about a second: mouse, keyboard, drives and the dock's network port. "
+            "Finish any copy over them first.",
+            "Wake",
+            lambda: self._run_operation(["pkexec", ADMIN, "dock-wake"], title="Waking the Dock Display",
+                                        working="Re-initialising the USB-C controller.", done="Done: the monitor should come up in a moment"),
+        )
+
+    def _on_printers_repair(self, _row):
+        self._confirm(
+            "Repair the Printer Queues?",
+            "The duplicate queues are removed. Your printer stays: CUPS discovers it on its own and makes a queue the moment you print. "
+            "Reopen apps that were already running; print dialogs cache the list.",
+            "Repair",
+            lambda: self._run_operation(["pkexec", ADMIN, "printers-repair"], title="Repairing the Printer Queues",
+                                        working="Removing the queues cups-browsed left.", done="Printer queues repaired"),
+        )
+
+    def _on_home_stock(self, _row):
+        self._confirm(
+            "Use the Standard Home Folders?",
+            "Apps default to Documents, Downloads, Music, Pictures and Videos in your home again, and Margine's bookmarks leave the "
+            "Files sidebar. No file is moved or deleted: what is in data, dev and scratch stays there.",
+            "Use Standard Folders",
+            lambda: self._run_operation([HOME_RESTORE, "--apply"], title="Restoring the Standard Folders",
+                                        working="Rewriting the folder settings.",
+                                        done="The standard folders are back: log out and back in for every app to see them"),
+        )
+
+    # ═════════════════════════════ Features ═════════════════════════
+
+    def _build_features(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self._restart_banner = Adw.Banner(title="A restart finishes the change to the system packages")
+        self._restart_banner.set_button_label("Restart…")
+        self._restart_banner.connect("button-clicked", lambda *_: self._reboot())
+        self._restart_banner.set_revealed(False)
+        box.append(self._restart_banner)
+        page = preferences_page()
+        page.set_vexpand(True)
+        box.append(page)
+        self._feature_rows = {}
+        for group_name, description in FEATURE_GROUPS:
+            group = Adw.PreferencesGroup(title=group_name, description=description)
+            page.add(group)
+            for spec in FEATURE_SPECS:
+                if spec["group"] != group_name:
+                    continue
+                title = spec["title"] + (" (experimental)" if spec.get("experimental") else "")
+                row = Adw.ActionRow(title=title)
+                row.add_prefix(icon(spec["icon"]))
+                row.set_subtitle_lines(3)
+                install = Gtk.Button(label="Install…", valign=Gtk.Align.CENTER)
+                install.connect("clicked", self._on_feature_install, spec["key"])
+                remove = Gtk.Button(label="Remove…", valign=Gtk.Align.CENTER)
+                remove.connect("clicked", self._on_feature_remove, spec["key"])
+                for button in (install, remove):
+                    button.set_visible(False)
+                    row.add_suffix(button)
+                row._install, row._remove = install, remove
+                self._set_loading(row, True)
+                group.add(row)
+                self._feature_rows[spec["key"]] = row
+        return box
+
+    def _refresh_features(self):
+        gen = self._bump("features")
+        for row in self._feature_rows.values():
+            self._set_loading(row, True)
+            row._install.set_visible(False)
+            row._remove.set_visible(False)
+
+        def worker():
+            rc, out, err = run([FEATURE, "all", "status"], timeout=90)
+            statuses = ls.feature_statuses(out) if rc == 0 else {}
+            rc2, st_out, _ = run(["rpm-ostree", "status", "--json"])
+            state = ls.parse_deployments(st_out if rc2 == 0 else "")
+            _, lspci, _ = run(["lspci"])
+            on_main(self._set_features, gen, statuses, state, ls.amd_gpu(lspci), err if rc != 0 else "")
+
+        in_thread(worker)
+
+    def _set_features(self, gen, statuses, state, amd, error):
+        if not self._current("features", gen):
+            return
+        self._features = statuses
+        self._amd_gpu = amd
+        unknown = {"state": "unknown", "detail": ""}
+        pending = bool(state.get("staged"))
+        for spec in FEATURE_SPECS:
+            key = spec["key"]
+            row = self._feature_rows[key]
+            st = statuses.get(key, unknown)
+            if key == "gaming":
+                st = ls.gaming_state(st, statuses.get("gaming-native", unknown))
+            self._set_loading(row, False)
+            label = ls.FEATURE_STATE_LABELS[st["state"]]
+            detail = st.get("detail") or (ls.last_line(error) if error else "")
+            row.set_subtitle(f"{label}. {detail}" if detail else label)
+            row._install.set_visible(st["state"] in ("absent", "partial", "unknown"))
+            row._remove.set_visible(st["state"] in ("installed", "pending", "partial"))
+            row._install.set_sensitive(not self._busy)
+            row._remove.set_sensitive(not self._busy)
+            if st["state"] == "pending":
+                pending = True
+        self._restart_banner.set_revealed(pending)
+
+    def _spec(self, key):
+        return next(s for s in FEATURE_SPECS if s["key"] == key)
+
+    def _on_feature_install(self, _button, key):
+        spec = self._spec(key)
+        option = None
+        extra = None
+        if key == "gaming":
+            option = Adw.SwitchRow(title="Native Variant", subtitle=spec["native"])
+        elif key == "ai" and self._amd_gpu:
+            option = Adw.SwitchRow(title="AMD GPU Acceleration", subtitle=spec["amd"])
+            option.set_active(True)
+        if option is not None:
+            option.set_subtitle_lines(4)
+            extra = Adw.PreferencesGroup()
+            extra.add(option)
+        body = spec["explain"]
+        if spec["restart"]:
+            body += " A restart is needed afterwards."
+
+        def go():
+            verb, args, then = f"{key}-on", [], None
+            if key == "gaming" and option.get_active():
+                verb = "gaming-native-on"
+            if key == "ai" and option is not None and option.get_active():
+                args = ["amd"]
+            if key == "devmode":
+                then = self._brew_install
+            elif key == "sunshine":
+                then = self._sunshine_user_setup
+            self._run_operation(["pkexec", ADMIN, verb] + args, title=f"Installing {spec['title']}",
+                                working=spec["working"], done=spec["done"], then=then)
+
+        self._confirm(f"Install {spec['title']}?", body, "Install", go, extra=extra)
+
+    def _brew_install(self, code):
+        # Homebrew belongs to the user: never under pkexec.
+        if code == 0:
+            self._run_operation([DEVMODE, "brew-install"], title="Installing Homebrew",
+                                working="Installing Homebrew in /home/linuxbrew, owned by you. No restart is needed for it.",
+                                done="Homebrew installed: it works in new terminals")
+
+    def _sunshine_user_setup(self, code):
+        # The Flatpak override and Sunshine's own helper act on the user's session.
+        if code == 0:
+            run(["flatpak", "override", "--user", "--device=all", SUNSHINE_APP])
+            self._run_operation(["flatpak", "run", "--command=additional-install.sh", SUNSHINE_APP],
+                                title="Finishing Sunshine's Setup", working="Running Sunshine's own setup helper.",
+                                done="Sunshine is ready: log out and back in once, then open it and pair your Moonlight client")
+
+    def _on_feature_remove(self, _button, key):
+        spec = self._spec(key)
+        option = None
+        extra = None
+        if key == "devmode" and os.path.exists(BREW):
+            option = Adw.SwitchRow(title="Also Delete Homebrew", subtitle="Everything installed with it goes too")
+            extra = Adw.PreferencesGroup()
+            extra.add(option)
+        done = f"{spec['title']} removed" + (": restart to finish" if spec["restart"] else "")
+
+        def privileged(_code=0):
+            verb = f"{key}-off"
+            if key == "gaming" and self._features.get("gaming-native", {}).get("state") in ("installed", "pending", "partial"):
+                verb = "gaming-native-off"
+            then = None
+            if option is not None and option.get_active():
+                then = self._brew_remove
+            self._run_operation(["pkexec", ADMIN, verb], title=f"Removing {spec['title']}",
+                                working=f"Removing {spec['title']}.", done=done, then=then)
+
+        def go():
+            if key == "sunshine":
+                # Sunshine's own helper first, as the user; the system part follows either way.
+                self._run_operation(["flatpak", "run", "--command=additional-uninstall.sh", SUNSHINE_APP],
+                                    title="Undoing Sunshine's Setup", working="Running Sunshine's own uninstall helper.",
+                                    done="Sunshine's session setup undone", then=privileged)
+            else:
+                privileged()
+
+        self._confirm(f"Remove {spec['title']}?", spec["remove"], "Remove", go, destructive=True, extra=extra)
+
+    def _brew_remove(self, code):
+        if code == 0:
+            self._run_operation(["pkexec", ADMIN, "brew-remove"], title="Deleting Homebrew",
+                                working="Deleting Homebrew and its packages.", done="Homebrew deleted")
+
+    # ═══════════════════════════════ Apps ═══════════════════════════
+
+    def _build_apps(self):
+        page = preferences_page()
+        profiles = Adw.PreferencesGroup(
+            title="Default Apps",
+            description="Lucciola installs its set of apps at the first start and keeps it. The set can be trimmed and brought back here; single apps come and go from Bazaar.",
+        )
+        page.add(profiles)
+        self._profile_rows = {}
+        for key, title, subtitle in (
+            ("stock", "Stock", "Everything Lucciola ships: browser, mail, office, creative apps and the GNOME utilities"),
+            ("slim", "Slim", "Without the heavy creative apps (GIMP, Inkscape, darktable, OBS Studio) and the tinkerer apps; "
+                             "Zen, Thunderbird, LibreOffice and the GNOME suite stay"),
+            ("naked", "Naked", "Only the browser, the viewers and the system utilities; mail, office and the situational apps go too"),
+        ):
+            row = Adw.ActionRow(title=title, subtitle=subtitle)
+            row.set_subtitle_lines(3)
+            row._check = icon("object-select-symbolic")
+            row._check.set_opacity(0.0)
+            row.add_prefix(row._check)
+            button = Gtk.Button(label="Restore…" if key == "stock" else "Use…", valign=Gtk.Align.CENTER)
+            button.connect("clicked", self._on_profile, key)
+            button.set_visible(False)
+            row.add_suffix(button)
+            row._button = button
+            profiles.add(row)
+            self._profile_rows[key] = row
+        self._set_loading(self._profile_rows["stock"], True)
+
+        updates = Adw.PreferencesGroup(title="Updates")
+        page.add(updates)
+        self._excluded_row = self._link_row(updates, "Excluded From Automatic Updates", "dialog-warning-symbolic", self._on_show_flatpak)
+        button_row(updates, "Remove Unused Runtimes…", "edit-clear-symbolic", self._on_unused)
+
+        more = Adw.PreferencesGroup(title="More Apps")
+        page.add(more)
+        self._spola_row = self._tweak_row(more, "folder-remote-symbolic", "spola")
+
+        tweaks = Adw.PreferencesGroup(title="Tweaks", description="Adjustments for single apps that Lucciola does not apply on its own.")
+        page.add(tweaks)
+        self._netflix_row = self._tweak_row(tweaks, "video-display-symbolic", "netflix")
+        self._darktable_row = self._tweak_row(tweaks, "applications-graphics-symbolic", "darktable")
+        self._blender_row = self._tweak_row(tweaks, "applications-graphics-symbolic", "blender")
+        return page
+
+    def _tweak_row(self, group, icon_name, key):
+        spec = TWEAKS[key]
+        row = Adw.ActionRow(title=spec["title"])
+        row.add_prefix(icon(icon_name))
+        row.set_subtitle_lines(3)
+        on = Gtk.Button(label=spec["on_label"], valign=Gtk.Align.CENTER)
+        off = Gtk.Button(label=spec["off_label"], valign=Gtk.Align.CENTER)
+        on.connect("clicked", self._on_tweak, key, True)
+        off.connect("clicked", self._on_tweak, key, False)
+        for button in (on, off):
+            button.set_visible(False)
+            row.add_suffix(button)
+        row._on, row._off = on, off
+        self._set_loading(row, True)
+        group.add(row)
+        return row
+
+    def _refresh_apps(self):
+        gen = self._bump("apps")
+        for row in list(self._profile_rows.values()) + [self._spola_row, self._netflix_row, self._darktable_row, self._blender_row, self._excluded_row]:
+            self._set_loading(row, True)
+
+        def worker():
+            rc, out, _ = run([FEATURE, "all", "status"], timeout=90)
+            statuses = ls.feature_statuses(out) if rc == 0 else {}
+            profile = ls.apps_profile(statuses.get("slim", {}).get("state", "unknown"), statuses.get("naked", {}).get("state", "unknown"))
+            excluded = ls.excluded_apps(read_file(BLOCKED))
+            present = {}
+            for app in (SPOLA_APP, ZEN_APP, DARKTABLE_APP, BLENDER_APP):
+                rc_u, _, _ = run(["flatpak", "info", "--user", app])
+                rc_s, _, _ = run(["flatpak", "info", "--system", app])
+                present[app] = rc_u == 0 or rc_s == 0
+            if present[ZEN_APP]:
+                rc, out, _ = run([UJUST, "lucciola-netflix-1080p", "status"], timeout=60)
+                netflix = ls.netflix_state(out, rc)
+            else:
+                netflix = "no-browser"
+            _, lspci, _ = run(["lspci"])
+            amd = ls.amd_gpu(lspci)
+            _, dt_show, _ = run(["flatpak", "override", "--user", "--show", DARKTABLE_APP])
+            _, bl_show, _ = run(["flatpak", "override", "--user", "--show", BLENDER_APP])
+            tweaks = {
+                "darktable": (present[DARKTABLE_APP] and amd, ls.override_set(dt_show, "OCL_ICD_VENDORS")),
+                "blender": (present[BLENDER_APP] and amd, ls.override_set(bl_show, "blender-rocm")),
+            }
+            on_main(self._set_apps, gen, profile, excluded, present[SPOLA_APP], netflix, tweaks)
+
+        in_thread(worker)
+
+    def _set_apps(self, gen, profile, excluded, spola, netflix, tweaks):
+        if not self._current("apps", gen):
+            return
+        self._profile = profile
+        for key, row in self._profile_rows.items():
+            self._set_loading(row, False)
+            row._check.set_opacity(1.0 if key == profile else 0.0)
+            if key == "stock":
+                row._button.set_visible(profile != "stock")
+            elif key == "slim":
+                row._button.set_visible(profile in ("stock", "mixed"))
+            else:
+                row._button.set_visible(profile != "naked")
+            row._button.set_sensitive(not self._busy)
+        if profile == "mixed":
+            self._profile_rows["stock"].set_subtitle("A trimmed set with some apps put back by hand. Restore brings the whole stock set; Bazaar removes single apps")
+        self._excluded = excluded
+        self._set_loading(self._excluded_row, False)
+        self._excluded_row.set_subtitle(f"{len(excluded)} app" + ("" if len(excluded) == 1 else "s") if excluded else "None")
+        self._set_tweak(self._spola_row, True, spola,
+                        "Installed. Keeps folders in step with Koofr" if spola else "Not installed. A Koofr sync client made for Lucciola, with the sync state in Files")
+        self._set_tweak(self._netflix_row, netflix != "no-browser", netflix == "installed", {
+            "installed": "On. Netflix sees an Opera user agent in Zen and plays in 1080p",
+            "absent": "Off. Netflix plays in 720p in Zen",
+            "no-profile": "Open Zen once first",
+        }.get(netflix, "The state could not be read"))
+        if netflix in ("no-profile", "unknown"):
+            self._netflix_row._on.set_visible(False)
+        for key, row in (("darktable", self._darktable_row), ("blender", self._blender_row)):
+            applicable, on = tweaks[key]
+            self._set_tweak(row, applicable, on,
+                            "On. Renders on the AMD GPU through the host's ROCm" if on else "Off. Runs on the CPU; the AMD GPU is available through the host's ROCm")
+
+    def _set_tweak(self, row, visible, on, subtitle):
+        self._set_loading(row, False)
+        row.set_visible(visible)
+        row.set_subtitle(subtitle)
+        row._on.set_visible(not on)
+        row._off.set_visible(on)
+        row._on.set_sensitive(not self._busy)
+        row._off.set_sensitive(not self._busy)
+
+    def _on_profile(self, _button, key):
+        if key == "stock":
+            self._confirm(
+                "Bring the Default Apps Back?",
+                "The apps the trimmed set removed are installed again in the background, 5 to 15 minutes on a normal line, "
+                "and the first-start installer keeps the set again.",
+                "Restore",
+                lambda: self._run_operation(["pkexec", ADMIN, "apps-restore"], title="Restoring the Default Apps",
+                                            working="Letting the first-start installer bring the stock set back.",
+                                            done="The default apps are coming back in the background"),
+            )
+        elif key == "slim":
+            self._confirm(
+                "Use the Slim Set?",
+                "GIMP, Inkscape, darktable, OBS Studio, Apostrophe, Audacity, EasyEffects, DistroShelf, Pinta and G4Music are removed, "
+                "and the first-start installer stops bringing them back. Zen, Thunderbird, LibreOffice and the GNOME suite stay. "
+                "Any of them can be reinstalled from Bazaar.",
+                "Use Slim",
+                lambda: self._run_operation(["pkexec", ADMIN, "apps-slim"], title="Trimming to the Slim Set",
+                                            working="Removing the larger apps.", done="The slim set is in place"),
+                destructive=True,
+            )
+        else:
+            self._confirm(
+                "Use the Naked Set?",
+                "On top of the slim set, LibreOffice, Thunderbird, Contacts, Sound Recorder, Impression and Deja Dup go too. "
+                "Zen, Papers, Loupe, Calculator, Text Editor, Calendar, Clocks and the system utilities stay. "
+                "Any app can be reinstalled from Bazaar.",
+                "Use Naked",
+                lambda: self._run_operation(["pkexec", ADMIN, "apps-naked"], title="Trimming to the Naked Set",
+                                            working="Removing the apps.", done="The naked set is in place"),
+                destructive=True,
+            )
+
+    def _on_unused(self, _row):
+        # No pkexec: flatpak asks polkit itself for the system installation.
+        self._confirm(
+            "Remove Unused Runtimes?",
+            "Runtimes and extensions no installed app uses any more are removed; apps are not touched.",
+            "Remove",
+            lambda: self._run_operation(["flatpak", "uninstall", "--unused", "-y", "--noninteractive"], title="Removing Unused Runtimes",
+                                        working="Removing the runtimes no app uses.", done="Unused runtimes removed"),
+        )
+
+    def _on_tweak(self, _button, key, turn_on):
+        spec = TWEAKS[key]
+        side = "on" if turn_on else "off"
+        self._confirm(
+            spec[f"heading_{side}"], spec[f"explain_{side}"], spec[f"verb_{side}"],
+            lambda: self._run_operation(spec[f"argv_{side}"], title=spec["title"],
+                                        working=spec[f"working_{side}"], done=spec[f"done_{side}"]),
+            destructive=(not turn_on and key == "spola"),
+        )
+
     # ══════════════════════ help, report, about ═════════════════════
 
     def _on_help(self):
@@ -1394,12 +1975,14 @@ class SystemWindow(Adw.ApplicationWindow):
 
     # ═════════════ runner for long operations, privileged or not ═════════════
 
-    def _run_operation(self, argv, title, working, done, stdin_text=None):
+    def _run_operation(self, argv, title, working, done, stdin_text=None, then=None):
         """Runs argv and shows a progress dialog: a spinner and a sentence,
         the command's output under Details. The dialog can be closed while
         the work goes on; a toast tells the end, with the log a click away
         when it failed. stdin_text, when given, is written to the command
-        and forgotten: that is how secrets travel."""
+        and forgotten: that is how secrets travel. then(code) runs when the
+        command has ended, whatever the code: the user part that follows a
+        privileged one (Homebrew after the developer layer)."""
         if self._busy:
             self._toast("Another operation is still running")
             return
@@ -1466,7 +2049,7 @@ class SystemWindow(Adw.ApplicationWindow):
             stdin_text = None
         stream = Gio.DataInputStream.new(proc.get_stdout_pipe())
         self._read_line(stream, buffer, view)
-        proc.wait_async(None, self._on_operation_done, (dialog, state, indicator, status, expander, done))
+        proc.wait_async(None, self._on_operation_done, (dialog, state, indicator, status, expander, done, then))
 
     def _on_operation_dialog_closed(self, state):
         state["open"] = False
@@ -1489,7 +2072,7 @@ class SystemWindow(Adw.ApplicationWindow):
         stream.read_line_async(GLib.PRIORITY_DEFAULT, None, on_line)
 
     def _on_operation_done(self, proc, result, payload):
-        dialog, state, indicator, status, expander, done_message = payload
+        dialog, state, indicator, status, expander, done_message, then = payload
         state["done"] = True
         try:
             proc.wait_finish(result)
@@ -1514,6 +2097,8 @@ class SystemWindow(Adw.ApplicationWindow):
                 expander.set_expanded(True)
             else:
                 self._toast("The operation did not complete", "Details", "win.show-log")
+        if then is not None:
+            then(code)
         self._refresh_all()
 
     def _finish_operation(self):
