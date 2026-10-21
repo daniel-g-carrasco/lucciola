@@ -235,45 +235,32 @@ restore_akmodsbuild() {
 #     shipped 7.2.9-300.fc45 while Fedora offered only 7.2.11 (a branched
 #     release keeps no superseded builds; updates-archive gets only
 #     superseded updates). So the repositories first, then Koji, where
-#     every build stays, in the copy Fedora signed with the release key.
+#     every build stays, in the copy Fedora signed with the release key
+#     (fetch_signed_rpm in 00-common.sh, shared with Lucciola's Noctalia
+#     pin since 2026-10-20).
 # Either way the RPMs are checked against Fedora's release key before dnf
-# sees them: dnf does not check the signature of a local file.
+# sees them (verify_fedora_signature): dnf does not check the signature of
+# a local file.
 install_fedora_kernel_devel() {
-  local kver="$1" v r a keyfile="" fpr keyid dir pkg f out
+  local kver="$1" v r a dir pkg
   v="$(rpm -q --qf '%{VERSION}\n' kernel-core | head -n1)"
   r="$(rpm -q --qf '%{RELEASE}\n' kernel-core | head -n1)"
   a="$(rpm -q --qf '%{ARCH}\n' kernel-core | head -n1)"
   [[ "${v}-${r}.${a}" == "$kver" ]] || { err "kernel-core is ${v}-${r}.${a}, not $kver"; return 1; }
-  for f in "/usr/share/pki/rpm-gpg/RPM-GPG-KEY-fedora-${FEDORA_VER}-primary" \
-           "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-${FEDORA_VER}-primary"; do
-    [[ -s "$f" ]] && { keyfile="$f"; break; }
-  done
-  [[ -n "$keyfile" ]] || { err "no Fedora ${FEDORA_VER} release key in the image"; return 1; }
+  fedora_release_key >/dev/null || return 1   # before any download: no key, no point
   dir=/run/kernel-devel
   rm -rf "$dir"; mkdir -p "$dir"
   if retry 2 15 bash -c 'dnf -y clean metadata >/dev/null 2>&1 || true; exec dnf -y download --destdir "$0" "$@"' \
        "$dir" "kernel-devel-${kver}" "kernel-devel-matched-${kver}"; then
     log "kernel-devel-${kver}: downloaded from the repositories"
+    verify_fedora_signature "$dir"/*.rpm || return 1
   else
     log "kernel-devel-${kver} is not in the repositories any more: fetching Fedora's signed build from Koji"
     rm -f "$dir"/*.rpm
-    fpr="$(key_fingerprint "$keyfile")" || return 1
-    [[ "$fpr" =~ ^[0-9A-F]{40}$ ]] || { err "unreadable fingerprint for $keyfile"; return 1; }
-    # Koji keeps each signed copy under the key id: the fingerprint's last 8
-    # digits, in lower case.
-    keyid="${fpr: -8}"
     for pkg in kernel-devel kernel-devel-matched; do
-      retry_curl_strict "https://kojipkgs.fedoraproject.org/packages/kernel/${v}/${r}/data/signed/${keyid,,}/${a}/${pkg}-${kver}.rpm" \
-        "$dir/${pkg}-${kver}.rpm" || return 1
+      fetch_signed_rpm "$pkg" "${v}-${r}" "$a" "$dir" kernel || return 1
     done
   fi
-  rpmkeys --import "$keyfile" || true   # already in the rpmdb on a Fedora base
-  for f in "$dir"/*.rpm; do
-    out="$(rpmkeys --checksig "$f" 2>&1)" || true
-    [[ "$out" == *"signatures OK"* ]] \
-      || { err "$(basename "$f") does not carry a valid Fedora ${FEDORA_VER} signature: $out"; return 1; }
-    log "  $out"
-  done
   retry 3 30 bash -c 'dnf -y clean metadata >/dev/null 2>&1 || true; exec dnf -y install --refresh --exclude=kernel,kernel-core,kernel-modules,kernel-modules-core,kernel-modules-extra "$@"' \
     _ "$dir"/*.rpm akmods || { err "akmods with kernel-devel-${kver} did not install"; return 1; }
   rm -rf "$dir"

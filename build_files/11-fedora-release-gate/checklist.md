@@ -41,13 +41,24 @@ matches the base; go through this list first, then bump the number.
 ## Release-pinned names in this tree
 
 - `Containerfile`: `NOCTALIA_VR` carries no Fedora tag (lucciola/build.sh
-  adds the base's); check that the new release ships the same
-  version-release and test-boot Lucciola. On 2026-10-17 the pin is 5.3.0-1,
-  and Fedora 45, still a pre-release, had 5.2.1-1 in its release
-  repository and 5.3.0-1 only in updates-testing (FEDORA-2026-04f44a27d9).
-  A pre-release enables updates-testing by default, a released Fedora does
-  not: once 45 is out, the pin resolves there only after that update is
-  stable.
+  adds the base's); check that the new release has a build of the same
+  version-release (Koji: `https://koji.fedoraproject.org/koji/packageinfo?packageID=`
+  for noctalia, or `koji list-builds --package noctalia`) and test-boot
+  Lucciola. Where that build sits no longer decides whether the image
+  builds: `dnf_install_pinned` (build_files/00-common.sh) installs it from
+  the repositories when they have it and from Koji's signed copy otherwise,
+  checked with `rpmkeys` against the release key in the image before dnf
+  sees it, and the build log says which. The case it was written for: on
+  2026-10-17 the pin was 5.3.0-1 and Fedora 45, still a pre-release, had
+  5.2.1-1 in its release repository and 5.3.0-1 only in updates-testing
+  (FEDORA-2026-04f44a27d9), which a released Fedora does not enable; a
+  newer Noctalia obsoleting that update before it went stable would have
+  done the same. Still a hand's work: moving `NOCTALIA_VR` when upstream
+  moves (Noctalia supports only its latest release, Fedora builds each
+  within a day), and only together with a test boot, as the Containerfile
+  comment says; and a pin whose build never went through Bodhi has no
+  signed copy, so the build fails at once, naming the Koji URL it asked
+  for.
 - Login screen (greetd + Noctalia Greeter, lucciola/build.sh step 5): the
   greeter RPM is built from `NOCTALIA_GREETER_VERSION` against the new
   release's libraries; it needs `wlroots-0.20` (a release that moves to
