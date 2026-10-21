@@ -94,6 +94,14 @@ stable release is cut.
   notifies when it is false. Only jobs that run on every pull request may
   be required: one that does not run blocks the merge forever (the pitfall
   is written in the script). `tests/repo-guard.test.sh`.
+### Fixed (2026-10-21, build)
+- **The gaming-native alignment uses one snapshot of the repositories.**
+  The plan, the alignment and the check refreshed the metadata each, so
+  each could land on a different mirror; while expat 2.9.0 propagated
+  through updates-testing the build stopped with "still needs to change
+  image packages after the alignment" on an image that was fine. The first
+  plan refreshes, the other two reuse its metadata.
+
 ### Fixed (2026-10-20, build)
 - **The pinned Noctalia build could leave the repositories and stop every
   image build.** `NOCTALIA_VR` pins noctalia to 5.3.0-1, which Fedora 45
