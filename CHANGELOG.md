@@ -7,6 +7,13 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-20, welcome window)
+- **The welcome window no longer redraws all day.** The firefly's glow is a
+  CSS animation, which has GTK redraw the window on every frame: left open
+  on another workspace since the login, it had used an hour of CPU in a
+  day (5% of a core, steadily). It now glows only while the window is the
+  active one.
+
 ### Added (2026-10-20, checks that can fail)
 - **Mutation checks.** Each guard the two reviews looked at is broken on
   purpose, one file per breakage in `tests/mutants/`, and its test must
