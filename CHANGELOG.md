@@ -19,6 +19,63 @@ stable release is cut.
   build no longer downloads one from MoreWaita; the scheduler icon is a
   tracked file instead of a heredoc in the branding script. The rootfs
   validator checks the six files and the two launchers.
+### Fixed (2026-10-21, build)
+- **The gaming-native alignment uses one snapshot of the repositories.**
+  The plan, the alignment and the check refreshed the metadata each, so
+  each could land on a different mirror; while expat 2.9.0 propagated
+  through updates-testing the build stopped with "still needs to change
+  image packages after the alignment" on an image that was fine. The first
+  plan refreshes, the other two reuse its metadata.
+
+### Fixed (2026-10-20, build)
+- **The pinned Noctalia build could leave the repositories and stop every
+  image build.** `NOCTALIA_VR` pins noctalia to 5.3.0-1, which Fedora 45
+  offers only in updates-testing (FEDORA-2026-04f44a27d9) while it is a
+  pre-release: at the release (27 October) that repository goes away, and
+  a newer Noctalia obsoleting the update before then would have had the
+  same effect; from that day every build of the image, security updates
+  included, failed on the install, at the worst possible time. Fedora
+  keeps every build in Koji, with a copy signed by the release key. The
+  install now asks the repositories for the exact build first and, when
+  they no longer have it, fetches that copy, checks it with `rpmkeys`
+  against the Fedora release key in the image (dnf does not check a local
+  file) and installs it in the same transaction as niri,
+  xwayland-satellite and ddcutil, weak dependencies off as before; the
+  build then checks that the installed noctalia is the pinned one. The log
+  says which path was taken; a bad signature, a signature by another key,
+  or a build Koji does not have fail the build at once, naming the URL.
+  The kernel reserve's kernel-devel install, which already did this for
+  Fedora's kernel, uses the same helpers (`fetch_signed_rpm`,
+  `verify_fedora_signature`, `dnf_install_pinned` in
+  build_files/00-common.sh): it now also insists that the signer is the
+  release key and not any key the rpmdb holds, and a 404 from Koji fails
+  at once instead of after five retries. Tested with fake dnf5, curl and
+  rpmkeys (tests/pinned-fedora-build.test.sh, run by lint); the real
+  signed copy of noctalia-5.3.0-1.fc45 was fetched and verified with the
+  same helpers in a Fedora 45 container. The Lucciola step now sources the
+  shared helpers, so its installs carry `SOURCE_DATE_EPOCH` like every
+  other step. Bumping `NOCTALIA_VR` when upstream moves stays a reviewed
+  change with a test boot (release checklist).
+### Changed (validator)
+- **Apps still downloading are pending, not failures.** Since the first
+  preinstall run no longer holds the boot, `lucciola-validate-margine-system`
+  run in those minutes reports an app the run has not reached yet as a
+  warning, not as a missing app; once the run has passed, a missing app is
+  a failure as before.
+- **Stock Fedora starting points.** The "fedora" and "fedora-testing"
+  Flatpak remotes a Silverblue or Kinoite install leaves behind are removed
+  before the first preinstall, unless apps were installed from them.
+### Fixed (2026-10-20, layering)
+- **An outage of Cisco's openh264 mirror no longer fails `rpm-ostree
+  install`.** rpm-ostree fetches the metadata of every enabled repository
+  before it layers anything and ignores `skip_if_unavailable`; on
+  2026-10-20 Cisco's mirror was down for over ten minutes and every
+  layering failed, in the upgrade test as on installed systems. The image
+  now ships `fedora-cisco-openh264` disabled: its openh264 comes from
+  negativo17 and updates with the image, nothing is layered from Cisco.
+  `validate-margine-system` checks it (9f). The upgrade test also makes
+  three attempts at layering, 45 seconds apart, for the older images it
+  starts from, which still have the repository on.
 
 ### Fixed (2026-10-20, lint)
 - **The MOK signer test runs whole on the lint runner.** The runner has no

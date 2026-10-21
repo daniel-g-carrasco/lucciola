@@ -235,45 +235,32 @@ restore_akmodsbuild() {
 #     shipped 7.2.9-300.fc45 while Fedora offered only 7.2.11 (a branched
 #     release keeps no superseded builds; updates-archive gets only
 #     superseded updates). So the repositories first, then Koji, where
-#     every build stays, in the copy Fedora signed with the release key.
+#     every build stays, in the copy Fedora signed with the release key
+#     (fetch_signed_rpm in 00-common.sh, shared with Lucciola's Noctalia
+#     pin since 2026-10-20).
 # Either way the RPMs are checked against Fedora's release key before dnf
-# sees them: dnf does not check the signature of a local file.
+# sees them (verify_fedora_signature): dnf does not check the signature of
+# a local file.
 install_fedora_kernel_devel() {
-  local kver="$1" v r a keyfile="" fpr keyid dir pkg f out
+  local kver="$1" v r a dir pkg
   v="$(rpm -q --qf '%{VERSION}\n' kernel-core | head -n1)"
   r="$(rpm -q --qf '%{RELEASE}\n' kernel-core | head -n1)"
   a="$(rpm -q --qf '%{ARCH}\n' kernel-core | head -n1)"
   [[ "${v}-${r}.${a}" == "$kver" ]] || { err "kernel-core is ${v}-${r}.${a}, not $kver"; return 1; }
-  for f in "/usr/share/pki/rpm-gpg/RPM-GPG-KEY-fedora-${FEDORA_VER}-primary" \
-           "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-${FEDORA_VER}-primary"; do
-    [[ -s "$f" ]] && { keyfile="$f"; break; }
-  done
-  [[ -n "$keyfile" ]] || { err "no Fedora ${FEDORA_VER} release key in the image"; return 1; }
+  fedora_release_key >/dev/null || return 1   # before any download: no key, no point
   dir=/run/kernel-devel
   rm -rf "$dir"; mkdir -p "$dir"
   if retry 2 15 bash -c 'dnf -y clean metadata >/dev/null 2>&1 || true; exec dnf -y download --destdir "$0" "$@"' \
        "$dir" "kernel-devel-${kver}" "kernel-devel-matched-${kver}"; then
     log "kernel-devel-${kver}: downloaded from the repositories"
+    verify_fedora_signature "$dir"/*.rpm || return 1
   else
     log "kernel-devel-${kver} is not in the repositories any more: fetching Fedora's signed build from Koji"
     rm -f "$dir"/*.rpm
-    fpr="$(key_fingerprint "$keyfile")" || return 1
-    [[ "$fpr" =~ ^[0-9A-F]{40}$ ]] || { err "unreadable fingerprint for $keyfile"; return 1; }
-    # Koji keeps each signed copy under the key id: the fingerprint's last 8
-    # digits, in lower case.
-    keyid="${fpr: -8}"
     for pkg in kernel-devel kernel-devel-matched; do
-      retry_curl_strict "https://kojipkgs.fedoraproject.org/packages/kernel/${v}/${r}/data/signed/${keyid,,}/${a}/${pkg}-${kver}.rpm" \
-        "$dir/${pkg}-${kver}.rpm" || return 1
+      fetch_signed_rpm "$pkg" "${v}-${r}" "$a" "$dir" kernel || return 1
     done
   fi
-  rpmkeys --import "$keyfile" || true   # already in the rpmdb on a Fedora base
-  for f in "$dir"/*.rpm; do
-    out="$(rpmkeys --checksig "$f" 2>&1)" || true
-    [[ "$out" == *"signatures OK"* ]] \
-      || { err "$(basename "$f") does not carry a valid Fedora ${FEDORA_VER} signature: $out"; return 1; }
-    log "  $out"
-  done
   retry 3 30 bash -c 'dnf -y clean metadata >/dev/null 2>&1 || true; exec dnf -y install --refresh --exclude=kernel,kernel-core,kernel-modules,kernel-modules-core,kernel-modules-extra "$@"' \
     _ "$dir"/*.rpm akmods || { err "akmods with kernel-devel-${kver} did not install"; return 1; }
   rm -rf "$dir"
@@ -633,12 +620,26 @@ log "Base now ships: steam-devices + the gstreamer bad/ugly codecs (negativo17)"
 # (.github/scripts/gaming-native-resolve.sh, every installed package locked
 # at its version) and smoke-boot with rpm-ostree on the booted image; a
 # failure of either stops the image.
+#
+# One snapshot of the repositories for the three steps. The first plan
+# refreshes the metadata; the alignment and the second plan reuse it. With
+# a refresh at each step, each dnf call can land on a different mirror,
+# and while a push to updates-testing propagates the mirrors disagree: on
+# 2026-10-21 (expat 2.8.5 obsoleted by 2.9.0 at 01:59 UTC) the plan saw
+# 2.8.5, the alignment's first attempt found "No match" for it, its retry
+# installed it, and the second plan, on a mirror that already had 2.9.0,
+# wanted to upgrade it again, so the build stopped although nothing was
+# wrong with the image. Reusing the first plan's metadata keeps the three
+# steps on one view of the repositories; the mirrors' disagreement is
+# then the smoke runs' to catch, as a layer that does not resolve, and a
+# rebuild once they agree settles it.
 mapfile -t GAMING_LAYER < <(grep -vE '^[[:space:]]*(#|$)' /ctx/60-ujust-services/gaming-native-packages.txt)
 (( ${#GAMING_LAYER[@]} )) || { err "gaming-native-packages.txt lists no package"; exit 1; }
-gaming_plan() {
-  local out attempt
+gaming_plan() {  # gaming_plan [--refresh]
+  local out attempt refresh="${1:-}"
   for attempt in 1 2 3 4 5; do
-    out="$(dnf install --assumeno --refresh --setopt=install_weak_deps=False --enablerepo=fedora-multimedia "${GAMING_LAYER[@]}" 2>&1 || true)"
+    # shellcheck disable=SC2086  # $refresh is --refresh or nothing
+    out="$(dnf install --assumeno $refresh --setopt=install_weak_deps=False --enablerepo=fedora-multimedia "${GAMING_LAYER[@]}" 2>&1 || true)"
     if grep -q '^Transaction Summary' <<<"$out"; then printf '%s\n' "$out"; return 0; fi
     if grep -qE '^Failed to resolve the transaction|^Problem' <<<"$out"; then
       printf '%s\n' "$out" | tail -n 40 >&2
@@ -652,7 +653,7 @@ gaming_plan() {
   return 1
 }
 log "Planning the gaming-native layer (${GAMING_LAYER[*]}) against the image"
-_plan="$(gaming_plan)" || exit 1
+_plan="$(gaming_plan --refresh)" || exit 1
 # Rows are " <name> <arch> <epoch:version-release> <repo> <size>", and a
 # row that takes the place of an installed package is followed by
 # "   replacing <old>" rows. Install exactly those builds (not the i686 ones).
@@ -662,7 +663,8 @@ mapfile -t _align < <(awk '
                     { cand = "" }' <<<"$_plan" | sort -u)
 if (( ${#_align[@]} )); then
   log "Aligning ${#_align[@]} image packages with the gaming-native layer: ${_align[*]}"
-  retry 5 30 bash -c 'dnf -y clean metadata >/dev/null 2>&1 || true; exec dnf -y install --refresh --setopt=install_weak_deps=False --enablerepo=fedora-multimedia "$@"' _ "${_align[@]}" \
+  # The same metadata the plan used: no clean, no refresh (see above).
+  retry 5 30 dnf -y install --setopt=install_weak_deps=False --enablerepo=fedora-multimedia "${_align[@]}" \
     || { err "aligning the image packages failed after 5 attempts; aborting"; exit 1; }
 else
   log "No image package needs upgrading for the gaming-native layer"

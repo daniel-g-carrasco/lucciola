@@ -43,6 +43,30 @@ fi
 rm -f /var/lib/authselect/checksum
 rmdir /var/lib/authselect 2>/dev/null || true
 
+# Cisco's openh264 repository is enabled in Fedora's repo files, and
+# rpm-ostree fetches the metadata of every enabled repository before it
+# layers anything, ignoring skip_if_unavailable: while Cisco's mirror was
+# down on 2026-10-20 (over ten minutes), every `rpm-ostree install` failed,
+# on installed systems as in the upgrade test. The image's openh264 comes
+# from negativo17 and updates with the image; nothing is layered from
+# Cisco, and no build step reads this repository. Disabled in the shipped
+# file (dnf5 keeps the distribution's repo files under
+# /usr/share/dnf5/repos.d); validate-margine-system checks it.
+#
+# The edit must change the file's SIZE: the mtime pass below gives every
+# file written in this RUN mtime 0, which is what the base's copy has, and
+# the layer diff on the CI runners (root overlay with metacopy, so the
+# storage compares size, mode and mtime, not content) then takes a same-size
+# edit for the unchanged file and drops it from the layer. The first build
+# of this change passed this check and shipped the repository enabled
+# (2026-10-20). The comment line below is the size difference.
+CISCO_REPO=/usr/share/dnf5/repos.d/fedora-cisco-openh264.repo
+[[ -f "$CISCO_REPO" ]] || { echo "ERROR: $CISCO_REPO is missing: the repository layout changed, update this step" >&2; exit 1; }
+sed -i '/^\[fedora-cisco-openh264\]$/,/^\[/{s/^enabled=1$/enabled=0\n# Lucciola: off, nothing is layered from Cisco and its mirror goes down (99-cleanup.sh)/}' "$CISCO_REPO"
+sed -n '/^\[fedora-cisco-openh264\]$/,/^\[/p' "$CISCO_REPO" | grep -qx 'enabled=0' \
+  || { echo "ERROR: fedora-cisco-openh264 is still enabled in $CISCO_REPO" >&2; exit 1; }
+echo "99-cleanup: fedora-cisco-openh264 disabled: $(grep -n '^enabled=' "$CISCO_REPO" | head -n1 | tr -d '\n'), $(stat -c 'inode %i, %h link(s)' "$CISCO_REPO"), sha256 $(sha256sum "$CISCO_REPO" | cut -c1-12)"
+
 # Build state that changed on every rebuild and moved whole layers with
 # it (2026-10-03, measured file by file between two builds of the same
 # tree; the chunking step also prunes /run as a whole):
@@ -133,6 +157,9 @@ fi
 # measurement). Every step below that writes into a directory is followed
 # by one last directory pass at the end of the script.
 rpm -qa --qf '[%{FILENAMES}\n]' 2>/dev/null | LC_ALL=C sort -u > /tmp/margine-owned
+# Beware: a base file edited in THIS run without changing its size ends up
+# here with the base copy's mtime 0, and the layer diff on the CI runners
+# (size, mode, mtime) drops it as unchanged; see the Cisco repository above.
 echo "Normalising mtimes of directories and build-created files"
 find / -xdev \( -type d -o -newer /ctx/99-cleanup.sh \) -exec touch -h -d @0 {} + 2>/dev/null || true
 find / -xdev ! -type d -print 2>/dev/null | LC_ALL=C sort > /tmp/margine-all
