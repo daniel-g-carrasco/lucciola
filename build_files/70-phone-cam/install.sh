@@ -20,7 +20,7 @@ source /ctx/00-common.sh
 
 log "Installing phone-cam dependencies (android-tools, gtk4 gst sink)"
 dnf -y install --no-docs --setopt=install_weak_deps=False \
-  android-tools gstreamer1-plugin-gtk4
+  android-tools gstreamer1-plugin-gtk4 qrencode
 
 SCRCPY_VERSION=5.0.1
 SCRCPY_SHA256=9f969d30cc574816077edecda65719c1c70b0aee1df1ba5fa00779ac07b8fd6e

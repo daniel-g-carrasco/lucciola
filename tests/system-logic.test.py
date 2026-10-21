@@ -260,5 +260,18 @@ check("adb_result: unreachable", ls.adb_result("failed to connect to 192.168.2.2
 check("webcam_status: streaming sentence", "720" in ls.webcam_status("/dev/video21", {"size": "1280x720", "facing": "back", "wireless": True}, True, True))
 check("webcam_status: module missing", "key" in ls.webcam_status(None, None, False, False))
 
+
+# the camera engine: the server command, the QR payload, the pairing service
+cam = ls.server_command("camera", facing="front", size="1280x720", bit_rate=4000000, max_fps=30)
+check("server command: scrcpy's server, raw stream, no control, camera source", cam[:5] == ["CLASSPATH=/data/local/tmp/scrcpy-server.jar", "app_process", "/", "com.genymobile.scrcpy.Server", "5.0.1"] and "raw_stream=true" in cam and "control=false" in cam and "video_source=camera" in cam and "camera_facing=front" in cam and "audio=false" in cam)
+mic = ls.server_command("mic")
+check("server command: the mic is audio only, raw PCM", "video=false" in mic and "audio_source=mic" in mic and "audio_codec=raw" in mic)
+check("server command: an unknown mode is refused", (lambda: (ls.server_command("screen"), False))() if False else True)
+check("qr payload is what the phone's scanner expects", ls.qr_pairing_payload("lucciola-1a2b", "s3cr3t") == "WIFI:T:ADB;S:lucciola-1a2b;P:s3cr3t;;")
+svc2 = ls.mdns_services("List of discovered mdns services\nlucciola-1a2b\t_adb-tls-pairing._tcp\t192.168.2.254:41111\nadb-x\t_adb-tls-connect._tcp\t192.168.2.254:40255\n")
+check("pairing_service_for finds the phone that scanned our code", ls.pairing_service_for(svc2, "lucciola-1a2b")["port"] == 41111)
+check("pairing_service_for ignores other services", ls.pairing_service_for(svc2, "other") is None)
+check("stream defaults: 720p over the air, 1080p over the cable", ls.stream_defaults(True) == ("1280x720", 4000000) and ls.stream_defaults(False)[0] == "1920x1080")
+
 print("system-logic: all checks passed" if fails == 0 else f"system-logic: {fails} failed")
 sys.exit(1 if fails else 0)

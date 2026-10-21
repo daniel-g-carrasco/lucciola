@@ -157,9 +157,11 @@ check "the Phone page writes Lucciola's default (notifications to the phone off)
 # user, and the microphone goes through pw-loopback (pactl is not in the image).
 check "the separate Phone Camera window is gone" [ ! -e "$SF/usr/libexec/margine/phone-cam-gui" ]
 check "the Phone Camera launcher opens the Phone page" bash -c "grep -qx 'Exec=/usr/libexec/margine/system-gui --page phone' '$SF/usr/share/applications/dev.margine.PhoneCam.desktop' && grep -qx 'StartupWMClass=dev.margine.System' '$SF/usr/share/applications/dev.margine.PhoneCam.desktop'"
-check "the camera uses scrcpy, adb and pw-loopback by path" bash -c "grep -q 'SCRCPY = \"/usr/bin/scrcpy\"' '$GUI' && grep -q 'ADB = \"/usr/bin/adb\"' '$GUI' && grep -q 'PW_LOOPBACK = \"/usr/bin/pw-loopback\"' '$GUI' && ! grep -q 'pactl' '$GUI'"
-check "the camera always constrains the size and never shows a window" bash -c "grep -q -- '--camera-size=' '$GUI' && grep -q -- '--no-window' '$GUI'"
-check "wireless pairing takes the code as an argument, never typed into adb" bash -c "grep -q 'ADB, \"pair\", f\"{h}:{p}\", c' '$GUI'"
+check "the camera drives scrcpy's server itself and lands in PipeWire, by path" bash -c "grep -q 'ADB = \"/usr/bin/adb\"' '$GUI' && grep -q 'QRENCODE = \"/usr/bin/qrencode\"' '$GUI' && grep -q 'pipewiresink name=pw mode=provide' '$GUI' && grep -q 'server_command' '$GUI' && ! grep -q 'pactl' '$GUI' && ! grep -q 'pw-loopback' '$GUI'"
+check "the camera always constrains the size and the stream is raw, without control" bash -c "grep -q 'camera_size=' '$SF/usr/share/lucciola/system/lucciola_system.py' && grep -q 'raw_stream=true' '$SF/usr/share/lucciola/system/lucciola_system.py' && grep -q 'control=false' '$SF/usr/share/lucciola/system/lucciola_system.py'"
+check "the loopback device is a bonus, never a requirement" bash -c "grep -q 'if device:' '$GUI' && ! grep -q 'button_row(expander, \"Register' '$GUI'"
+check "wireless pairing takes the code as an argument, never typed into adb" bash -c "grep -q 'ADB, \"pair\", f\"{h}:{p}\", c' '$GUI' && grep -q 'ADB, \"pair\", f\"{service\[.host.\]}:{service\[.port.\]}\", password' '$GUI'"
+check "the QR code carries the payload the phone expects" grep -q 'qr_pairing_payload' "$GUI"
 for k in $(grep -oE '"key": "[a-z-]+"' "$GUI" | cut -d'"' -f4); do
   check "the window's feature '$k' has its verbs in the helper" bash -c "echo \"$verbs\" | grep -qx '$k-on' && echo \"$verbs\" | grep -qx '$k-off'"
 done

@@ -7,21 +7,29 @@ stable release is cut.
 
 ## [Unreleased]
 
-### Changed (2026-10-21, Phone Camera in the Phone page)
+### Changed (2026-10-21, Phone Camera in the Phone page, rebuilt)
 - **Phone Camera is a section of the Phone page**, not a window of its own
-  any more: in the phone's card, Use as a Webcam opens the camera dialog
-  (lens, resolution, Start, preview, the two remedies), with the stream
-  going on when the dialog closes and a Stop in the card. The Phone Camera
-  launcher stays and opens the page. A Camera Over USB group covers a
-  phone on the cable with or without KDE Connect.
-- **Over Wi-Fi**: Set Up Wireless pairs the PC with the phone's wireless
-  debugging once (address from KDE Connect, port and six-digit code from
-  the phone); from then on the page finds the phone through adb's mDNS
-  discovery and connects by itself, or sends a reminder to the phone when
-  wireless debugging is off. 720p over the air, 1080p over the cable.
-- **The phone's microphone**: a switch in the camera dialog makes it
-  "Lucciola Phone Mic", a PipeWire source any call can pick (pw-loopback
-  plus scrcpy's microphone capture; Android 11 or later).
+  any more, and it is rebuilt: Lucciola drives scrcpy's own server on the
+  phone in raw-stream mode and decodes the bare H.264 with GStreamer
+  straight into PipeWire. "Lucciola Phone Cam" is a PipeWire video source
+  that the camera portal, Flatpak browsers, GNOME apps and calls see at
+  once, with no kernel module in the way; when the v4l2loopback device is
+  there the video is copied into it too, for apps that only speak V4L2.
+  The preview is a branch of the same pipeline. In the phone's card: the
+  Camera row with the real state, Use as a Webcam (lens, resolution, Start,
+  preview), Stop while streaming. A Camera Over USB group covers a phone on
+  the cable with or without KDE Connect. The Phone Camera launcher stays and
+  opens the page.
+- **Over Wi-Fi**: Set Up Wireless shows a QR code the phone scans in
+  Wireless debugging (Pair device with QR code), pairs by itself when the
+  phone advertises the pairing service, and connects; typing the six-digit
+  code stays as the other way. Afterwards the page finds the phone through
+  adb's mDNS discovery and connects by itself, or sends a reminder to the
+  phone when wireless debugging is off. 720p at 4 Mbit/s over the air, 1080p
+  at 8 Mbit/s over the cable. qrencode joins the image for the QR code.
+- **The phone's microphone**: a switch in the camera dialog runs a second
+  stream (bare PCM from scrcpy's server) into a PipeWire audio source,
+  "Lucciola Phone Mic", any call can pick. Android 11 or later.
 - The guide's phone chapter says it, with the native USB webcam of recent
   Pixels first for who has the cable.
 

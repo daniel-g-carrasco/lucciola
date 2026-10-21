@@ -707,3 +707,50 @@ def webcam_status(device, stream, adb_ready, wireless_ready, service_seen=False)
     if service_seen:
         return "Wireless debugging is on, but this PC is not paired with it yet: Set Up Wireless, once"
     return "Not connected for the camera: a USB cable with USB debugging on, or Set Up Wireless with wireless debugging on"
+
+
+# ── the phone camera engine: scrcpy's server driven by us, into PipeWire ──
+
+SCRCPY_VERSION = "5.0.1"
+SCRCPY_SERVER = "/usr/lib/margine/scrcpy/scrcpy-server"
+SCRCPY_SERVER_ON_PHONE = "/data/local/tmp/scrcpy-server.jar"
+ADB_PAIR_SERVICE_TYPE = "_adb-tls-pairing._tcp"
+MIC_RATE = 48000
+MIC_CHANNELS = 2
+
+
+def server_command(mode, facing="back", size="1280x720", bit_rate=4000000, max_fps=30):
+    """The command run on the phone through `adb shell` for one stream:
+    scrcpy's own server, in raw-stream mode (no headers, no control), so a
+    plain TCP socket carries bare H.264 (camera) or bare PCM (mic) that
+    GStreamer reads straight. Versions must match the bundled jar."""
+    base = ["CLASSPATH=" + SCRCPY_SERVER_ON_PHONE, "app_process", "/", "com.genymobile.scrcpy.Server", SCRCPY_VERSION,
+            "tunnel_forward=true", "raw_stream=true", "send_frame_meta=false", "control=false", "cleanup=false", "log_level=info"]
+    if mode == "camera":
+        return base + ["video_source=camera", f"camera_facing={facing}", f"camera_size={size}",
+                       f"video_bit_rate={int(bit_rate)}", f"max_fps={int(max_fps)}", "audio=false"]
+    if mode == "mic":
+        return base + ["video=false", "audio=true", "audio_source=mic", "audio_codec=raw"]
+    raise ValueError(mode)
+
+
+def qr_pairing_payload(name, password):
+    """What the phone's QR scanner in Wireless debugging expects (the same
+    text Android Studio shows): a Wi-Fi-style payload with the service name
+    the phone will advertise for pairing, and the pairing password."""
+    return f"WIFI:T:ADB;S:{name};P:{password};;"
+
+
+def pairing_service_for(services, name):
+    """The pairing service the phone advertises after scanning our QR code,
+    by the name the QR carried."""
+    for s in services:
+        if s["type"] == ADB_PAIR_SERVICE_TYPE and s["name"] == name:
+            return s
+    return None
+
+
+def stream_defaults(wireless):
+    """Resolution and bit rate by link: the air gets 720p at 4 Mbit/s, the
+    cable 1080p at 8 Mbit/s."""
+    return ("1280x720", 4000000) if wireless else ("1920x1080", 8000000)
