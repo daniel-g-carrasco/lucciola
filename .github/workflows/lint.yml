@@ -138,6 +138,11 @@ jobs:
         # library is gone (Margine's Wayland Scroll Factor line after a move).
         run: bash tests/drop-missing-preload.test.sh
 
+      - name: Stock-Fedora Flatpak remotes tidy
+        # The fedora remotes a Silverblue/Kinoite start leaves behind go,
+        # unless apps came from them. See tests/flatpak-remote-tidy.test.sh.
+        run: bash tests/flatpak-remote-tidy.test.sh
+
       - name: Developer layer helper (ujust lucciola-devmode)
         # Reads the package list, picks what remove may drop, installs and
         # deletes Homebrew: tested on temp files with a fake installer.
