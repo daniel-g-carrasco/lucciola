@@ -49,7 +49,7 @@ plan scheduler-off;               check "scheduler-off (rc $RC)" bash -c "[ '$RC
 # The optional features, the app profiles and the maintenance verbs: one
 # definition in /usr/libexec/lucciola/feature (and printers-repair), reached
 # through fixed argument vectors.
-for f in gaming gaming-native ai devmode vscode devtools docker tailscale vm sunshine; do
+for f in gaming gaming-native ai devmode vscode devtools docker tailscale vm sunshine phone; do
   plan "$f-on";  check "$f-on plans the feature helper (rc $RC)"  bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/lucciola/feature $f install' '$T/out'"
   plan "$f-off"; check "$f-off plans the feature helper (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/lucciola/feature $f remove' '$T/out'"
 done
@@ -114,11 +114,13 @@ check "feature helper never prompts" bash -c "! grep -qE 'read -r?p' '$FEAT'"
 check "feature helper refuses install/remove without root" bash -c "grep -q 'need_root' '$FEAT'"
 bash -n "$FEAT" > "$T/out" 2>&1 && RC=0 || RC=$?
 check "feature helper parses (rc $RC)" [ "$RC" = 0 ]
-for f in gaming gaming-native ai devmode vscode devtools docker tailscale vm sunshine slim naked; do
+for f in gaming gaming-native ai devmode vscode devtools docker tailscale vm sunshine phone slim naked; do
   check "feature helper knows $f" bash -c "grep -qE '^${f//-/_}_status\(\)' '$FEAT'"
 done
 "$FEAT" nothing status > "$T/out" 2>&1 && RC=0 || RC=$?
 check "feature helper refuses an unknown feature (rc $RC)" [ "$RC" != 0 ]
+check "the phone layer's list names the packages the recipe explains" bash -c "grep -qx kdeconnectd '$ROOT/build_files/60-ujust-services/phone-packages.txt' && grep -qx fuse-sshfs '$ROOT/build_files/60-ujust-services/phone-packages.txt'"
+check "the indicator's autostart entry runs kdeconnect-indicator" grep -qx 'Exec=kdeconnect-indicator' "$SF/usr/share/lucciola/phone/org.kde.kdeconnect.nonplasma.desktop"
 check "printers-repair never prompts" bash -c "! grep -qE 'read -r?p' '$SF/usr/libexec/lucciola/printers-repair'"
 # The recipes explain and ask, then go through the dispatcher: no second definition.
 JUST="$ROOT/build_files/60-custom.just"
@@ -127,7 +129,7 @@ for pair in "lucciola-gaming:gaming-on" "lucciola-gaming-remove:gaming-off" "luc
             "lucciola-ai:ai-on" "lucciola-ai-remove:ai-off" "lucciola-slim:apps-slim" "lucciola-naked:apps-naked" "lucciola-slim-restore:apps-restore" \
             "lucciola-printers-repair:printers-repair" "lucciola-dock-wake:dock-wake" "lucciola-dock-rescue:dock-rescue" \
             "lucciola-docker:docker-on" "lucciola-tailscale:tailscale-on" "lucciola-vscode:vscode-on" "lucciola-devtools:devtools-on" "lucciola-vm:vm-on" \
-            "lucciola-devmode:devmode-on" "lucciola-sunshine:sunshine-on" "lucciola-sunshine-remove:sunshine-off" "lucciola-update-unblock:flatpak-unblock"; do
+            "lucciola-devmode:devmode-on" "lucciola-sunshine:sunshine-on" "lucciola-sunshine-remove:sunshine-off" "lucciola-update-unblock:flatpak-unblock" "lucciola-phone:phone-on"; do
   recipe="${pair%%:*}"; verb="${pair##*:}"
   recipe_body "$recipe" > "$T/out"
   check "recipe $recipe goes through the dispatcher ($verb)" grep -q "lucciola/admin $verb" "$T/out"

@@ -41,8 +41,8 @@
 # fail with "File exists".
 set -euo pipefail
 
-IMAGE_REF="${1:?usage: layer-resolve.sh <image-ref> <gaming-native|developer>}"
-LAYER="${2:?usage: layer-resolve.sh <image-ref> <gaming-native|developer>}"
+IMAGE_REF="${1:?usage: layer-resolve.sh <image-ref> <gaming-native|developer|phone>}"
+LAYER="${2:?usage: layer-resolve.sh <image-ref> <gaming-native|developer|phone>}"
 
 case "$LAYER" in
   gaming-native)
@@ -55,6 +55,11 @@ case "$LAYER" in
     MARK=MARGINE-DEVELOPER-RESOLVE
     RECIPE="ujust lucciola-devmode"
     SETUP="/usr/libexec/margine/devmode repo" ;;
+  phone)
+    LIST=/usr/share/margine/phone-packages.txt
+    MARK=MARGINE-PHONE-RESOLVE
+    RECIPE="ujust lucciola-phone"
+    SETUP="" ;;
   *) echo "layer-resolve.sh: unknown layer '$LAYER'" >&2; exit 2 ;;
 esac
 

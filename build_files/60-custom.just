@@ -1261,6 +1261,50 @@ lucciola-docker ACTION="install":
       *) echo "usage: ujust lucciola-docker [install|remove|status]"; exit 2 ;;
     esac
 
+# The phone link: KDE Connect's service, tray indicator and Files extension
+# as a layer (kdeconnectd brings Qt6 and KF6, about 260 MB: not in the
+# image), the firewall service, an autostart entry for the indicator. The
+# Phone row of Lucciola System does the same through the same helper.
+# Phone link (KDE Connect): install (default) / remove / status.
+[group('Lucciola')]
+lucciola-phone ACTION="install":
+    #!/usr/bin/bash
+    set -euo pipefail
+    case "{{ ACTION }}" in
+      status)
+        /usr/libexec/lucciola/feature phone status | sed -n 's/^detail=//p' ;;
+      remove)
+        sudo /usr/libexec/lucciola/admin phone-off
+        echo "Phone link removed. Reboot to apply; the pairings in ~/.config/kdeconnect stay." ;;
+      install)
+        cat <<'EOF'
+    == Lucciola phone link (KDE Connect) ==
+    Your Android phone and this PC together, with the KDE Connect app on the
+    phone (Google Play or F-Droid), on the same Wi-Fi:
+      - the phone's notifications here, and this PC's on the phone
+      - one clipboard for both
+      - files, photos and links in a tap, either way; the phone's storage in Files
+      - music and video controlled from the phone, even from its lock screen
+      - the phone's battery in the tray, and a ring to find it
+      - commands on this PC from the phone (lock, suspend, ...)
+    This layers kdeconnectd, kde-connect (indicator and command line),
+    kde-connect-nautilus and fuse-sshfs with rpm-ostree (about 260 MB,
+    active after a restart), adds an autostart entry for the tray indicator
+    and the kdeconnect service to the firewall (ports 1714-1764).
+    Mouse and keyboard from the phone do not work under niri yet: the
+    RemoteDesktop portal it needs is not there.
+    Layered packages are reapplied on every system update. To undo:
+    ujust lucciola-phone remove (the pairings stay).
+    EOF
+        read -rp "Continue? [y/N] " ans
+        case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
+        sudo /usr/libexec/lucciola/admin phone-on
+        echo
+        echo "Phone link layered. Reboot; then open KDE Connect on the phone and pair:"
+        echo "the request arrives as a notification here, and both sides show the same key." ;;
+      *) echo "usage: ujust lucciola-phone [install|remove|status]"; exit 2 ;;
+    esac
+
 # Tailscale on demand. Not in the image since 2026-10-10: it ran a daemon
 # with UDP 41641 open on every install (docs/SECURITY-CLAIMS.md D4).
 # Layers it from Tailscale's repository (key pinned) and enables tailscaled.

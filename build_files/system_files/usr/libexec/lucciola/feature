@@ -7,7 +7,7 @@
 #   /usr/libexec/lucciola/feature NAME remove            root
 #
 # NAME is one of: gaming, gaming-native, ai, devmode, vscode, devtools,
-# docker, tailscale, vm, sunshine, slim, naked.
+# docker, tailscale, vm, sunshine, phone, slim, naked.
 #
 # The ujust recipes (lucciola-gaming, lucciola-devmode, ...) explain, ask
 # once and then reach this through /usr/libexec/lucciola/admin with sudo;
@@ -33,6 +33,10 @@ LAYER_REPO=/usr/libexec/margine/layer-repo
 PREINSTALL_KEEP=/usr/libexec/margine/flatpak-preinstall-keep
 DEV_GROUPS=/usr/bin/lucciola-dev-groups
 GAMING_NATIVE_LIST=/usr/share/margine/gaming-native-packages.txt
+PHONE_LIST=/usr/share/margine/phone-packages.txt
+PHONE_AUTOSTART_SRC=/usr/share/lucciola/phone/org.kde.kdeconnect.nonplasma.desktop
+PHONE_AUTOSTART=/etc/xdg/autostart/org.kde.kdeconnect.nonplasma.desktop
+PHONE_FIREWALL_SERVICE=kdeconnect
 FLATHUB=https://dl.flathub.org/repo/flathub.flatpakrepo
 
 GAMING_FLATPAKS=(com.valvesoftware.Steam net.lutris.Lutris com.heroicgameslauncher.hgl
@@ -386,6 +390,58 @@ sunshine_remove() {
   fi
 }
 
+# ── phone (KDE Connect: the phone and Lucciola together) ───────────────
+# The service and its indicator come as system packages (kdeconnectd pulls
+# Qt6 and KF6, about 260 MB: a layer, not the image), the indicator gets
+# an autostart entry of ours (Fedora ships upstream's only under
+# applications/), and the firewall learns the service (ports 1714-1764;
+# the FedoraWorkstation zone already opens them, the entry keeps the phone
+# working if the zone is ever tightened). Pairings live in the user's
+# ~/.config/kdeconnect and are never touched: the phone is known again
+# when the layer comes back.
+phone_pkgs() {
+  [[ -r "$PHONE_LIST" ]] || die "missing $PHONE_LIST: bad image?"
+  grep -vE '^[[:space:]]*(#|$)' "$PHONE_LIST"
+}
+phone_status() {
+  local -a pkgs=()
+  mapfile -t pkgs < <(phone_pkgs)
+  case "$(rpm_state "${pkgs[@]}")" in
+    installed)
+      local extras=""
+      [[ -f "$PHONE_AUTOSTART" ]] || extras+="; the indicator's autostart entry is missing"
+      if command -v firewall-cmd >/dev/null 2>&1 && ! firewall-cmd --query-service="$PHONE_FIREWALL_SERVICE" >/dev/null 2>&1; then
+        extras+="; the firewall service is not on"
+      fi
+      state installed "KDE Connect $(rpm -q --qf '%{VERSION}' kdeconnectd) is installed; pair from the KDE Connect app on the phone, same Wi-Fi$extras" ;;
+    pending)   state pending "KDE Connect is layered and works after a restart" ;;
+    absent)    state absent "Notifications, clipboard, files, media and more between an Android phone and this PC, with the KDE Connect app" ;;
+    *)         state partial "Some of the phone packages are installed" ;;
+  esac
+}
+phone_install() {
+  local -a pkgs=()
+  mapfile -t pkgs < <(phone_pkgs)
+  say rpm-ostree install --idempotent "${pkgs[@]}"
+  install -Dm0644 "$PHONE_AUTOSTART_SRC" "$PHONE_AUTOSTART"
+  echo "+ autostart entry for the indicator: $PHONE_AUTOSTART"
+  if command -v firewall-cmd >/dev/null 2>&1; then
+    say firewall-cmd --permanent --add-service="$PHONE_FIREWALL_SERVICE" >/dev/null || true
+    say firewall-cmd --reload >/dev/null || true
+  fi
+}
+phone_remove() {
+  local -a pkgs=()
+  mapfile -t pkgs < <(phone_pkgs)
+  uninstall_layered "${pkgs[@]}"
+  rm -f "$PHONE_AUTOSTART"
+  if command -v firewall-cmd >/dev/null 2>&1; then
+    say firewall-cmd --permanent --remove-service="$PHONE_FIREWALL_SERVICE" >/dev/null 2>&1 || true
+    say firewall-cmd --reload >/dev/null 2>&1 || true
+  fi
+  echo "the pairings in ~/.config/kdeconnect stay"
+}
+
 # ── slim and naked (the default app set, trimmed) ──────────────────────
 preinstall_masked() { [[ "$(systemctl is-enabled "$PREINSTALL_UNIT" 2>/dev/null || true)" == masked ]]; }
 profile_status() {  # profile_status NAME APPS...
@@ -436,7 +492,7 @@ profile_remove() {
 slim_remove() { profile_remove; }
 naked_remove() { profile_remove; }
 
-ALL=(gaming gaming-native ai devmode vscode devtools docker tailscale vm sunshine slim naked)
+ALL=(gaming gaming-native ai devmode vscode devtools docker tailscale vm sunshine phone slim naked)
 
 name="${1:-}"; action="${2:-}"
 if [[ "$name" == all && "$action" == status ]]; then

@@ -1,0 +1,9 @@
+# The phone layer: KDE Connect's service, its tray indicator and command
+# line (kde-connect), the Files extension ("Send to device"), and sshfs for
+# browsing the phone from Files. Layered by `ujust lucciola-phone` and the
+# Phone row of Lucciola System through /usr/libexec/lucciola/feature; the
+# build's resolve check and the smoke-boot dry run read this same file.
+kdeconnectd
+kde-connect
+kde-connect-nautilus
+fuse-sshfs

@@ -46,7 +46,7 @@ DOCK_SWITCH = "/etc/margine/dock-dp-rescue"
 DEVMODE = "/usr/libexec/margine/devmode"
 # The optional features /usr/libexec/lucciola/feature knows, each with its
 # <name>-on and <name>-off verb (slim and naked are the apps-* verbs below).
-FEATURES = ("gaming", "gaming-native", "ai", "devmode", "vscode", "devtools", "docker", "tailscale", "vm", "sunshine")
+FEATURES = ("gaming", "gaming-native", "ai", "devmode", "vscode", "devtools", "docker", "tailscale", "vm", "sunshine", "phone")
 
 APP_ID = re.compile(r"^[A-Za-z][A-Za-z0-9._-]{2,254}$")
 PCRS = re.compile(r"^[0-9]{1,2}(\+[0-9]{1,2})*$")

@@ -533,4 +533,28 @@
     <annotate key="org.freedesktop.policykit.exec.argv1">dock-rescue</annotate>
   </action>
 
+  <action id="dev.lucciola.admin.phone-on">
+    <description>Install the phone link (KDE Connect)</description>
+    <message>Authentication is required to install KDE Connect's service, its tray indicator and the Files extension as system packages, and to open its ports in the firewall.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">phone-on</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.phone-off">
+    <description>Remove the phone link</description>
+    <message>Authentication is required to remove KDE Connect and close its firewall ports. The pairings in your home folder stay.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">phone-off</annotate>
+  </action>
+
 </policyconfig>

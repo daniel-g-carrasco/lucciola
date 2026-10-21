@@ -33,6 +33,11 @@ install -Dm0644 /ctx/60-ujust-services/gaming-native-packages.txt \
 # smoke-boot dry run all read this one list.
 install -Dm0644 /ctx/60-ujust-services/developer-packages.txt \
   /usr/share/margine/developer-packages.txt
+# And for the phone layer: `ujust lucciola-phone` and the Phone row of
+# Lucciola System (through /usr/libexec/lucciola/feature), the build's
+# resolve check and the smoke-boot dry run read this one list.
+install -Dm0644 /ctx/60-ujust-services/phone-packages.txt \
+  /usr/share/margine/phone-packages.txt
 
 # ---------------------------------------------------------------------------
 # 5b. First-login bootstrap: not automatic in Lucciola

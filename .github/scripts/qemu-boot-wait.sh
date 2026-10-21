@@ -156,6 +156,7 @@ SEC_RESULT=""
 GUI_RESULT=""
 GAMING_RESULT=""
 DEV_RESULT=""
+PHONE_RESULT=""
 GUI_DEADLINE=0
 for (( i = 1; i <= TIMEOUT; i++ )); do
   if [[ -z "$BOOT_OK" && -f "$LOG" ]] && grep -qE "$OK_REGEX" "$LOG"; then
@@ -196,17 +197,21 @@ for (( i = 1; i <= TIMEOUT; i++ )); do
     [[ -z "$DEV_RESULT" ]] && grep -q "MARGINE-DEVELOPER-LAYER: PASS" "$LOG" && DEV_RESULT=pass
     [[ -z "$DEV_RESULT" ]] && grep -q "MARGINE-DEVELOPER-LAYER: FAIL" "$LOG" && DEV_RESULT=fail
     [[ -z "$DEV_RESULT" ]] && grep -q "MARGINE-DEVELOPER-LAYER: SKIP" "$LOG" && DEV_RESULT=skip
+    [[ -z "$PHONE_RESULT" ]] && grep -q "MARGINE-PHONE-LAYER: PASS" "$LOG" && PHONE_RESULT=pass
+    [[ -z "$PHONE_RESULT" ]] && grep -q "MARGINE-PHONE-LAYER: FAIL" "$LOG" && PHONE_RESULT=fail
+    [[ -z "$PHONE_RESULT" ]] && grep -q "MARGINE-PHONE-LAYER: SKIP" "$LOG" && PHONE_RESULT=skip
     if (( SEC_WATCH )); then
       [[ -z "$SEC_RESULT" ]] && grep -q "MARGINE-SEC-SMOKE: PASS" "$LOG" && SEC_RESULT=pass
       [[ -z "$SEC_RESULT" ]] && grep -q "MARGINE-SEC-SMOKE: FAIL" "$LOG" && SEC_RESULT=fail
     else
       SEC_RESULT=off
     fi
-    if [[ -n "$GUI_RESULT" && -n "$GAMING_RESULT" && -n "$DEV_RESULT" && -n "$SEC_RESULT" ]]; then break; fi
+    if [[ -n "$GUI_RESULT" && -n "$GAMING_RESULT" && -n "$DEV_RESULT" && -n "$PHONE_RESULT" && -n "$SEC_RESULT" ]]; then break; fi
     if (( i > GUI_DEADLINE )); then
       [[ -z "$GUI_RESULT" ]] && GUI_RESULT=timeout
       [[ -z "$GAMING_RESULT" ]] && GAMING_RESULT=timeout
       [[ -z "$DEV_RESULT" ]] && DEV_RESULT=timeout
+      [[ -z "$PHONE_RESULT" ]] && PHONE_RESULT=timeout
       [[ -z "$SEC_RESULT" ]] && SEC_RESULT=timeout
       break
     fi
@@ -280,6 +285,22 @@ if [[ -n "$BOOT_OK" ]]; then
         exit 1 ;;
       skip) echo "::warning::Developer-layer check skipped (rpm-ostreed not ready, VS Code repository unreachable or dry run timed out); build.yml's resolve check still ran." ;;
       *)    echo "::warning::Developer-layer check gave no verdict (probe skipped or stuck); see inject step + serial log." ;;
+    esac
+
+    # ---- Phone-layer dry-run verdict: GATING on FAIL, like the other two ----
+    # (2026-10-21) `ujust lucciola-phone` and the Phone row of Lucciola
+    # System layer KDE Connect: a FAIL means the recipe, and every update
+    # of a machine that has the phone link, would stop depsolving.
+    grep -E "MARGINE-PHONE-LAYER" "$LOG" || true
+    emit "phone=${PHONE_RESULT:-none}"
+    case "$PHONE_RESULT" in
+      pass) echo "✓ Phone layer resolves (rpm-ostree dry-run)" ;;
+      fail)
+        echo "::error::Phone layer does NOT resolve: ujust lucciola-phone, and rpm-ostree upgrades of machines that have it, would fail. GATING: not promoting. See serial log artifact."
+        emit "passed=false"
+        exit 1 ;;
+      skip) echo "::warning::Phone-layer check skipped (rpm-ostreed not ready or dry run timed out); build.yml's resolve check still ran." ;;
+      *)    echo "::warning::Phone-layer check gave no verdict (probe skipped or stuck); see inject step + serial log." ;;
     esac
   fi
   exit 0

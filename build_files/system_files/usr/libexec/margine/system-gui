@@ -99,6 +99,14 @@ PAGES = (
 # <key>-on and <key>-off verbs; "restart" marks the ones that add system
 # packages, which work after a restart. The words match the ujust recipes.
 FEATURE_SPECS = (
+    {"key": "phone", "group": "Phone", "title": "Phone", "icon": "phone-symbolic", "restart": True,
+     "explain": "Your Android phone and Lucciola together, with the KDE Connect app on the phone: its notifications here and yours there, "
+                "a shared clipboard, files and links in a tap, music and video controlled from the phone, its battery and a ring from the tray, "
+                "commands. KDE Connect's service, its tray indicator and the Send to Device entry of Files are added to the system, "
+                "and the firewall learns its ports. About 260 MB.",
+     "working": "Adding KDE Connect to the system and preparing the tray and the firewall.",
+     "done": "Phone link added: restart, then open KDE Connect on the phone, same Wi-Fi, and pair",
+     "remove": "KDE Connect, its tray indicator and its firewall ports are removed. The pairings in your home folder stay for when it comes back."},
     {"key": "gaming", "group": "Gaming", "title": "Gaming", "icon": "applications-games-symbolic", "restart": True,
      "explain": "Steam, Lutris, Heroic, Bottles, Protontricks, ProtonPlus and RetroArch come from Flathub and work at once. "
                 "gamescope, MangoHud, vkBasalt and GOverlay are added to the system and work after a restart. A few GB of downloads.",
@@ -153,6 +161,7 @@ FEATURE_SPECS = (
      "remove": "Alpaca is removed. Downloaded models stay in your home folder until you delete them."},
 )
 FEATURE_GROUPS = (
+    ("Phone", "The phone needs the KDE Connect app, from Google Play or F-Droid, on the same Wi-Fi."),
     ("Gaming", ""),
     ("Developer", "System packages work after a restart; apps work at once. Layered packages are reapplied with every system update."),
     ("AI", ""),

@@ -616,6 +616,7 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
       <li><a href="#g-install">switch to lucciola</a></li>
       <li><a href="#g-desktop">getting around</a></li>
       <li><a href="#g-apps">apps</a></li>
+      <li><a href="#g-phone">phone</a></li>
       <li><a href="#g-updates">updates</a></li>
       <li><a href="#g-back">going back</a></li>
       <li><a href="#g-kernel">fedora’s kernel</a></li>
@@ -716,6 +717,14 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
     <p>One command adds the developer tools: VS Code, a C compiler, and Homebrew for command-line tools. It lists what it installs and asks first. Restart when it is done.</p>
     <div class="cmd"><pre>ujust lucciola-devmode</pre><button type="button">Copy</button></div>
     <p>Add <code>status</code> to see what is in place, or <code>remove</code> to take it away.</p>
+  </section>
+
+  <section id="g-phone" aria-labelledby="g-h-phone">
+  <h2 id="g-h-phone">phone</h2>
+  <p>An Android phone and Lucciola can work together: the phone’s notifications arrive on the PC and the PC’s on the phone, the clipboard is one, files and links go either way in a tap, the phone’s storage shows in Files, music and video answer to the phone, and the tray shows the phone’s battery and rings it when it hides.</p>
+  <p>On the phone, install KDE Connect, from Google Play or F-Droid. On the PC, open Lucciola System, Features, and press Install on the Phone row: it adds KDE Connect’s service and its tray indicator to the system, with a restart. In a terminal, <code>ujust lucciola-phone</code> does the same.</p>
+  <p>After the restart, with both on the same Wi-Fi, open the app on the phone: Lucciola appears with the PC’s name. Touch it, accept on the PC from the notification or the tray icon, and check that the two keys match. From then on the phone icon in the tray does the rest: battery, ring, send a file. In Files, right click on a file for Send to Device.</p>
+  <p class="note">Mouse and keyboard from the phone do not work under niri yet, and the phone’s notifications include their text: the KDE Connect app lets you choose which apps send theirs. Remove on the same row keeps the pairing in your home folder for when it comes back.</p>
   </section>
 
   <section id="g-updates" aria-labelledby="g-h-updates">

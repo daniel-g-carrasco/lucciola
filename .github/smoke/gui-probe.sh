@@ -156,7 +156,44 @@ developer_check() {
     out "MARGINE-DEVELOPER-LAYER: FAIL rc=$rc ${why}"
   fi
 }
-{ gaming_check; developer_check; } & GAMING_PID=$!
+# ---- Phone layer resolvability (2026-10-21) ----------------------------------
+# `ujust lucciola-phone` and the Phone row of Lucciola System layer KDE
+# Connect (kdeconnectd with its Qt6 and KF6 chain, kde-connect, the Files
+# extension, fuse-sshfs) from the list the image ships. Same dry run and
+# same verdicts as the gaming check, after the developer one.
+phone_check() {
+  local list=/usr/share/margine/phone-packages.txt
+  if [[ ! -r "$list" ]]; then
+    out "MARGINE-PHONE-LAYER: FAIL package list $list not found: ujust lucciola-phone cannot run"
+    return
+  fi
+  local pkgs
+  mapfile -t pkgs < <(grep -vE '^[[:space:]]*(#|$)' "$list")
+  if [[ "${#pkgs[@]}" -eq 0 ]]; then
+    out "MARGINE-PHONE-LAYER: FAIL empty package list $list"
+    return
+  fi
+  rpm-ostree status >/dev/null 2>&1 || { out "MARGINE-PHONE-LAYER: SKIP (rpm-ostreed not ready)"; return; }
+  local rc attempt why
+  for attempt in 1 2 3; do
+    timeout 420 rpm-ostree install --dry-run --idempotent "${pkgs[@]}" >/tmp/phone.out 2>&1
+    rc=$?
+    if (( rc == 0 )); then
+      out "MARGINE-PHONE-LAYER: PASS (${#pkgs[@]} pkgs resolve)"
+      return
+    fi
+    if (( rc == 124 )); then
+      out "MARGINE-PHONE-LAYER: SKIP (dry run timed out after 420 s on attempt $attempt)"
+      return
+    fi
+    grep -qiE 'transaction in progress|busy' /tmp/phone.out || break
+    sleep 20
+  done
+  why="$(grep -iE 'cannot install|conflict|requires|nothing provides|depsolve|problem|not found' /tmp/phone.out | head -3 | tr '\n' ' ' | tr -s ' ')"
+  [[ -n "$why" ]] || why="$(tail -n 3 /tmp/phone.out | tr '\n' ' ' | tr -s ' ')"
+  out "MARGINE-PHONE-LAYER: FAIL rc=$rc ${why}"
+}
+{ gaming_check; developer_check; phone_check; } & GAMING_PID=$!
 
 # ---- The autologin user and its session ------------------------------------
 # inject-gui-probe.sh creates "smoke" (uid 1010, home /var/home/smoke);

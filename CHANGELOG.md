@@ -7,6 +7,21 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Added (2026-10-21, phone link)
+- **Phone, the first row of the Features page of Lucciola System**, and
+  `ujust lucciola-phone`: KDE Connect's service (kdeconnectd), its tray
+  indicator and command line (kde-connect), the Files extension
+  (kde-connect-nautilus) and fuse-sshfs as an optional layer, about 260 MB,
+  with an autostart entry for the indicator and the kdeconnect service in
+  the firewall. With the KDE Connect app on an Android phone, same Wi-Fi:
+  notifications both ways, one clipboard, files and links in a tap, the
+  phone's storage in Files, media control, battery and ring, commands.
+  Mouse and keyboard from the phone wait for a RemoteDesktop portal under
+  niri. One list, `/usr/share/margine/phone-packages.txt`, for the helper,
+  the build's resolve check, the smoke-boot dry run and the upgrade smoke,
+  so a machine with the phone link always updates. The guide has a phone
+  chapter.
+
 ### Added (2026-10-21, Lucciola System: Features and Apps)
 - **Two more pages in Lucciola System: Features and Apps.** Features
   installs and removes the optional layers with a button each, the state
