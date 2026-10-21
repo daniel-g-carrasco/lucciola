@@ -75,10 +75,10 @@ These five cut across almost every touchpoint below:
 | First-login bootstrap + notification (no autostart in Lucciola: `ujust lucciola-bootstrap` by hand) | `build_files/system_files/usr/libexec/margine/first-boot-bootstrap`, `…/usr/libexec/margine-first-boot-status` | `first-boot-bootstrap`, `first-boot-status` |
 | Update notifications | `build_files/system_files/usr/libexec/margine*` (units in `…/usr/lib/systemd/user/`) | `margine-notify` |
 | Notification icon and sender (lock screen included) | `build_files/system_files/usr/libexec/margine/margine-notify` | `app_icon`, `image-path`, `APP_NAME` |
-| Lucciola System app (name/icon/id) | `…/applications/dev.margine.System.desktop` + `…/icons/hicolor/scalable/apps/dev.margine.System.svg` + `…/libexec/margine/system-gui` | `dev.margine.System`, `Lucciola System` |
-| Lucciola Welcome, the first-login window (name/icon/id/look) | `…/applications/dev.margine.Welcome.desktop` (icon `lucciola-logo`) + `…/libexec/margine/welcome` (texts: `lucciola/system_files/usr/share/lucciola/welcome/content.json`, window title included), opened by `lucciola/system_files/usr/libexec/lucciola/session-start` | `dev.margine.Welcome`, `Lucciola Welcome`, `Welcome to Lucciola` |
-| Lucciola CPU Scheduler, system update launcher | `…/applications/margine-scheduler.desktop`, `…/libexec/margine/system-gui --page hardware` (the Hardware page of Lucciola System), `…/applications/margine-system-update.desktop` | `Lucciola CPU Scheduler`, `Lucciola system update` |
-| Phone Camera app (name/icon/id), virtual webcam label | `…/applications/dev.margine.PhoneCam.desktop` + `…/icons/hicolor/scalable/apps/dev.margine.PhoneCam.svg` + `…/libexec/margine/system-gui` (the Camera section of the Phone page; the launcher opens it) + `…/modprobe.d/margine-phone-cam.conf` | `dev.margine.PhoneCam`, `Lucciola Phone Cam` |
+| Lucciola System app (name/icon/id) | `…/applications/dev.margine.System.desktop` + `…/icons/hicolor/scalable/apps/dev.margine.System.svg` (family style, see below) + `…/libexec/margine/system-gui` | `dev.margine.System`, `Lucciola System` |
+| Lucciola Welcome, the first-login window (name/icon/id/look) | `…/applications/dev.margine.Welcome.desktop` + `…/icons/hicolor/scalable/apps/dev.margine.Welcome.svg` (family style, see below) + `…/libexec/margine/welcome` (texts: `lucciola/system_files/usr/share/lucciola/welcome/content.json`, window title included), opened by `lucciola/system_files/usr/libexec/lucciola/session-start` | `dev.margine.Welcome`, `Lucciola Welcome`, `Welcome to Lucciola` |
+| Lucciola CPU Scheduler, system update launcher (names/icons) | `…/applications/margine-scheduler.desktop` + `…/icons/hicolor/scalable/apps/margine-scheduler.svg`, `…/libexec/margine/system-gui --page hardware` (the Hardware page of Lucciola System), `…/applications/margine-system-update.desktop` + `…/icons/hicolor/scalable/apps/margine-system-update.svg` (family style, see below) | `Lucciola CPU Scheduler`, `Lucciola system update` |
+| Phone Camera app (name/icon/id), virtual webcam label | `…/applications/dev.margine.PhoneCam.desktop` + `…/icons/hicolor/scalable/apps/dev.margine.PhoneCam.svg` (family style, see below) + `…/libexec/margine/system-gui` (the Camera section of the Phone page; the launcher opens it) + `…/modprobe.d/margine-phone-cam.conf` | `dev.margine.PhoneCam`, `Lucciola Phone Cam` |
 | fastfetch / MOTD / `/etc/issue` | `build_files/50-branding/install.sh`, `lucciola/assets/fastfetch-logo.txt`, `…/fastfetch/margine.jsonc`, `build_files/60-ujust-services/install.sh` | `ascii-logo.txt`, `no-show-user-motd`, `/etc/issue` |
 | Command names: `lucciola-*` in /usr/bin and ujust, `margine-*` kept as links and aliases | `build_files/system_files/usr/bin/`, `build_files/40-spec-scripts/install.sh`, `build_files/60-custom.just` | `lucciola-status`, `alias margine-` |
 | **Lucciola**: public name, login session, validator name | `lucciola/build.sh`, `lucciola/system_files/usr/share/margine/product-name` | `NAME="Lucciola"`, `lucciola.desktop`, `product-name` |
@@ -711,11 +711,69 @@ themed name via `app_icon` shows the logo.
 
 ---
 
+## App icons: the family style
+
+Every app icon of Lucciola is a disc with one subject in the middle, two
+tones, no strokes: the house style shared with Margine and Spola.
+
+- Canvas 512×512, disc of 480 px (r = 240), the proportion of GNOME's round
+  icons. The subject stays inside the 416 px box.
+- Two variants: dark disc (`#333333` → `#1a1a1a`, vertical gradient) for
+  light backgrounds, ivory disc (`#f3f1ea` → `#e0ddd4`) for dark ones. The
+  subject takes the complementary tone (ivory `#f3f1ea` → `#d4d0c2`, or
+  `#333333` → `#1a1a1a`), opaque. Two exceptions by design: the firefly's
+  shapes sit at 90 % because the play of layers is its drawing, and the
+  guide's upper pages at 95.7 % with the flat ivory `#e1ded3`, so the page
+  underneath shows through.
+- The symbolic version is the negative: a 14 px disc on a 16 px canvas with
+  the subject cut out, one path, `#2e3436`.
+- **The installed icon is the dark-disc variant**, the first row of the
+  family plate. No SVG filters anywhere: Welcome's halo is a radial gradient.
+
+The six icons (2026-10-21):
+
+| Icon | Icon name | Subject |
+|---|---|---|
+| Lucciola System | `dev.margine.System` | the little firefly: body and two front wings in ivory, two darker underwings behind, tilted by 10°; it replaced the laptop |
+| Welcome | `dev.margine.Welcome` | Lucciola's light mark, the dot `#e6d5bf` with the halo `#f0cf9c` of the logo, kept within three quarters of the disc; the desktop used `lucciola-logo` for it before, and `lucciola-logo` stays the system logo |
+| Guide | `lucciola-guide` | an open book: spine, two pages per side, the upper one half transparent over the one below; it replaced the book with the dot |
+| Phone Camera | `dev.margine.PhoneCam` | a minimal eye: almond, iris cut out, highlight |
+| CPU Scheduler | `margine-scheduler` | the lightning bolt of the old icon, sharp corners, centred in the disc |
+| Update | `margine-system-update` | an equilateral triangle inscribed in a circle of radius 120; a name of its own in place of the stock `system-software-update` |
+
+The files, per icon (`<name>` is the icon name above):
+
+| File | What it is | Where |
+|---|---|---|
+| `<name>.svg` | Inkscape master, two pages (page 1 dark disc, page 2 ivory disc), layers `Sfondo` and `Soggetto`, gradients named `sfumatura-*` (and `alone-*` for Welcome's halo). Edit this, then re-export. | `docs/branding/design/` |
+| `<name>-lightbg.svg`, `<name>-darkbg.svg` | Plain 512 px exports of the two pages | `docs/branding/` |
+| `<name>-symbolic.svg` | The 16 px negative. Not installed: nothing consumes it yet; install it in `hicolor/symbolic/apps/` only when something does | `docs/branding/` |
+| `<name>.svg` (from `<name>-installed.svg`) | The installed icon: the dark-disc variant with `width="128" height="128"`, viewBox `0 0 512 512`, and a comment that points back to the master | `build_files/system_files/usr/share/icons/hicolor/scalable/apps/` |
+
+Where they come from in the image: the six installed icons are tracked
+files and **nothing writes them at build time**. Until 2026-10-21 a heredoc
+in `build_files/50-branding/install.sh` wrote the orange lightning bolt over
+`margine-scheduler.svg`, and `build_files/30-gnome-defaults/install.sh`
+downloaded a pinned `system-software-update.svg` from MoreWaita into
+Adwaita's `scalable/` for the update launcher; both left with the family
+icons. `50-branding` still rebuilds the hicolor cache (`-f -t`) at the end.
+`dev.margine.Welcome.desktop` names `dev.margine.Welcome` (it borrowed
+`lucciola-logo` before) and `margine-system-update.desktop` names
+`margine-system-update` (it named the stock `system-software-update`).
+`validate-image-rootfs.sh` (A.4.bis) checks the six files are there with the
+512 viewBox and that those two launchers name their icons;
+`check-gui-icon-names.sh` checks every symbolic name the GUIs use exists.
+
+`lucciola-logo` does not change: it stays the system logo in os-release, in
+pixmaps and in About; only Welcome stopped using it as its app icon.
+
 ## When you add a NEW branding touchpoint
 
 1. Decide the surface: installed system (`build_files/`) or ISO (`docs/history/margine/live-env/src/`)?
-2. If it's an icon: install the SVG under `hicolor/scalable/apps/`, add a raster
-   size if anything renders it as a small badge, then rebuild the cache (`-f -t`).
+2. If it's an icon: draw it in the family style (section above: master in
+   `docs/branding/design/`, exports in `docs/branding/`, the dark-disc variant
+   installed under `hicolor/scalable/apps/`), add a raster size if anything
+   renders it as a small badge, then rebuild the cache (`-f -t`).
 3. If it's dconf: write the keyfile, then `dconf update`; remember GDM is a
    separate db; consider a lock if users shouldn't override it.
 4. If it's an autostart `.desktop`: no `X-GNOME-Autostart-Phase`; `Exec=` a

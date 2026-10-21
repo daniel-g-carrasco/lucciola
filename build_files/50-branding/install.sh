@@ -330,31 +330,11 @@ log "Stripping Bluefin/ublue branding leftover from /usr/share + /usr/share/appl
 # the underlying uupd flow (Margine uses it too) but rebrand.
 rm -f /usr/share/applications/discourse.desktop
 
-SCHEDULER_ICON="/usr/share/icons/hicolor/scalable/apps/margine-scheduler.svg"
-
-# Lightning-bolt app icon for the CPU scheduler — ties to Margine's perf /
-# "snappier under load" theme, shipped locally instead of a generic MoreWaita
-# system glyph.
-cat >"$SCHEDULER_ICON" <<'SCHEDULER_ICON_SVG'
-<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <defs>
-    <linearGradient id="m-sched-bg" x1="64" y1="8" x2="64" y2="120" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#2b2018"/>
-      <stop offset="1" stop-color="#171210"/>
-    </linearGradient>
-    <linearGradient id="m-sched-bolt" x1="64" y1="20" x2="64" y2="108" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ffc06a"/>
-      <stop offset="0.55" stop-color="#f97316"/>
-      <stop offset="1" stop-color="#d9480f"/>
-    </linearGradient>
-  </defs>
-  <rect x="8" y="8" width="112" height="112" rx="28" fill="url(#m-sched-bg)"/>
-  <rect x="8.5" y="8.5" width="111" height="111" rx="27.5" fill="none" stroke="#ffffff" stroke-opacity="0.06"/>
-  <path d="M74 18 L36 70 H58 L54 110 L92 58 H70 Z" fill="url(#m-sched-bolt)" stroke="#ffe0b0" stroke-opacity="0.5" stroke-width="2" stroke-linejoin="round"/>
-</svg>
-SCHEDULER_ICON_SVG
-chmod 0644 "$SCHEDULER_ICON"
+# The CPU scheduler's icon (margine-scheduler.svg) is a tracked file in
+# build_files/system_files/usr/share/icons/hicolor/scalable/apps/, in the
+# family style (docs/BRANDING.md, "App icons: the family style"), as the
+# other app icons are. Until 2026-10-21 a heredoc here wrote the old
+# orange lightning bolt over it; nothing writes that file at build time now.
 # The offline mirror of margine.dev (fetched here at build time, refreshed
 # by margine-docs-refresh.timer, opened by margine-docs-open and its
 # "Margine Documentation" launcher) left on 2026-10-18: Lucciola's guide

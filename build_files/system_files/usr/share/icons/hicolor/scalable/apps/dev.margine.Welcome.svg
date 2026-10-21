@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Welcome: the Lucciola light mark on the dark disc, family style (docs/BRANDING.md). Generated from
+     docs/branding/design/dev.margine.Welcome.svg (page 1): edit the master, not this file. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sfumatura-cerchio-scuro" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" style="stop-color:#333333;stop-opacity:1" />
+      <stop offset="1" style="stop-color:#1a1a1a;stop-opacity:1" />
+    </linearGradient>
+    <radialGradient id="alone-scuro" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0.0" style="stop-color:#f0cf9c;stop-opacity:0.9099" />
+      <stop offset="0.0417" style="stop-color:#f0cf9c;stop-opacity:0.9098" />
+      <stop offset="0.0833" style="stop-color:#f0cf9c;stop-opacity:0.9093" />
+      <stop offset="0.125" style="stop-color:#f0cf9c;stop-opacity:0.9079" />
+      <stop offset="0.1667" style="stop-color:#f0cf9c;stop-opacity:0.9044" />
+      <stop offset="0.2083" style="stop-color:#f0cf9c;stop-opacity:0.8968" />
+      <stop offset="0.25" style="stop-color:#f0cf9c;stop-opacity:0.8814" />
+      <stop offset="0.2917" style="stop-color:#f0cf9c;stop-opacity:0.85" />
+      <stop offset="0.3333" style="stop-color:#f0cf9c;stop-opacity:0.7963" />
+      <stop offset="0.375" style="stop-color:#f0cf9c;stop-opacity:0.724" />
+      <stop offset="0.4167" style="stop-color:#f0cf9c;stop-opacity:0.625" />
+      <stop offset="0.4583" style="stop-color:#f0cf9c;stop-opacity:0.5064" />
+      <stop offset="0.5" style="stop-color:#f0cf9c;stop-opacity:0.4084" />
+      <stop offset="0.5417" style="stop-color:#f0cf9c;stop-opacity:0.3123" />
+      <stop offset="0.5833" style="stop-color:#f0cf9c;stop-opacity:0.2331" />
+      <stop offset="0.625" style="stop-color:#f0cf9c;stop-opacity:0.1841" />
+      <stop offset="0.6667" style="stop-color:#f0cf9c;stop-opacity:0.1464" />
+      <stop offset="0.7083" style="stop-color:#f0cf9c;stop-opacity:0.1183" />
+      <stop offset="0.75" style="stop-color:#f0cf9c;stop-opacity:0.0949" />
+      <stop offset="0.7917" style="stop-color:#f0cf9c;stop-opacity:0.0779" />
+      <stop offset="0.8333" style="stop-color:#f0cf9c;stop-opacity:0.0577" />
+      <stop offset="0.875" style="stop-color:#f0cf9c;stop-opacity:0.0344" />
+      <stop offset="0.9167" style="stop-color:#f0cf9c;stop-opacity:0.0139" />
+      <stop offset="0.9583" style="stop-color:#f0cf9c;stop-opacity:0.0029" />
+      <stop offset="1.0" style="stop-color:#f0cf9c;stop-opacity:0.0" />
+    </radialGradient>
+  </defs>
+  <circle cx="256" cy="256" r="240" style="fill:url(#sfumatura-cerchio-scuro)" />
+  <circle id="alone" cx="256" cy="264" r="180" style="fill:url(#alone-scuro)" />
+  <circle id="punto" cx="256" cy="256" r="87" style="fill:#e6d5bf" />
+</svg>
