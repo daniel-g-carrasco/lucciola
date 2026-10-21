@@ -486,6 +486,7 @@ PHONE_FUNCTIONS = (
     ("kdeconnect_findmyphone", "Ring the Phone", "Make the phone ring from here"),
     ("kdeconnect_runcommand", "Commands", "Run commands on this PC from the phone: lock, suspend, power off"),
     ("kdeconnect_systemvolume", "This PC's Volume", "Change this PC's volume from the phone"),
+    ("kdeconnect_telephony", "Calls", "Incoming and missed calls as notices here; without the Phone, Contacts and Call log permissions in the app, it guesses. Phone Notifications Here already carries the Phone app's own notices"),
     ("kdeconnect_ping", "Ping", "A test notification either way"),
 )
 PHONE_DEFAULT_OFF = ("kdeconnect_sendnotifications",)
