@@ -620,12 +620,26 @@ log "Base now ships: steam-devices + the gstreamer bad/ugly codecs (negativo17)"
 # (.github/scripts/gaming-native-resolve.sh, every installed package locked
 # at its version) and smoke-boot with rpm-ostree on the booted image; a
 # failure of either stops the image.
+#
+# One snapshot of the repositories for the three steps. The first plan
+# refreshes the metadata; the alignment and the second plan reuse it. With
+# a refresh at each step, each dnf call can land on a different mirror,
+# and while a push to updates-testing propagates the mirrors disagree: on
+# 2026-10-21 (expat 2.8.5 obsoleted by 2.9.0 at 01:59 UTC) the plan saw
+# 2.8.5, the alignment's first attempt found "No match" for it, its retry
+# installed it, and the second plan, on a mirror that already had 2.9.0,
+# wanted to upgrade it again, so the build stopped although nothing was
+# wrong with the image. Reusing the first plan's metadata keeps the three
+# steps on one view of the repositories; the mirrors' disagreement is
+# then the smoke runs' to catch, as a layer that does not resolve, and a
+# rebuild once they agree settles it.
 mapfile -t GAMING_LAYER < <(grep -vE '^[[:space:]]*(#|$)' /ctx/60-ujust-services/gaming-native-packages.txt)
 (( ${#GAMING_LAYER[@]} )) || { err "gaming-native-packages.txt lists no package"; exit 1; }
-gaming_plan() {
-  local out attempt
+gaming_plan() {  # gaming_plan [--refresh]
+  local out attempt refresh="${1:-}"
   for attempt in 1 2 3 4 5; do
-    out="$(dnf install --assumeno --refresh --setopt=install_weak_deps=False --enablerepo=fedora-multimedia "${GAMING_LAYER[@]}" 2>&1 || true)"
+    # shellcheck disable=SC2086  # $refresh is --refresh or nothing
+    out="$(dnf install --assumeno $refresh --setopt=install_weak_deps=False --enablerepo=fedora-multimedia "${GAMING_LAYER[@]}" 2>&1 || true)"
     if grep -q '^Transaction Summary' <<<"$out"; then printf '%s\n' "$out"; return 0; fi
     if grep -qE '^Failed to resolve the transaction|^Problem' <<<"$out"; then
       printf '%s\n' "$out" | tail -n 40 >&2
@@ -639,7 +653,7 @@ gaming_plan() {
   return 1
 }
 log "Planning the gaming-native layer (${GAMING_LAYER[*]}) against the image"
-_plan="$(gaming_plan)" || exit 1
+_plan="$(gaming_plan --refresh)" || exit 1
 # Rows are " <name> <arch> <epoch:version-release> <repo> <size>", and a
 # row that takes the place of an installed package is followed by
 # "   replacing <old>" rows. Install exactly those builds (not the i686 ones).
@@ -649,7 +663,8 @@ mapfile -t _align < <(awk '
                     { cand = "" }' <<<"$_plan" | sort -u)
 if (( ${#_align[@]} )); then
   log "Aligning ${#_align[@]} image packages with the gaming-native layer: ${_align[*]}"
-  retry 5 30 bash -c 'dnf -y clean metadata >/dev/null 2>&1 || true; exec dnf -y install --refresh --setopt=install_weak_deps=False --enablerepo=fedora-multimedia "$@"' _ "${_align[@]}" \
+  # The same metadata the plan used: no clean, no refresh (see above).
+  retry 5 30 dnf -y install --setopt=install_weak_deps=False --enablerepo=fedora-multimedia "${_align[@]}" \
     || { err "aligning the image packages failed after 5 attempts; aborting"; exit 1; }
 else
   log "No image package needs upgrading for the gaming-native layer"
