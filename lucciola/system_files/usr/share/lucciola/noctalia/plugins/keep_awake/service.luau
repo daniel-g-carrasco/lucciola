@@ -1,8 +1,8 @@
 --!nonstrict
 -- Keep Awake service: the only entry that runs keep-awake. It polls
 -- `keep-awake status --json` and publishes the result through noctalia.state
--- (ka.active, ka.until, ka.sstart, ka.suntil), and runs the commands the other
--- entries publish on ka.cmd, refreshing right after each one.
+-- (ka.active, ka.until, ka.mode, ka.sstart, ka.suntil, ka.smode), and runs the
+-- commands the other entries publish on ka.cmd, refreshing right after each one.
 --
 --   noctalia msg plugin lucciola/keep_awake:service all refresh
 
@@ -42,8 +42,10 @@ local function refresh()
     end
     noctalia.state.set("ka.active", s.active == true)
     noctalia.state.set("ka.until", s["until"] or 0)
+    noctalia.state.set("ka.mode", s.mode or "awake")
     noctalia.state.set("ka.sstart", s.scheduled_start or 0)
     noctalia.state.set("ka.suntil", s.scheduled_until or 0)
+    noctalia.state.set("ka.smode", s.scheduled_mode or "awake")
     noctalia.state.set("ka.ready", true)
   end)
 end
