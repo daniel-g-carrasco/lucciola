@@ -110,6 +110,7 @@ CAM_LABEL = "Lucciola Phone Cam"
 CAM_NODE = "lucciola_phone_cam"
 MIC_LABEL = "Lucciola Phone Mic"
 MIC_NODE = "lucciola_phone_mic"
+SIZE_HINT = "720p over Wi-Fi, 1080p over USB"
 REFRESH_EVERY = 10 * 60   # seconds between unasked refreshes
 REFRESH_ON_FOCUS = 5 * 60  # refresh when the window comes back after this long
 
@@ -401,6 +402,7 @@ class PhoneStream:
         self.wireless = False
         self.facing = "back"
         self.size = ""
+        self.rotation = 0
         self.on_end = None
         self.on_state = None
         self.state = "off"
@@ -427,8 +429,8 @@ class PhoneStream:
     def info(self):
         if not self.running:
             return None
-        return {"size": self.size, "facing": self.facing, "wireless": self.wireless, "label": self.label,
-                "serial": self.serial, "state": self.state}
+        return {"size": self.size, "facing": self.facing, "rotation": self.rotation, "wireless": self.wireless,
+                "label": self.label, "serial": self.serial, "state": self.state}
 
     def _take(self, name):
         with self._swap:
@@ -445,11 +447,14 @@ class PhoneStream:
         print(f"lucciola-system: phone {self.mode}: {text}", file=sys.stderr, flush=True)
 
     # ── on and off ──
-    def start(self, serial, label, wireless, facing, size, on_end, on_state=None):
+    def start(self, serial, label, wireless, facing, size, on_end, on_state=None, rotation=0):
         """Blocking for a few seconds (adb, the phone's camera): call from a
-        thread. Raises RuntimeError, or Stopped when stop() came first."""
+        thread. Raises RuntimeError, or Stopped when stop() came first.
+        rotation turns the picture clockwise on the phone: the sensor sits
+        sideways, so an upright phone needs the sensor's own orientation."""
         gen = self._gen = next(STREAM_GENERATIONS)
         self.serial, self.label, self.wireless, self.facing, self.size = serial, label, wireless, facing, size
+        self.rotation = int(rotation) % 360
         self.on_end, self.on_state = on_end, on_state
         self.note = ""
         self._channel = f"lucciola-{self.mode}-{os.getpid()}-{gen}"
@@ -482,17 +487,20 @@ class PhoneStream:
         else:
             self._release_later(feed)
 
-    def set_facing(self, facing):
-        """Blocking: the feed is rebuilt with the other lens while the outlet
-        and its node stay. When the new lens fails the old one comes back;
-        when neither does, the stream goes on trying as after a drop."""
+    def set_view(self, facing, rotation):
+        """Blocking: the feed is rebuilt with another lens or rotation while
+        the outlet and its node stay; a portrait picture lands in the
+        session's landscape frame between black bars. When the new view
+        fails the old one comes back; when neither does, the stream goes on
+        trying as after a drop."""
         gen = self._gen
+        rotation = int(rotation) % 360
         if not self.running:
-            self.facing = facing
+            self.facing, self.rotation = facing, rotation
             return
-        if facing == self.facing:
+        wanted, old = (facing, rotation), (self.facing, self.rotation)
+        if wanted == old:
             return
-        old = self.facing
         self.state = "switching"
         self._notify()
         error = None
@@ -502,9 +510,9 @@ class PhoneStream:
             feed = self._take("_feed")
             if feed is not None:
                 self._drop_feed(feed)
-            time.sleep(0.5)
-            for lens in (facing, old):
-                self.facing = lens
+            time.sleep(0.5)  # the camera service lets go of the lens
+            for view in (wanted, old):
+                self.facing, self.rotation = view
                 try:
                     self._open_feed(gen)
                     break
@@ -515,12 +523,15 @@ class PhoneStream:
             if self._feed is not None:
                 self.state = "streaming"
         if self._feed is None:
-            self.facing = old
+            self.facing, self.rotation = old
             self._begin_reconnect(gen, str(error))
         else:
             self._notify()
-        if self.facing != facing:
+        if (self.facing, self.rotation) != wanted:
             raise RuntimeError(str(error))
+
+    def set_facing(self, facing):
+        self.set_view(facing, self.rotation)
 
     # ── the outlet: the PipeWire node, the preview, the copy into V4L2 ──
     def _open_outlet(self):
@@ -540,7 +551,7 @@ class PhoneStream:
             desc = (f"interaudiosrc channel={ch} buffer-time={ls.MIC_BUFFER_NS} ! audioconvert ! audioresample "
                     f"! capsfilter caps=\"{ls.MIC_CAPS}\" ! identity drop-allocation=true ! pipewiresink name=pw mode=provide async=false qos=false")
             props = f'props,media.class="Audio/Source",node.name="{MIC_NODE}",node.description="{MIC_LABEL}"'
-        self._log(f"start: {self.facing} {self.size} from {self.serial}" if self.mode == "camera" else f"start: from {self.serial}")
+        self._log(f"start: {self.facing} {self.size}, turned {self.rotation}, from {self.serial}" if self.mode == "camera" else f"start: from {self.serial}")
         try:
             pipeline = Gst.parse_launch(desc)
         except GLib.Error as e:
@@ -648,7 +659,8 @@ class PhoneStream:
                     raise RuntimeError("adb could not forward the phone's socket: " + ls.last_line(err or out))
                 feed["port"] = int(port)
                 _, bit_rate = ls.stream_defaults(self.wireless)
-                command = ls.server_command(self.mode, facing=self.facing, size=self.size, bit_rate=bit_rate, scid=scid)
+                command = ls.server_command(self.mode, facing=self.facing, size=self.size, bit_rate=bit_rate, scid=scid,
+                                            rotation=self.rotation if self.mode == "camera" else 0)
                 with open(self.log_path, "w", encoding="utf-8") as log:
                     feed["server"] = subprocess.Popen([ADB, "-s", serial, "shell"] + command,
                                                       stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
@@ -949,7 +961,15 @@ class CameraDialog(Adw.Dialog):
         self._facing.set_selected(1 if self._session.running and self._session.camera.facing == "front" else 0)
         self._facing.connect("notify::selected", self._on_facing_changed)
         camera.add(self._facing)
-        self._size = Adw.ComboRow(title="Resolution", subtitle="720p over Wi-Fi, 1080p over USB; larger sizes cost bandwidth and battery")
+        self._rotation_row = Adw.ActionRow(title="Rotation")
+        self._rotation_row.add_prefix(icon("object-rotate-right-symbolic"))
+        self._rotate_button = Gtk.Button(label="Rotate", valign=Gtk.Align.CENTER)
+        self._rotate_button.set_tooltip_text("Turn the picture a quarter, clockwise")
+        self._rotate_button.connect("clicked", self._on_rotate)
+        self._rotation_row.add_suffix(self._rotate_button)
+        self._rotation_row.set_activatable_widget(self._rotate_button)
+        camera.add(self._rotation_row)
+        self._size = Adw.ComboRow(title="Resolution", subtitle=SIZE_HINT)
         self._size.add_prefix(icon("view-fullscreen-symbolic"))
         self._set_sizes(list(ls.CAM_DEFAULT_SIZES))
         self._size.connect("notify::selected", self._on_size_changed)
@@ -964,6 +984,7 @@ class CameraDialog(Adw.Dialog):
         run_group.add(self._button)
         self._picture = Gtk.Picture()
         self._picture.set_size_request(-1, 260)
+        self._picture.set_margin_top(18)
         self._picture.add_css_class("card")
         self._picture.set_visible(False)
         run_group.add(self._picture)
@@ -986,14 +1007,19 @@ class CameraDialog(Adw.Dialog):
     # sizes
     def _set_sizes(self, sizes):
         self._loading = True
+        running_size = self._session.camera.size if self._session.running else None
+        if running_size and running_size not in sizes:
+            sizes = [running_size] + sizes  # what runs stays shown until it stops
         self._size.set_model(Gtk.StringList.new(sizes))
-        want = self._session.camera.size if self._session.running else None
+        want = running_size
         if want not in sizes:
             want = ls.default_size(sizes, self._target["wireless"])
         self._size.set_selected(sizes.index(want) if want in sizes else 0)
         self._loading = False
 
     def _load_sizes(self):
+        self._win._orientations_for(self._target["serial"])
+        on_main(self._sync)
         try:
             by_facing = list_camera_sizes(self._target["serial"])
         except RuntimeError:
@@ -1011,7 +1037,14 @@ class CameraDialog(Adw.Dialog):
         sizes = self._sizes_by_facing.get(facing)
         if not sizes:
             sizes = sorted({s for v in self._sizes_by_facing.values() for s in v}, key=ls.size_key, reverse=True)
+        sizes = ls.webcam_sizes(sizes) if sizes else sizes
         return sizes or list(ls.CAM_DEFAULT_SIZES)
+
+    def _rotation_for(self, facing):
+        """(the turn for this lens, the turn an upright phone needs)."""
+        serial = self._target["serial"]
+        upright = self._win._cam_orientations.get(serial, {}).get(facing, 0)
+        return self._win._cam_rotation.get((serial, facing), upright), upright
 
     def _chosen(self):
         facing = "front" if self._facing.get_selected() == 1 else "back"
@@ -1028,6 +1061,15 @@ class CameraDialog(Adw.Dialog):
             label = "Stop Camera" if running else "Start Camera"
         self._button.set_label(label)
         self._button.set_sensitive(not self._busy)
+        # A new size is a new node, and an app linked to the old one may
+        # close: the size changes only while stopped.
+        self._size.set_sensitive(not running and not self._busy)
+        self._size.set_subtitle("Stop the camera to change it" if running else SIZE_HINT)
+        camera = self._session.camera
+        facing = camera.facing if running else self._chosen()[0]
+        rotation, upright = self._rotation_for(facing)
+        self._rotation_row.set_subtitle(ls.rotation_label(camera.rotation if running else rotation, upright))
+        self._rotate_button.set_sensitive(not self._busy)
         link = "Over Wi-Fi" if self._target["wireless"] else "Over USB"
         self._phone_row.set_subtitle(link + (": the link dropped, reconnecting…" if state == "reconnecting" else ""))
         note = self._session.camera.note if running else ""
@@ -1056,8 +1098,10 @@ class CameraDialog(Adw.Dialog):
 
         def worker():
             try:
+                self._win._orientations_for(target["serial"])
+                rotation = self._rotation_for(facing)[0]
                 self._session.camera.start(target["serial"], target["label"], target["wireless"], facing, size,
-                                           self._win._on_stream_end, self._win._on_stream_state)
+                                           self._win._on_stream_end, self._win._on_stream_state, rotation)
                 on_main(self._started, None)
             except Stopped:
                 on_main(self._started, "")
@@ -1081,6 +1125,7 @@ class CameraDialog(Adw.Dialog):
         if self._loading:
             return
         self._set_sizes(self._sizes_for(self._chosen()[0]))
+        self._sync()  # the Rotation row follows the lens
         if self._session.running:
             self._later(self._switch_lens)
 
@@ -1109,7 +1154,8 @@ class CameraDialog(Adw.Dialog):
 
         def worker():
             try:
-                camera.set_facing(facing)
+                self._win._orientations_for(self._target["serial"])
+                camera.set_view(facing, self._rotation_for(facing)[0])
                 on_main(self._switched, None)
             except Stopped:
                 on_main(self._switched, "")
@@ -1122,12 +1168,40 @@ class CameraDialog(Adw.Dialog):
     def _switched(self, error):
         self._busy = False
         if error:
+            camera = self._session.camera
             self._loading = True
-            self._facing.set_selected(1 if self._session.camera.facing == "front" else 0)
+            self._facing.set_selected(1 if camera.facing == "front" else 0)
             self._loading = False
-            self._win._toast(f"Could not switch the lens: {error}")
+            self._win._cam_rotation[(self._target["serial"], camera.facing)] = camera.rotation
+            self._win._toast(f"Could not change the picture: {error}")
         self._sync()
         self._win._phone_refresh_soon()
+
+    def _on_rotate(self, _button):
+        # A quarter turn clockwise per press, kept per lens while the app
+        # runs; while streaming the node stays and the picture comes back
+        # turned after a moment of black.
+        camera = self._session.camera
+        facing = camera.facing if camera.running else self._chosen()[0]
+        current = camera.rotation if camera.running else self._rotation_for(facing)[0]
+        turned = (current + 90) % 360
+        self._win._cam_rotation[(self._target["serial"], facing)] = turned
+        if not camera.running:
+            self._sync()
+            return
+        self._busy = True
+        self._sync()
+
+        def worker():
+            try:
+                camera.set_view(facing, turned)
+                on_main(self._switched, None)
+            except Stopped:
+                on_main(self._switched, "")
+            except (RuntimeError, GLib.Error) as e:
+                on_main(self._switched, getattr(e, "message", None) or str(e))
+
+        in_thread(worker)
 
     def _restart(self):
         # A new size: the node goes and comes back with it. start() waits
@@ -1234,6 +1308,8 @@ class SystemWindow(Adw.ApplicationWindow):
         self._phone_name_guard = False
         self._cam = CameraSession()
         self._cam_dialog = None
+        self._cam_rotation = {}       # (serial, facing) -> the turn picked with Rotate
+        self._cam_orientations = {}   # serial -> {facing: sensor orientation}
         self._adb_devices = []
         self._adb_services = []
         self._cam_device = None
@@ -3255,6 +3331,16 @@ class SystemWindow(Adw.ApplicationWindow):
             row.add_prefix(icon("phone-symbolic"))
             self._phone_usb_group.add(row)
             self._usb_rows.append(row)
+
+    def _orientations_for(self, serial):
+        """{facing: degrees} of a phone's camera sensors, asked once per
+        phone. Blocking: call from a thread."""
+        if serial not in self._cam_orientations:
+            rc, out, _ = run([ADB, "-s", serial, "shell", "dumpsys", "media.camera"], timeout=15)
+            found = ls.camera_orientations(out) if rc == 0 else {}
+            if found:
+                self._cam_orientations[serial] = found
+        return self._cam_orientations.get(serial, {})
 
     def _open_camera(self, target):
         if self._cam.running and self._cam.serial != target["serial"]:

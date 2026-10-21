@@ -31,9 +31,18 @@ stable release is cut.
   set of caps for the session: a mid-stream change made v4l2loopback
   answer "device busy" and took the node down), and the preview and the
   V4L2 copy run as pipelines of their own, so neither can hold the node
-  back. In the phone's card: the
-  Camera row with the real state, Use as a Webcam (lens, resolution, Start,
-  preview), Stop while streaming. A Camera Over USB group covers a phone on
+  back. The picture stands upright: a phone's camera sensor sits sideways,
+  so the phone turns it by the sensor's own orientation (read from the
+  phone, 90 behind and 270 in front on a Pixel), and Rotate turns it a
+  quarter more for a phone on its side or upside down; a portrait picture
+  lands in the landscape frame between black bars, and the turn, like the
+  lens, changes without the node going away. The resolution changes only
+  while the camera is stopped, since a new size is a new node and GNOME's
+  Camera closed when its node went away; the list offers 16:9 and 4:3 from
+  640 pixels wide up to 1080p, not the sensor's 12 megapixels. In the
+  phone's card: the
+  Camera row with the real state, Use as a Webcam (lens, rotation,
+  resolution, Start, preview), Stop while streaming. A Camera Over USB group covers a phone on
   the cable with or without KDE Connect. The Phone Camera launcher stays and
   opens the page.
 - **Over Wi-Fi**: Set Up Wireless shows a QR code the phone scans in

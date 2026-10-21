@@ -662,6 +662,51 @@ def camera_sizes(text):
     return sorted(sizes, key=size_key, reverse=True)
 
 
+def webcam_sizes(sizes):
+    """The sizes worth offering for a webcam: 16:9 and 4:3, from 640 pixels
+    wide up to 1080p. The sensor's own list runs to 12 megapixels and 2:1
+    shapes; past 1080p nothing gains over Wi-Fi and the PC decodes for
+    nothing. The whole list stays when none of it fits."""
+    keep = []
+    for size in sizes:
+        try:
+            w, h = (int(x) for x in size.split("x"))
+        except ValueError:
+            continue
+        if 640 <= w <= 1920 and h <= 1080 and (w * 9 == h * 16 or w * 3 == h * 4):
+            keep.append(size)
+    return keep or list(sizes)
+
+
+def camera_orientations(text):
+    """`dumpsys media.camera`: {facing: sensor orientation in degrees}. The
+    sensor sits sideways in the phone; this is how far the picture turns,
+    clockwise, to stand upright on an upright phone (90 behind, 270 in front
+    on a Pixel). The first camera of each facing counts."""
+    out = {}
+    facing = None
+    for line in (text or "").splitlines():
+        m = re.match(r"\s*Facing:\s*(\w+)", line)
+        if m:
+            facing = m.group(1).lower()
+            continue
+        m = re.match(r"\s*Orientation:\s*(\d+)", line)
+        if m and facing:
+            out.setdefault(facing, int(m.group(1)) % 360)
+            facing = None
+    return out
+
+
+def rotation_label(rotation, upright):
+    """What the Rotation row says: the phone position the turn suits."""
+    delta = (rotation - upright) % 360
+    if delta == 0:
+        return "Upright phone"
+    if delta == 180:
+        return "Phone upside down"
+    return "Phone on its side"
+
+
 def camera_sizes_by_facing(text):
     """The server's camera list (`list_camera_sizes=true`) as {facing:
     [WxH, largest first]}: a `--camera-id=N (back, ...)` line opens a
@@ -787,7 +832,7 @@ def socket_name(scid=None):
     return "scrcpy" if scid is None else f"scrcpy_{scid:08x}"
 
 
-def server_command(mode, facing="back", size="1280x720", bit_rate=4000000, max_fps=30, scid=None):
+def server_command(mode, facing="back", size="1280x720", bit_rate=4000000, max_fps=30, scid=None, rotation=0):
     """The command run on the phone through `adb shell` for one stream:
     scrcpy's own server, in raw-stream mode (no headers, no control), so a
     plain TCP socket carries bare H.264 (camera) or bare PCM (mic) that
@@ -798,8 +843,9 @@ def server_command(mode, facing="back", size="1280x720", bit_rate=4000000, max_f
     if scid is not None:
         base.append(f"scid={scid:08x}")
     if mode == "camera":
-        return base + ["video_source=camera", f"camera_facing={facing}", f"camera_size={size}",
-                       f"video_bit_rate={int(bit_rate)}", f"max_fps={int(max_fps)}", "audio=false"]
+        turn = [f"capture_orientation={int(rotation) % 360}"] if int(rotation) % 360 in (90, 180, 270) else []
+        return base + ["video_source=camera", f"camera_facing={facing}", f"camera_size={size}"] + turn + [
+            f"video_bit_rate={int(bit_rate)}", f"max_fps={int(max_fps)}", "audio=false"]
     if mode == "mic":
         return base + ["video=false", "audio=true", "audio_source=mic", "audio_codec=raw"]
     raise ValueError(mode)

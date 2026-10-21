@@ -298,6 +298,31 @@ check("webcam_status: a dropped link says the node stays listed",
       "stays listed" in ls.webcam_status("/dev/video21", {"size": "1280x720", "facing": "back", "wireless": True, "state": "reconnecting"}, True, True))
 check("reconnect window: long enough for a Wi-Fi hiccup, short enough to give up", 30 <= ls.RECONNECT_SECONDS <= 300 and 3 <= ls.STALL_SECONDS <= 30)
 check("size_key sorts by pixels", ls.size_key("1920x1080") > ls.size_key("1280x720"))
+check("webcam sizes: 16:9 and 4:3 from 640 wide to 1080p, the sensor's 12 MP and 2:1 shapes left out",
+      ls.webcam_sizes(["4032x3024", "2560x1280", "1920x1080", "1440x1080", "1280x960", "1280x720", "1080x1080", "640x480", "352x288"])
+      == ["1920x1080", "1440x1080", "1280x960", "1280x720", "640x480"])
+check("webcam sizes: an odd list stays whole rather than empty", ls.webcam_sizes(["2560x1280"]) == ["2560x1280"])
+DUMPSYS = """== Camera device 0 dynamic info: ==
+== Camera device 1 dynamic info: ==
+Camera 0 information:
+    Facing: Back
+    Orientation: 90
+Camera 1 information:
+    Facing: Front
+    Orientation: 270
+Camera 2 information:
+    Facing: Back
+    Orientation: 0
+"""
+check("sensor orientations from dumpsys: first camera of each facing", ls.camera_orientations(DUMPSYS) == {"back": 90, "front": 270})
+check("sensor orientations: nothing from nothing", ls.camera_orientations("") == {})
+check("rotation label: what the turn suits",
+      ls.rotation_label(270, 270) == "Upright phone" and ls.rotation_label(0, 270) == "Phone on its side"
+      and ls.rotation_label(90, 270) == "Phone upside down" and ls.rotation_label(180, 270) == "Phone on its side")
+turned = ls.server_command("camera", facing="front", size="1280x720", rotation=270)
+check("server command: a turn rides as capture_orientation, none when upright as the sensor",
+      "capture_orientation=270" in turned and not any(a.startswith("capture_orientation") for a in ls.server_command("camera", rotation=0))
+      and not any(a.startswith("capture_orientation") for a in ls.server_command("mic")))
 vc = ls.video_caps("1920x1080", "YUY2")
 check("pinned video caps: size, format, BT.601 limited, progressive, square pixels, one view, 30 fps",
       all(f in vc for f in ("format=YUY2", "width=1920", "height=1080", "colorimetry=bt601", "interlace-mode=progressive",
