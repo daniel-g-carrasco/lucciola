@@ -138,6 +138,16 @@ jobs:
         # See tests/session-start-welcome.test.sh.
         run: bash tests/session-start-welcome.test.sh
 
+      - name: Lucciola System without a display
+        # The toolkit-free module (which image is followed, what rpm-ostree
+        # says, how pending updates are worded), the privileged helper's
+        # argument checks and its polkit policy (one action per verb,
+        # matched on path and first argument), and the window's script:
+        # compiles, no long dashes, no terminal commands in its strings.
+        # See tests/system-logic.test.sh.
+        run: |
+          sudo apt-get install -y -qq --no-install-recommends libxml2-utils >/dev/null 2>&1 || true
+          bash tests/system-logic.test.sh
       - name: Keep Awake holds sleep, and the lid locks the session
         # The two modes of /usr/libexec/lucciola/keep-awake (what the
         # inhibitor holds, the two-hour default with --screen), on again,

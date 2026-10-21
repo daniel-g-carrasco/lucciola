@@ -1,0 +1,13 @@
+[Desktop Entry]
+# Lucciola: the phone in the tray at every login while the phone layer is
+# installed. `feature phone install` copies this file to /etc/xdg/autostart
+# and `feature phone remove` takes it away; Fedora's kde-connect package has
+# the upstream entry only under /usr/share/applications.
+Type=Application
+Name=KDE Connect Indicator
+Comment=The phone in the tray: battery, ring, send a file, pairing requests
+Exec=kdeconnect-indicator
+Icon=kdeconnect
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-Phase=Applications

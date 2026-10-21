@@ -1,0 +1,509 @@
+#!/usr/bin/bash
+# lucciola feature: the optional features of Lucciola, one definition each.
+#
+#   /usr/libexec/lucciola/feature NAME status            any user
+#   /usr/libexec/lucciola/feature all status             any user, every feature
+#   /usr/libexec/lucciola/feature NAME install [OPTION]  root
+#   /usr/libexec/lucciola/feature NAME remove            root
+#
+# NAME is one of: gaming, gaming-native, ai, devmode, vscode, devtools,
+# docker, tailscale, vm, sunshine, phone, slim, naked.
+#
+# The ujust recipes (lucciola-gaming, lucciola-devmode, ...) explain, ask
+# once and then reach this through /usr/libexec/lucciola/admin with sudo;
+# the Features and Apps pages of Lucciola System reach the same verbs
+# through pkexec. So there is exactly one definition of what each feature
+# installs and removes, and the window can never drift from the terminal.
+#
+# Nothing here prompts or advises. `status` says the state in its first
+# two lines, which the window reads:
+#   state=installed|absent|pending|partial
+#   detail=<one short sentence>
+# (pending: layered with rpm-ostree, working after a restart; partial: some
+# of the pieces are there). `install` and `remove` print what they run.
+#
+# What belongs to the user is NOT here and runs as the user afterwards,
+# from the recipe or the window: Homebrew in /home/linuxbrew (devmode),
+# Sunshine's own setup helper and its Flatpak override.
+
+set -euo pipefail
+
+DEV=/usr/libexec/margine/devmode
+LAYER_REPO=/usr/libexec/margine/layer-repo
+PREINSTALL_KEEP=/usr/libexec/margine/flatpak-preinstall-keep
+DEV_GROUPS=/usr/bin/lucciola-dev-groups
+GAMING_NATIVE_LIST=/usr/share/margine/gaming-native-packages.txt
+PHONE_LIST=/usr/share/margine/phone-packages.txt
+PHONE_AUTOSTART_SRC=/usr/share/lucciola/phone/org.kde.kdeconnect.nonplasma.desktop
+PHONE_AUTOSTART=/etc/xdg/autostart/org.kde.kdeconnect.nonplasma.desktop
+PHONE_FIREWALL_SERVICE=kdeconnect
+FLATHUB=https://dl.flathub.org/repo/flathub.flatpakrepo
+
+GAMING_FLATPAKS=(com.valvesoftware.Steam net.lutris.Lutris com.heroicgameslauncher.hgl
+  com.usebottles.bottles com.github.Matoking.protontricks com.vysp3r.ProtonPlus org.libretro.RetroArch)
+GAMING_RPMS=(gamescope vkBasalt mangohud goverlay)
+GAMING_NATIVE_FLATPAKS=(com.heroicgameslauncher.hgl com.usebottles.bottles
+  com.github.Matoking.protontricks com.vysp3r.ProtonPlus)
+AI_APP=com.jeffser.Alpaca
+AI_AMD_PLUGIN=com.jeffser.Alpaca.Plugins.AMD
+DEVTOOLS_RPMS=(bcc bpftrace bpftop sysprof igt-gpu-tools gcc gcc-c++ make git-lfs git-credential-libsecret)
+DOCKER_RPMS=(docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin)
+VM_RPMS=(libvirt libvirt-nss qemu-kvm virt-manager virt-viewer virt-install edk2-ovmf swtpm dnsmasq
+  qemu-img qemu-device-display-virtio-gpu qemu-device-display-virtio-vga
+  qemu-device-usb-redirect qemu-char-spice podman-machine)
+VM_SOCKETS=()
+for d in virtqemud virtnetworkd virtstoraged virtnodedevd virtsecretd virtinterfaced virtnwfilterd virtproxyd; do
+  VM_SOCKETS+=("$d.socket" "$d-ro.socket" "$d-admin.socket")
+done
+VM_SOCKETS+=(virtlogd.socket virtlogd-admin.socket virtlockd.socket virtlockd-admin.socket)
+SUNSHINE_APP=dev.lizardbyte.app.Sunshine
+SUNSHINE_PORTS=(47984/tcp 47989/tcp 47990/tcp 48010/tcp 47998/udp 47999/udp 48000/udp 48002/udp 48010/udp)
+SUNSHINE_UDEV=/etc/udev/rules.d/60-sunshine.rules
+# The slim profile removes the tinkerer apps and stops the deferred heavy
+# ones; naked removes office, mail and the situational GNOME apps on top.
+SLIM_APPS=(org.gimp.GIMP org.inkscape.Inkscape org.darktable.Darktable com.obsproject.Studio
+  org.gnome.gitlab.somas.Apostrophe org.audacityteam.Audacity com.github.wwmm.easyeffects
+  com.ranfdev.DistroShelf com.mattjakeman.ExtensionManager de.haeckerfelix.Fragments
+  com.github.PintaProject.Pinta com.github.neithern.g4music com.rafaelmardojai.Blanket)
+NAKED_APPS=(org.libreoffice.LibreOffice org.mozilla.thunderbird_esr com.bitwarden.desktop
+  org.gnome.Maps org.gnome.Weather org.gnome.Contacts org.gnome.SoundRecorder
+  io.gitlab.adhami3310.Impression org.gnome.DejaDup)
+PREINSTALL_UNIT=flatpak-preinstall.service
+BROWSER=app.zen_browser.zen
+
+die() { echo "feature: $*" >&2; exit 1; }
+need_root() { [[ $EUID -eq 0 ]] || die "$1: run as root (through /usr/libexec/lucciola/admin)"; }
+say() { echo "+ $*"; "$@"; }
+
+# The packages rpm-ostree was asked to layer, one per line (empty when it
+# cannot be read: then nothing counts as pending).
+REQUESTED=""
+requested() {
+  if [[ -z "$REQUESTED" ]]; then
+    REQUESTED="$(rpm-ostree status --json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    print("\n".join(json.load(sys.stdin)["deployments"][0].get("requested-packages", [])))
+except Exception:
+    pass' 2>/dev/null || true)"
+    REQUESTED="${REQUESTED:-$'\n'}"
+  fi
+  printf '%s\n' "$REQUESTED"
+}
+is_requested() { requested | grep -qx -- "$1"; }
+is_installed() { rpm -q "$1" >/dev/null 2>&1; }
+has_flatpak() { flatpak info --system "$1" >/dev/null 2>&1; }
+layered_of() {  # the arguments that are layered right now
+  local p
+  for p in "$@"; do is_requested "$p" && echo "$p"; done
+  return 0
+}
+ensure_flathub() {
+  # Rebased systems can have Flathub missing at system level, or the
+  # Fedora-filtered one that hides Steam: make it present and unfiltered.
+  say flatpak remote-add --if-not-exists --system flathub "$FLATHUB"
+  say flatpak remote-modify --system flathub --no-filter || true
+}
+state() { printf 'state=%s\ndetail=%s\n' "$1" "$2"; }
+
+# rpm_state PKGS...: installed | pending | partial | absent, from rpm and
+# the layer request, for a set of packages that come together.
+rpm_state() {
+  local inst=0 req=0 p
+  for p in "$@"; do
+    if is_installed "$p"; then inst=$((inst + 1)); elif is_requested "$p"; then req=$((req + 1)); fi
+  done
+  if (( inst == $# )); then echo installed
+  elif (( inst + req == $# && req > 0 )); then echo pending
+  elif (( inst + req == 0 )); then echo absent
+  else echo partial; fi
+}
+flatpak_count() { local n=0 a; for a in "$@"; do has_flatpak "$a" && n=$((n + 1)); done; echo "$n"; }
+uninstall_layered() {
+  local -a drop=()
+  mapfile -t drop < <(layered_of "$@")
+  if (( ${#drop[@]} )); then say rpm-ostree uninstall "${drop[@]}"; else echo "nothing of this is layered"; fi
+}
+
+# ── gaming (Flatpak variant) ───────────────────────────────────────────
+gaming_status() {
+  local apps rpms
+  apps="$(flatpak_count "${GAMING_FLATPAKS[@]}")"
+  rpms="$(rpm_state "${GAMING_RPMS[@]}")"
+  if (( apps == ${#GAMING_FLATPAKS[@]} )) && [[ $rpms == installed ]]; then
+    state installed "Steam, Lutris, Heroic, Bottles, RetroArch and the host helpers are installed"
+  elif (( apps == 0 )) && [[ $rpms == absent ]]; then
+    state absent "Steam, Lutris, Heroic, Bottles and RetroArch, with gamescope, MangoHud, vkBasalt and GOverlay"
+  elif [[ $rpms == pending ]] && (( apps == ${#GAMING_FLATPAKS[@]} )); then
+    state pending "The apps are ready; the host helpers work after a restart"
+  else
+    state partial "$apps of ${#GAMING_FLATPAKS[@]} apps are installed, the host helpers are $rpms"
+  fi
+}
+gaming_install() {
+  ensure_flathub
+  say flatpak install --system -y --noninteractive --or-update flathub "${GAMING_FLATPAKS[@]}"
+  # --idempotent: already layered must not fail a second run.
+  say rpm-ostree install --idempotent "${GAMING_RPMS[@]}"
+}
+gaming_remove() {
+  uninstall_layered "${GAMING_RPMS[@]}"
+  say flatpak uninstall --system -y --noninteractive "${GAMING_FLATPAKS[@]}" || true
+}
+
+# ── gaming-native (Steam, Lutris, RetroArch as system packages) ────────
+native_pkgs() {
+  [[ -r "$GAMING_NATIVE_LIST" ]] || die "missing $GAMING_NATIVE_LIST: bad image?"
+  grep -vE '^[[:space:]]*(#|$)' "$GAMING_NATIVE_LIST"
+}
+gaming_native_status() {
+  local -a pkgs=()
+  mapfile -t pkgs < <(native_pkgs)
+  local rpms apps
+  rpms="$(rpm_state "${pkgs[@]}")"
+  apps="$(flatpak_count "${GAMING_NATIVE_FLATPAKS[@]}")"
+  case "$rpms" in
+    installed) state installed "Steam, Lutris and RetroArch run as system packages; Heroic, Bottles and the Proton tools as apps" ;;
+    pending)   state pending "Steam, Lutris and RetroArch are layered and work after a restart" ;;
+    absent)    if (( apps == 0 )); then state absent "Steam, Lutris and RetroArch as system packages: anti-cheat games, VR, daily play"
+               else state partial "Only the apps of the native variant are installed"; fi ;;
+    *)         state partial "Some of the native gaming packages are installed" ;;
+  esac
+}
+gaming_native_install() {
+  local -a pkgs=()
+  mapfile -t pkgs < <(native_pkgs)
+  say rpm-ostree install --idempotent "${pkgs[@]}"
+  ensure_flathub
+  say flatpak install --system -y --noninteractive --or-update flathub "${GAMING_NATIVE_FLATPAKS[@]}"
+}
+gaming_native_remove() {
+  local -a pkgs=()
+  mapfile -t pkgs < <(native_pkgs)
+  uninstall_layered "${pkgs[@]}"
+  say flatpak uninstall --system -y --noninteractive "${GAMING_NATIVE_FLATPAKS[@]}" || true
+}
+
+# ── ai (Alpaca, a local LLM chat in a Flatpak) ─────────────────────────
+ai_status() {
+  if has_flatpak "$AI_APP"; then
+    if has_flatpak "$AI_AMD_PLUGIN"; then state installed "Alpaca is installed, with the AMD GPU plugin"
+    else state installed "Alpaca is installed"; fi
+  else
+    state absent "Alpaca: chat with language models that run on this machine"
+  fi
+}
+ai_install() {
+  ensure_flathub
+  say flatpak install --system -y --noninteractive --or-update flathub "$AI_APP"
+  if [[ "${1:-}" == amd ]]; then
+    say flatpak install --system -y --noninteractive --or-update flathub "$AI_AMD_PLUGIN" \
+      || echo "the AMD plugin did not install; Alpaca works on Vulkan or the CPU"
+  fi
+}
+ai_remove() {
+  say flatpak uninstall --system -y --noninteractive "$AI_AMD_PLUGIN" || true
+  say flatpak uninstall --system -y --noninteractive "$AI_APP" || true
+}
+
+# ── devmode (VS Code, compiler, flatpak-builder; Homebrew is the user's) ─
+devmode_status() {
+  local -a pkgs=()
+  mapfile -t pkgs < <("$DEV" packages)
+  local rpms brew=""
+  rpms="$(rpm_state "${pkgs[@]}")"
+  [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]] && brew=", Homebrew is installed" || brew=", Homebrew is not installed"
+  case "$rpms" in
+    installed) state installed "VS Code, the compiler and flatpak-builder are installed$brew" ;;
+    pending)   state pending "The system packages are layered and work after a restart$brew" ;;
+    absent)    state absent "VS Code, a C and C++ compiler, flatpak-builder and Homebrew" ;;
+    *)         state partial "Some of the developer packages are installed$brew" ;;
+  esac
+}
+devmode_install() {
+  local -a pkgs=()
+  mapfile -t pkgs < <("$DEV" packages)
+  say "$DEV" repo
+  # --allow-inactive: a package the image ships one day stays requested.
+  say rpm-ostree install --idempotent --allow-inactive "${pkgs[@]}"
+}
+devmode_remove() {
+  local layered
+  layered="$("$DEV" layered)" || die "cannot read what is layered (rpm-ostree status)"
+  if [[ -n "$layered" ]]; then
+    local -a drop=()
+    mapfile -t drop <<<"$layered"
+    say rpm-ostree uninstall "${drop[@]}"
+  else
+    echo "no developer package is layered"
+  fi
+  say "$DEV" repo-remove
+}
+
+# ── vscode (the RPM alone, from Microsoft's repository) ────────────────
+vscode_status() {
+  case "$(rpm_state code)" in
+    installed) state installed "VS Code $(rpm -q --qf '%{VERSION}' code) is installed as a system package" ;;
+    pending)   state pending "VS Code is layered and works after a restart" ;;
+    *)         state absent "VS Code as a system package, for extensions that run host tools" ;;
+  esac
+}
+vscode_install() { say "$DEV" repo; say rpm-ostree install --idempotent code; }
+vscode_remove() { uninstall_layered code; say "$DEV" repo-remove; }
+
+# ── devtools (eBPF tracing, sysprof, igt, a toolchain) ─────────────────
+devtools_status() {
+  case "$(rpm_state "${DEVTOOLS_RPMS[@]}")" in
+    installed) state installed "bcc, bpftrace, sysprof, igt-gpu-tools and the toolchain are installed" ;;
+    pending)   state pending "The tools are layered and work after a restart" ;;
+    absent)    state absent "eBPF tracing (bcc, bpftrace, bpftop), sysprof, igt-gpu-tools and a C toolchain" ;;
+    *)         state partial "Some of the developer tools are installed" ;;
+  esac
+}
+devtools_install() { say rpm-ostree install --idempotent "${DEVTOOLS_RPMS[@]}"; }
+devtools_remove() { uninstall_layered "${DEVTOOLS_RPMS[@]}"; }
+
+# ── docker (Docker CE in place of podman-docker) ───────────────────────
+docker_status() {
+  if is_installed docker-ce; then
+    state installed "Docker CE $(rpm -q --qf '%{VERSION}' docker-ce) is installed; docker.socket is $(systemctl is-enabled docker.socket 2>/dev/null || echo 'not enabled')"
+  elif is_requested docker-ce; then
+    state pending "Docker CE is layered and works after a restart"
+  else
+    state absent "Docker's own engine for the tools that need its daemon; until then podman answers to docker"
+  fi
+}
+docker_install() {
+  say "$LAYER_REPO" docker-ce \
+    https://download.docker.com/linux/fedora/docker-ce.repo \
+    https://download.docker.com/linux/fedora/gpg \
+    060A61C51B558A7F742B77AAC52FEB6B621E9F35
+  local -a install=()
+  local p
+  for p in "${DOCKER_RPMS[@]}"; do install+=(--install "$p"); done
+  say rpm-ostree override remove podman-docker "${install[@]}"
+  printf 'net.ipv4.ip_forward = 1\n' > /etc/sysctl.d/margine-docker-ce.conf
+  # The unit only exists in the new deployment: enable it by hand.
+  mkdir -p /etc/systemd/system/sockets.target.wants
+  ln -sf /usr/lib/systemd/system/docker.socket /etc/systemd/system/sockets.target.wants/docker.socket
+}
+docker_remove() {
+  local -a uninstall=()
+  local p
+  for p in "${DOCKER_RPMS[@]}"; do uninstall+=(--uninstall "$p"); done
+  say rpm-ostree override reset podman-docker "${uninstall[@]}"
+  rm -f /etc/yum.repos.d/docker-ce.repo /etc/sysctl.d/margine-docker-ce.conf \
+    /etc/systemd/system/sockets.target.wants/docker.socket
+}
+
+# ── tailscale ──────────────────────────────────────────────────────────
+tailscale_status() {
+  if is_installed tailscale; then
+    state installed "Tailscale is installed; tailscaled is $(systemctl is-active tailscaled 2>/dev/null || true)"
+  elif is_requested tailscale; then
+    state pending "Tailscale is layered and works after a restart"
+  else
+    state absent "Your devices on one private network, wherever they are"
+  fi
+}
+tailscale_install() {
+  say "$LAYER_REPO" tailscale \
+    https://pkgs.tailscale.com/stable/fedora/tailscale.repo \
+    https://pkgs.tailscale.com/stable/fedora/repo.gpg \
+    2596A99EAAB33821893C0A79458CA832957F5868
+  say rpm-ostree install --idempotent tailscale
+  mkdir -p /etc/systemd/system/multi-user.target.wants
+  ln -sf /usr/lib/systemd/system/tailscaled.service /etc/systemd/system/multi-user.target.wants/tailscaled.service
+}
+tailscale_remove() {
+  uninstall_layered tailscale
+  rm -f /etc/yum.repos.d/tailscale.repo /etc/systemd/system/multi-user.target.wants/tailscaled.service
+}
+
+# ── vm (libvirt, QEMU/KVM, virt-manager, OVMF, swtpm) ──────────────────
+vm_installed() { is_installed libvirt-daemon && is_installed qemu-kvm && is_installed virt-manager; }
+vm_status() {
+  if vm_installed; then
+    local grp="the libvirt group applies after a restart or a new login"
+    [[ " $(id -nG) " == *" libvirt "* ]] && grp="you are in the libvirt group"
+    state installed "libvirt $(rpm -q --qf '%{VERSION}' libvirt-daemon) and QEMU $(rpm -q --qf '%{VERSION}' qemu-kvm) are installed; $grp"
+  elif is_requested libvirt; then
+    state pending "The VM tools are layered and work after a restart"
+  else
+    state absent "libvirt, QEMU/KVM, virt-manager, UEFI firmware and a software TPM, about 290 MB"
+  fi
+}
+vm_install() {
+  if vm_installed; then
+    # Booted into the layer: start what the next boot would start.
+    say systemctl enable --now "${VM_SOCKETS[@]}" 2>/dev/null \
+      || say systemctl start virtqemud.socket virtnetworkd.socket virtstoraged.socket || true
+    say "$DEV_GROUPS"
+    return 0
+  fi
+  say rpm-ostree install --idempotent "${VM_RPMS[@]}"
+  # The units only exist in the new deployment: enable them by hand.
+  mkdir -p /etc/systemd/system/sockets.target.wants
+  local s
+  for s in "${VM_SOCKETS[@]}"; do
+    ln -sf "/usr/lib/systemd/system/$s" "/etc/systemd/system/sockets.target.wants/$s"
+  done
+}
+vm_remove() {
+  uninstall_layered "${VM_RPMS[@]}"
+  local s
+  for s in "${VM_SOCKETS[@]}"; do rm -f "/etc/systemd/system/sockets.target.wants/$s"; done
+}
+
+# ── sunshine (Moonlight streaming host; experimental) ──────────────────
+sunshine_status() {
+  if has_flatpak "$SUNSHINE_APP"; then
+    local rule="the input rule is missing"
+    [[ -f "$SUNSHINE_UDEV" ]] && rule="virtual input and the streaming ports are set up"
+    state installed "Sunshine is installed; $rule"
+  else
+    state absent "Stream games and the desktop to a Moonlight client; experimental"
+  fi
+}
+sunshine_install() {
+  ensure_flathub
+  say flatpak install --system -y --noninteractive --or-update flathub "$SUNSHINE_APP"
+  echo uinput > /etc/modules-load.d/uinput.conf
+  modprobe uinput || true
+  printf '%s\n' 'KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", TAG+="uaccess"' > "$SUNSHINE_UDEV"
+  say udevadm control --reload-rules
+  say udevadm trigger --subsystem-match=misc || true
+  if command -v firewall-cmd >/dev/null 2>&1; then
+    local p
+    for p in "${SUNSHINE_PORTS[@]}"; do firewall-cmd --permanent --add-port="$p" >/dev/null || true; done
+    say firewall-cmd --reload >/dev/null || true
+  fi
+}
+sunshine_remove() {
+  say flatpak uninstall --system -y --noninteractive "$SUNSHINE_APP" || true
+  rm -f "$SUNSHINE_UDEV"
+  say udevadm control --reload-rules || true
+  if command -v firewall-cmd >/dev/null 2>&1; then
+    local p
+    for p in "${SUNSHINE_PORTS[@]}"; do firewall-cmd --permanent --remove-port="$p" >/dev/null 2>&1 || true; done
+    say firewall-cmd --reload >/dev/null 2>&1 || true
+  fi
+}
+
+# ── phone (KDE Connect: the phone and Lucciola together) ───────────────
+# The service and its indicator come as system packages (kdeconnectd pulls
+# Qt6 and KF6, about 260 MB: a layer, not the image), the indicator gets
+# an autostart entry of ours (Fedora ships upstream's only under
+# applications/), and the firewall learns the service (ports 1714-1764;
+# the FedoraWorkstation zone already opens them, the entry keeps the phone
+# working if the zone is ever tightened). Pairings live in the user's
+# ~/.config/kdeconnect and are never touched: the phone is known again
+# when the layer comes back.
+phone_pkgs() {
+  [[ -r "$PHONE_LIST" ]] || die "missing $PHONE_LIST: bad image?"
+  grep -vE '^[[:space:]]*(#|$)' "$PHONE_LIST"
+}
+phone_status() {
+  local -a pkgs=()
+  mapfile -t pkgs < <(phone_pkgs)
+  case "$(rpm_state "${pkgs[@]}")" in
+    installed)
+      local extras=""
+      [[ -f "$PHONE_AUTOSTART" ]] || extras+="; the indicator's autostart entry is missing"
+      if command -v firewall-cmd >/dev/null 2>&1 && ! firewall-cmd --query-service="$PHONE_FIREWALL_SERVICE" >/dev/null 2>&1; then
+        extras+="; the firewall service is not on"
+      fi
+      state installed "KDE Connect $(rpm -q --qf '%{VERSION}' kdeconnectd) is installed; pair from the KDE Connect app on the phone, same Wi-Fi$extras" ;;
+    pending)   state pending "KDE Connect is layered and works after a restart" ;;
+    absent)    state absent "Notifications, clipboard, files, media and more between an Android phone and this PC, with the KDE Connect app" ;;
+    *)         state partial "Some of the phone packages are installed" ;;
+  esac
+}
+phone_install() {
+  local -a pkgs=()
+  mapfile -t pkgs < <(phone_pkgs)
+  say rpm-ostree install --idempotent "${pkgs[@]}"
+  install -Dm0644 "$PHONE_AUTOSTART_SRC" "$PHONE_AUTOSTART"
+  echo "+ autostart entry for the indicator: $PHONE_AUTOSTART"
+  if command -v firewall-cmd >/dev/null 2>&1; then
+    say firewall-cmd --permanent --add-service="$PHONE_FIREWALL_SERVICE" >/dev/null || true
+    say firewall-cmd --reload >/dev/null || true
+  fi
+}
+phone_remove() {
+  local -a pkgs=()
+  mapfile -t pkgs < <(phone_pkgs)
+  uninstall_layered "${pkgs[@]}"
+  rm -f "$PHONE_AUTOSTART"
+  if command -v firewall-cmd >/dev/null 2>&1; then
+    say firewall-cmd --permanent --remove-service="$PHONE_FIREWALL_SERVICE" >/dev/null 2>&1 || true
+    say firewall-cmd --reload >/dev/null 2>&1 || true
+  fi
+  echo "the pairings in ~/.config/kdeconnect stay"
+}
+
+# ── slim and naked (the default app set, trimmed) ──────────────────────
+preinstall_masked() { [[ "$(systemctl is-enabled "$PREINSTALL_UNIT" 2>/dev/null || true)" == masked ]]; }
+profile_status() {  # profile_status NAME APPS...
+  local name="$1"; shift
+  local present
+  present="$(flatpak_count "$@")"
+  if preinstall_masked && (( present == 0 )); then
+    state installed "The $name profile is active"
+  elif preinstall_masked; then
+    state partial "$present of the apps the $name profile removes are installed"
+  else
+    state absent "The stock app set is installed and kept"
+  fi
+}
+slim_status() { profile_status slim "${SLIM_APPS[@]}"; }
+naked_status() {
+  if preinstall_masked && (( $(flatpak_count "${SLIM_APPS[@]}") == 0 )); then
+    profile_status naked "${NAKED_APPS[@]}"
+  else
+    state absent "Office, mail and the situational apps go too; only the browser, viewers and the system utilities stay"
+  fi
+}
+remove_apps() {
+  local a
+  for a in "$@"; do
+    has_flatpak "$a" && { say flatpak uninstall --system -y --noninteractive "$a" || true; }
+  done
+  say flatpak uninstall --system --unused -y --noninteractive || true
+}
+slim_install() {
+  # Guard: without the browser the first-boot install has not finished (or
+  # failed); masking now could strand a half-set system.
+  has_flatpak "$BROWSER" || die "the browser is not installed yet: the first-boot app install is still running (or broken); wait for it"
+  say systemctl stop "$PREINSTALL_UNIT" 2>/dev/null || true
+  say systemctl mask "$PREINSTALL_UNIT"
+  remove_apps "${SLIM_APPS[@]}"
+}
+naked_install() { slim_install; remove_apps "${NAKED_APPS[@]}"; }
+# Unmasking is not enough: Flatpak remembers a preinstalled app the user
+# removed and never installs it again. The keep helper forgets those
+# removals for the stock list, so the next run installs them.
+profile_remove() {
+  say systemctl unmask "$PREINSTALL_UNIT"
+  say "$PREINSTALL_KEEP" --restore
+  say systemctl start "$PREINSTALL_UNIT" --no-block
+  echo "the stock apps come back in the background, 5-15 minutes on a normal line"
+}
+slim_remove() { profile_remove; }
+naked_remove() { profile_remove; }
+
+ALL=(gaming gaming-native ai devmode vscode devtools docker tailscale vm sunshine phone slim naked)
+
+name="${1:-}"; action="${2:-}"
+if [[ "$name" == all && "$action" == status ]]; then
+  for f in "${ALL[@]}"; do echo "[$f]"; "${f//-/_}_status"; done
+  exit 0
+fi
+case " ${ALL[*]} " in *" $name "*) ;; *) die "usage: feature NAME status|install|remove (NAME: ${ALL[*]}, or 'all status')" ;; esac
+fn="${name//-/_}"
+case "$action" in
+  status)  "${fn}_status" ;;
+  install) need_root "$name install"; "${fn}_install" "${3:-}" ;;
+  remove)  need_root "$name remove"; "${fn}_remove" ;;
+  *) die "usage: feature $name status|install|remove" ;;
+esac

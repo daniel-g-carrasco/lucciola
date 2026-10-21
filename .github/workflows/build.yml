@@ -660,6 +660,24 @@ jobs:
             *) echo "::error::the developer layer does not resolve against this image: ujust lucciola-devmode, and updates of machines that have it, would fail"; exit 1 ;;
           esac
 
+      # The phone layer (KDE Connect: kdeconnectd with its Qt6 and KF6 chain,
+      # kde-connect, the Files extension, fuse-sshfs), same check and same
+      # verdicts: `ujust lucciola-phone` and the Phone row of Lucciola System
+      # layer exactly this list.
+      - name: Phone layer resolves against the image
+        env:
+          IMG: localhost/${{ env.IMAGE_NAME }}:${{ steps.metadata.outputs.version }}
+        run: |
+          set -uo pipefail
+          rc=0
+          sudo .github/scripts/layer-resolve.sh "$IMG" phone | tee phone-resolve.log || rc=$?
+          { echo "### Phone layer"; echo '```'; grep -E 'MARGINE-PHONE-RESOLVE' phone-resolve.log | head -n 20 || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          case "$rc" in
+            0) ;;
+            2) echo "::warning::phone layer resolve check gave no verdict (repositories unreachable?); smoke-boot's dry run still gates promotion" ;;
+            *) echo "::error::the phone layer does not resolve against this image: ujust lucciola-phone, and updates of machines that have it, would fail"; exit 1 ;;
+          esac
+
       # The kernel version, for the dev.margine.kernel and ostree.linux labels
       # the chunker writes (the image ships exactly one /usr/lib/modules/<kver>/).
       # Read here since the SBOM step, which used to read it in passing, now

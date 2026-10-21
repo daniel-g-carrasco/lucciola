@@ -339,6 +339,11 @@ for f in usr/share/margine/offline-docs usr/share/applications/margine-documenta
          usr/bin/margine-docs-open usr/lib/systemd/system/margine-docs-refresh.timer; do
   if [[ -e "$ROOTFS/$f" ]]; then echo "::error::$f is back in the image (A.4.bis: the offline docs left on 2026-10-18)"; fail=1; fi
 done
+# The phone layer's list and the indicator's autostart entry: what
+# `ujust lucciola-phone` and the Phone row of Lucciola System install from.
+check_nonempty "usr/share/margine/phone-packages.txt" "A.4.bis"
+grep -qx 'kdeconnectd' "$ROOTFS/usr/share/margine/phone-packages.txt" 2>/dev/null || { echo "::error::A.4.bis the phone layer's list does not name kdeconnectd"; fail=1; }
+check_nonempty "usr/share/lucciola/phone/org.kde.kdeconnect.nonplasma.desktop" "A.4.bis"
 
 # A.5 — REMOVED (org.gnome.shell.app-grid schema does not exist in
 # GNOME 47/48; the keys we tried to set are ignored. Icon-size drift

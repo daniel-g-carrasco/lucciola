@@ -38,6 +38,7 @@ PROMPT = "MPROMPT> "
 # every prompt and command). Both are stripped before matching.
 ESCAPES = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-9;?]*[ -/]*[@-~]|\r")
 GAMING_LIST = "/usr/share/margine/gaming-native-packages.txt"
+PHONE_LIST = "/usr/share/margine/phone-packages.txt"
 
 
 def keep_status(cmd, lines):
@@ -367,6 +368,12 @@ def main():
     say("gaming-native dry run: " + (out or "").strip().replace("\n", " | ")[-400:])
     if rc != 0:
         fail("the gaming-native layer does not resolve on the new deployment")
+    # The phone layer (KDE Connect), the same way: a machine with it must
+    # still update.
+    rc, out = capture(gaming_dry_run(sudo, PHONE_LIST), 900)
+    say("phone dry run: " + (out or "").strip().replace("\n", " | ")[-400:])
+    if rc != 0:
+        fail("the phone layer does not resolve on the new deployment")
     rc, out = capture(sudo + "MARGINE_VALIDATE_CONTEXT=live lucciola-validate-margine-system 2>&1 | grep -E 'FAIL|PASSED|FAILED|WARN' | tail -25", 900)
     say("validator:\n" + (out or ""))
     if not out or "PASSED" not in out:

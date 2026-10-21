@@ -78,12 +78,9 @@ lucciola-bootstrap $MODE="interactive":
 lucciola-gaming:
     #!/usr/bin/bash
     set -euo pipefail
-
     cat <<'EOF'
     == Lucciola gaming layer ==
-
     This installs:
-
       Flatpaks (from Flathub, system-wide):
         - com.valvesoftware.Steam
         - net.lutris.Lutris
@@ -92,18 +89,15 @@ lucciola-gaming:
         - com.github.Matoking.protontricks
         - com.vysp3r.ProtonPlus
         - org.libretro.RetroArch   (multi-emulator: PS1/N64/GBA/SNES/…)
-
       Host RPMs (layered via rpm-ostree — requires reboot to take effect):
         - gamescope       (HDR / per-game compositor / scaling)
         - mangohud        (FPS / GPU / CPU overlay)
         - vkBasalt        (post-processing Vulkan layer)
         - goverlay        (GUI configurator for MangoHud + vkBasalt)
-
       Already in the image, nothing to install:
         - gamemode        (CPU governor + niceness during gameplay)
         - steam-devices   (controller udev rules)
         - tuned, tuned-ppd (CPU governor switching balanced↔performance)
-
     Notes:
       - GameMode auto-engages when Steam launches a game. No setup.
       - For host MangoHud inside Flatpak Steam, after install run:
@@ -113,7 +107,6 @@ lucciola-gaming:
       - For host gamescope inside Flatpak Steam:
           gamescope -- %command%   in Steam launch options.
       - To roll this back: ujust lucciola-gaming-remove
-
     Trade-off — host RPMs are layered via rpm-ostree, which means:
       - Your booted deployment becomes "branched" from the base OCI
         image: `rpm-ostree status` will show LayeredPackages: …
@@ -121,55 +114,22 @@ lucciola-gaming:
         upgrade`, which REFUSES a client-layered deployment). It
         re-applies the layer on top of the new base — slower (~30-60s
         extra per update) and can occasionally fail on file conflicts
-        when upstream relocates a
-        file in a layered RPM.
+        when upstream relocates a file in a layered RPM.
     This recipe is THE supported way to get the gaming layer on
-    Lucciola. The Flatpak clients above
-    (Steam/Lutris/Heroic/Bottles/Protontricks/ProtonPlus/RetroArch)
-    DO NOT layer — they're proper Flatpaks.
-
+    Lucciola. The Flatpak clients above DO NOT layer — they're proper
+    Flatpaks. The Features page of Lucciola System does the same.
     EOF
     read -rp "Continue? [y/N] " ans
     case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
-
-    echo
-    echo "== Ensuring full (unfiltered) Flathub at system level =="
-    # Rebased systems can have Flathub missing at --system scope, or the
-    # Fedora-FILTERED Flathub (which hides proprietary apps like Steam, the
-    # exact failure a tester hit 2026-06-24). Make it present + unfiltered.
-    sudo flatpak remote-add --if-not-exists --system flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-    sudo flatpak remote-modify --system flathub --no-filter || true
-    echo "== Installing gaming Flatpaks =="
-    sudo flatpak install --system -y --or-update flathub \
-        com.valvesoftware.Steam \
-        net.lutris.Lutris \
-        com.heroicgameslauncher.hgl \
-        com.usebottles.bottles \
-        com.github.Matoking.protontricks \
-        com.vysp3r.ProtonPlus \
-        org.libretro.RetroArch
-
-    echo
-    echo "== Layering gaming-only host helpers (rpm-ostree) =="
-    # The gaming-only RPMs. steam-devices, gamemode, tuned, tuned-ppd and
-    # scx-scheds are already in the image. mangohud and goverlay were too
-    # until 2026-10-18; they are layered here now, so re-running this
-    # recipe brings them back on a system that had them from the image.
-    # --idempotent: a re-run (common: "did it install?") must not abort
-    # under set -e when the package is already layered.
-    sudo rpm-ostree install --idempotent \
-        gamescope \
-        vkBasalt \
-        mangohud \
-        goverlay
-
+    # One definition for the terminal and the window: /usr/libexec/lucciola/feature.
+    sudo /usr/libexec/lucciola/admin gaming-on
     echo
     cat <<'EOF'
     == Done ==
     Reboot to activate the rpm-ostree layer:
         systemctl reboot
     The Flatpak apps are already available (without reboot) from the
-    Activities grid.
+    launcher.
     EOF
 
 # Roll back the gaming layer (undo lucciola-gaming).
@@ -177,9 +137,9 @@ lucciola-gaming:
 lucciola-gaming-remove:
     #!/usr/bin/bash
     set -euo pipefail
-
     echo "This will:"
     echo "  - rpm-ostree uninstall gamescope, vkBasalt, mangohud and goverlay"
+    echo "    (only the ones that are layered)"
     echo "  - flatpak uninstall the 7 gaming Flatpaks (Steam, Lutris, Heroic,"
     echo "    Bottles, Protontricks, ProtonPlus, RetroArch)"
     echo
@@ -188,27 +148,7 @@ lucciola-gaming-remove:
     echo
     read -rp "Continue? [y/N] " ans
     case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
-
-    # Only what is layered: rpm-ostree refuses the whole request when one
-    # name is not (mangohud and goverlay came with the image until
-    # 2026-10-18, so older layers lack them).
-    mapfile -t LAYERED < <(rpm-ostree status --json | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)["deployments"][0].get("requested-packages", [])))')
-    declare -A IS_LAYERED=()
-    for p in "${LAYERED[@]}"; do IS_LAYERED["$p"]=1; done
-    DROP=()
-    for p in gamescope vkBasalt mangohud goverlay; do
-        [[ -n "${IS_LAYERED[$p]:-}" ]] && DROP+=("$p")
-    done
-    (( ${#DROP[@]} )) && sudo rpm-ostree uninstall "${DROP[@]}"
-
-    sudo flatpak uninstall --system -y \
-        com.valvesoftware.Steam \
-        net.lutris.Lutris \
-        com.heroicgameslauncher.hgl \
-        com.usebottles.bottles \
-        com.github.Matoking.protontricks \
-        com.vysp3r.ProtonPlus \
-        org.libretro.RetroArch || true
+    sudo /usr/libexec/lucciola/admin gaming-off
 
 # Install the NATIVE Margine gaming layer (Steam + Lutris + RetroArch
 # as rpm-ostree layered RPMs, the launchers without an RPM stay Flatpak).
@@ -225,12 +165,9 @@ lucciola-gaming-remove:
 lucciola-gaming-native:
     #!/usr/bin/bash
     set -euo pipefail
-
     cat <<'EOF'
     == Lucciola gaming layer (NATIVE variant) ==
-
     This installs:
-
       Native RPMs (layered via rpm-ostree — requires reboot):
         - steam              (Valve Steam client, from negativo17, with its
                               32-bit libraries: about 200 packages, a few
@@ -240,13 +177,11 @@ lucciola-gaming-native:
         - gamescope          (HDR / per-game compositor / scaling)
         - vkBasalt           (post-processing Vulkan layer)
         - mangohud, goverlay (FPS / GPU / CPU overlay and its settings)
-
       Flatpaks (for launchers without an official RPM):
         - com.heroicgameslauncher.hgl   (Epic + GOG)
         - com.usebottles.bottles        (Wine prefix manager)
         - com.github.Matoking.protontricks
         - com.vysp3r.ProtonPlus         (Proton-GE manager)
-
     Native vs Flatpak — when to pick which:
       - lucciola-gaming         (DEFAULT, Flatpak): sandboxed, zero
                                 upgrade overhead. Fine for the
@@ -258,44 +193,22 @@ lucciola-gaming-native:
                                 quirks, Mesa version always matches
                                 the system. The cost is +30-60s per
                                 `ujust lucciola-update` to re-apply the layer.
-
     Pick this variant if: anti-cheat titles, VR, daily play, or NVIDIA
     proprietary + Mesa-git side-by-side.
-
     To roll this back: ujust lucciola-gaming-native-remove
     To switch from the Flatpak variant first: ujust lucciola-gaming-remove
-
+    The package set lives in /usr/share/margine/gaming-native-packages.txt,
+    shared with the smoke-boot dry-run check.
     EOF
     read -rp "Continue? [y/N] " ans
     case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
-
-    echo
-    echo "== Layering native gaming RPMs (rpm-ostree) =="
-    # Package set lives in a single source-of-truth file shared with the
-    # smoke-boot dry-run check (see /usr/share/margine/).
-    PKGLIST=/usr/share/margine/gaming-native-packages.txt
-    [ -r "$PKGLIST" ] || { echo "Missing $PKGLIST — bad image?" >&2; exit 1; }
-    mapfile -t GAMING_PKGS < <(grep -vE '^[[:space:]]*(#|$)' "$PKGLIST")
-    # --idempotent: safe to re-run without aborting on already-layered pkgs.
-    sudo rpm-ostree install --idempotent "${GAMING_PKGS[@]}"
-
-    echo
-    echo "== Ensuring full (unfiltered) Flathub at system level =="
-    sudo flatpak remote-add --if-not-exists --system flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-    sudo flatpak remote-modify --system flathub --no-filter || true
-    echo "== Installing the rest as Flatpaks =="
-    sudo flatpak install --system -y --or-update flathub \
-        com.heroicgameslauncher.hgl \
-        com.usebottles.bottles \
-        com.github.Matoking.protontricks \
-        com.vysp3r.ProtonPlus
-
+    sudo /usr/libexec/lucciola/admin gaming-native-on
     echo
     cat <<'EOF'
     == Done ==
     Reboot to activate the native RPM layer:
         systemctl reboot
-    The Flatpak apps are already in Activities (no reboot needed for them).
+    The Flatpak apps are already in the launcher (no reboot needed for them).
     EOF
 
 # Roll back the native gaming layer (undo lucciola-gaming-native).
@@ -303,10 +216,10 @@ lucciola-gaming-native:
 lucciola-gaming-native-remove:
     #!/usr/bin/bash
     set -euo pipefail
-
     echo "This will:"
     echo "  - rpm-ostree uninstall steam, lutris, RetroArch, gamescope, vkBasalt,"
-    echo "    mangohud, goverlay (and the 32-bit libraries steam brought)"
+    echo "    mangohud, goverlay (the ones that are layered) and the 32-bit"
+    echo "    libraries steam brought"
     echo "  - flatpak uninstall Heroic, Bottles, Protontricks, ProtonPlus"
     echo
     echo "  NOT touched (part of the image, not of the layer):"
@@ -314,36 +227,13 @@ lucciola-gaming-native-remove:
     echo
     read -rp "Continue? [y/N] " ans
     case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
-
-    PKGLIST=/usr/share/margine/gaming-native-packages.txt
-    [ -r "$PKGLIST" ] || { echo "Missing $PKGLIST — bad image?" >&2; exit 1; }
-    mapfile -t GAMING_PKGS < <(grep -vE '^[[:space:]]*(#|$)' "$PKGLIST")
-    # Only what is layered: rpm-ostree refuses the whole request when one
-    # name is not (a layer made before mangohud and goverlay joined the
-    # list lacks them).
-    mapfile -t LAYERED < <(rpm-ostree status --json | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)["deployments"][0].get("requested-packages", [])))')
-    declare -A IS_LAYERED=()
-    for p in "${LAYERED[@]}"; do IS_LAYERED["$p"]=1; done
-    DROP=()
-    for p in "${GAMING_PKGS[@]}"; do
-        [[ -n "${IS_LAYERED[$p]:-}" ]] && DROP+=("$p")
-    done
-    (( ${#DROP[@]} )) && sudo rpm-ostree uninstall "${DROP[@]}"
-
-    sudo flatpak uninstall --system -y \
-        com.heroicgameslauncher.hgl \
-        com.usebottles.bottles \
-        com.github.Matoking.protontricks \
-        com.vysp3r.ProtonPlus || true
-
-    echo
-    echo "Done. Reboot to release the rpm-ostree layer: systemctl reboot"
+    sudo /usr/libexec/lucciola/admin gaming-native-off
 
 
 # Switch the CPU scheduler at runtime (sched_ext / BPF schedulers).
 # Available on every Margine flavour. scx-scheds ships in the base
 # image, scx_loader stays disabled by default, and users opt in here
-# or through Activities -> "Margine CPU Scheduler".
+# or through Activities -> "Lucciola CPU Scheduler".
 #
 #   ujust lucciola-scheduler          # show current state
 #   ujust lucciola-scheduler lavd     # start/switch to a shipped scheduler
@@ -392,12 +282,12 @@ lucciola-scheduler $MODE="status":
     # + apply live) is done by the shared helper, so this recipe and the GTK
     # picker behave identically and the config format lives in one place.
     ensure_loader() {
-      sudo /usr/libexec/margine/scheduler-apply "$MODE" Auto auto \
+      sudo /usr/libexec/lucciola/admin scheduler "$MODE" Auto \
         || { echo "FAILED to apply scx_$MODE."; exit 1; }
     }
 
     stop_loader() {
-      sudo /usr/libexec/margine/scheduler-apply off \
+      sudo /usr/libexec/lucciola/admin scheduler-off \
         || { echo "FAILED to disable $SERVICE."; exit 1; }
     }
 
@@ -462,14 +352,12 @@ lucciola-ai:
     set -euo pipefail
     cat <<'EOF'
     == Lucciola AI workflow ==
-
     This installs:
       - com.jeffser.Alpaca (Flatpak) — GUI chat with local LLMs.
         Alpaca bundles its own Ollama backend in the Flatpak, so no
         host install or daemon-running is needed. First launch
         downloads the chosen model (a few GB depending on choice —
         llama3.1:8b is ~5 GB).
-
     NOT installed by this recipe (do separately if you want):
       - RamaLama (CLI, Red Hat's local-LLM container runner).
         For that: open Ptyxis, then:
@@ -480,13 +368,11 @@ lucciola-ai:
         a CLI ChatGPT-like.
       - Continue.dev / aichat / sgpt for VS Code or terminal-level
         completion. Install in your dev distrobox.
-
     Recommended starter models (downloadable from Alpaca's UI):
       - llama3.1:8b      — general purpose, ~5 GB, fits 8 GB GPU
       - qwen2.5-coder:7b — coding-focused, ~4 GB
       - mistral:7b       — fast general, ~4 GB
       - phi3.5:3.8b      — small footprint, ~2 GB (CPU-friendly)
-
     GPU acceleration:
       - The Flatpak is sandboxed and does NOT use the host ROCm. This
         recipe offers the AMD ROCm plugin (com.jeffser.Alpaca.Plugins.AMD)
@@ -495,40 +381,23 @@ lucciola-ai:
       - NVIDIA: Flatpak auto-pulls the matching GL driver; Ollama uses CUDA
         through it. Intel: Vulkan. No GPU: runs on CPU (fine, just slower —
         consider phi3.5:3.8b on a 16 GB-RAM machine).
-
     Hardware note:
       - 8 GB VRAM is the comfort floor for ~7B-parameter models.
-
     To uninstall: ujust lucciola-ai-remove
-
     EOF
     read -rp "Continue? [y/N] " ans
     case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
-    sudo flatpak install --system -y --or-update flathub com.jeffser.Alpaca
-
-    # GPU acceleration for the sandbox. The host ROCm (shipped by the Bluefin
-    # base) does not reach into the Flatpak; AMD accel needs the ROCm plugin
-    # extension inside the sandbox, or Ollama's Vulkan backend (no plugin).
     gpu="$(lspci 2>/dev/null | grep -iE 'vga|3d controller|display controller' || true)"
+    OPTION=()
     if echo "$gpu" | grep -qiE 'amd|ati|radeon'; then
       echo
       echo "AMD GPU detected. The ROCm plugin (com.jeffser.Alpaca.Plugins.AMD)"
       echo "enables GPU acceleration inside Alpaca's sandbox (a sizeable download)."
-      read -rp "Install the AMD ROCm plugin now? [Y/n] " amd
+      read -rp "Install the AMD ROCm plugin too? [Y/n] " amd
       case "$amd" in
         [nN]|[nN][oO]) echo "Skipped — Alpaca will use Vulkan if available, else CPU." ;;
-        *) sudo flatpak install --system -y --or-update flathub com.jeffser.Alpaca.Plugins.AMD \
-             && echo "AMD ROCm plugin installed." \
-             || echo "Plugin install failed — Alpaca still works on Vulkan/CPU." ;;
+        *) OPTION=(amd) ;;
       esac
-      cat <<'EOF'
-    Integrated AMD GPU (APU, e.g. Radeon 7xxM / gfx110x)? ROCm may not detect
-    it until you set, in Alpaca → Preferences → environment:
-        HSA_OVERRIDE_GFX_VERSION=11.0.0
-    Or skip ROCm entirely and use Ollama's Vulkan backend, which usually works
-    on APUs out of the box. Check Alpaca's hardware list to see which the GPU
-    shows up under.
-    EOF
     elif echo "$gpu" | grep -qiE 'nvidia'; then
       echo
       echo "NVIDIA GPU detected. Flatpak auto-pulls the matching GL driver and"
@@ -539,12 +408,21 @@ lucciola-ai:
       echo "No discrete AMD/NVIDIA GPU detected — Alpaca runs on CPU (or Intel"
       echo "Vulkan if present). phi3.5:3.8b is the comfortable CPU-only pick."
     fi
-
+    sudo /usr/libexec/lucciola/admin ai-on "${OPTION[@]}"
+    if (( ${#OPTION[@]} )); then
+      cat <<'EOF'
+    Integrated AMD GPU (APU, e.g. Radeon 7xxM / gfx110x)? ROCm may not detect
+    it until you set, in Alpaca → Preferences → environment:
+        HSA_OVERRIDE_GFX_VERSION=11.0.0
+    Or skip ROCm entirely and use Ollama's Vulkan backend, which usually works
+    on APUs out of the box. Check Alpaca's hardware list to see which the GPU
+    shows up under.
+    EOF
+    fi
     cat <<'EOF'
-
     == Done ==
-    Launch Alpaca from Activities → "Alpaca". The first run will ask
-    you to pick a model to download.
+    Launch Alpaca from the launcher. The first run will ask you to pick a
+    model to download.
     EOF
 
 # Roll back the AI workflow (undo lucciola-ai).
@@ -562,8 +440,7 @@ lucciola-ai-remove:
     echo
     read -rp "Continue? [y/N] " ans
     case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
-    sudo flatpak uninstall --system -y com.jeffser.Alpaca.Plugins.AMD || true
-    sudo flatpak uninstall --system -y com.jeffser.Alpaca || true
+    sudo /usr/libexec/lucciola/admin ai-off
     echo "Done."
 
 # Deprecated alias for lucciola-tpm-unlock (use that).
@@ -605,7 +482,6 @@ lucciola-slim:
     fi
     cat <<'EOF'
     == Lucciola slim profile ==
-
     This will:
       - mask flatpak-preinstall.service (stops the deferred heavy
         creator apps: GIMP, Inkscape, darktable, OBS Studio — and
@@ -615,25 +491,13 @@ lucciola-slim:
         Blanket where an older install still has them)
       - keep: Zen, Thunderbird, LibreOffice and the whole GNOME core
         suite
-
     Everything is reversible: ujust lucciola-slim-restore brings the
     stock set back, and single apps can be reinstalled from Bazaar.
+    The Apps page of Lucciola System does the same.
     EOF
     read -rp "Continue? [y/N] " ans
     case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
-    sudo systemctl stop flatpak-preinstall.service 2>/dev/null || true
-    sudo systemctl mask flatpak-preinstall.service
-    for app in \
-      org.gimp.GIMP org.inkscape.Inkscape org.darktable.Darktable \
-      com.obsproject.Studio \
-      org.gnome.gitlab.somas.Apostrophe org.audacityteam.Audacity \
-      com.github.wwmm.easyeffects com.ranfdev.DistroShelf \
-      com.mattjakeman.ExtensionManager de.haeckerfelix.Fragments \
-      com.github.PintaProject.Pinta com.github.neithern.g4music \
-      com.rafaelmardojai.Blanket; do
-      sudo flatpak uninstall --system -y "$app" 2>/dev/null || true
-    done
-    sudo flatpak uninstall --system --unused -y || true
+    sudo /usr/libexec/lucciola/admin apps-slim
     echo "Done: slim profile active. Restore anytime: ujust lucciola-slim-restore"
 
 # Near-empty profile on top of lucciola-slim: also removes office, mail
@@ -643,26 +507,28 @@ lucciola-slim:
 # Add anything back from Bazaar. Reversible with lucciola-slim-restore.
 [doc('Near-empty app set on top of lucciola-slim (undo: lucciola-slim-restore).')]
 [group('Lucciola')]
-lucciola-naked: lucciola-slim
+lucciola-naked:
     #!/usr/bin/bash
     set -euo pipefail
+    if ! flatpak info --system app.zen_browser.zen >/dev/null 2>&1; then
+      echo "Zen is not installed yet — first-boot app install still running (or broken)."
+      echo "Wait for the 'Lucciola is ready' notification, then re-run."
+      exit 1
+    fi
     cat <<'EOF'
-    == Lucciola naked profile (on top of slim) ==
-
-    This ALSO removes: LibreOffice, Thunderbird, Contacts, Sound
-    Recorder, Impression, Deja Dup (and Bitwarden, Maps, Weather where
-    an older install still has them).
+    == Lucciola naked profile (slim, and then some) ==
+    This applies the slim profile (the heavy creator apps and the tinkerer
+    apps go, flatpak-preinstall.service is masked) and ALSO removes:
+    LibreOffice, Thunderbird, Contacts, Sound Recorder, Impression, Deja Dup
+    (and Bitwarden, Maps, Weather where an older install still has them).
+    What survives: Zen, Papers, Loupe, Calculator, Text Editor, Calendar,
+    Clocks and the system utilities (Bazaar, Flatseal, Mission Center,
+    Firmware, Disk Usage Analyzer). Add anything back from Bazaar;
+    ujust lucciola-slim-restore brings the stock set back.
     EOF
     read -rp "Continue? [y/N] " ans
-    case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted (slim profile already applied)."; exit 0 ;; esac
-    for app in \
-      org.libreoffice.LibreOffice org.mozilla.thunderbird_esr \
-      com.bitwarden.desktop org.gnome.Maps org.gnome.Weather \
-      org.gnome.Contacts org.gnome.SoundRecorder \
-      io.gitlab.adhami3310.Impression org.gnome.DejaDup; do
-      sudo flatpak uninstall --system -y "$app" 2>/dev/null || true
-    done
-    sudo flatpak uninstall --system --unused -y || true
+    case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
+    sudo /usr/libexec/lucciola/admin apps-naked
     echo "Done: naked profile active. Restore anytime: ujust lucciola-slim-restore"
 
 # Undo lucciola-slim / lucciola-naked. Unmasking flatpak-preinstall is not
@@ -675,9 +541,7 @@ lucciola-slim-restore:
     #!/usr/bin/bash
     set -euo pipefail
     echo "Restoring the stock Lucciola app set (runs in background, 5-15 min on a normal line)…"
-    sudo systemctl unmask flatpak-preinstall.service
-    sudo /usr/libexec/margine/flatpak-preinstall-keep --restore
-    sudo systemctl start flatpak-preinstall.service --no-block
+    sudo /usr/libexec/lucciola/admin apps-restore
     echo "Started. Apps reappear as they land; check progress with:"
     echo "  systemctl status flatpak-preinstall.service"
 
@@ -723,10 +587,7 @@ lucciola-printers-repair:
     echo "on its own and creates a queue the moment you print. Queues you added"
     echo "yourself are left alone: only the implicitclass:// ones are touched."
     echo
-
-    mapfile -t STALE < <(lpstat -v 2>/dev/null \
-      | awk '/implicitclass:/ {sub(/:$/, "", $3); print $3}')
-
+    mapfile -t STALE < <(/usr/libexec/lucciola/printers-repair --list)
     if (( ${#STALE[@]} == 0 )); then
       echo "Nothing to repair: no cups-browsed queues on this machine."
       echo
@@ -734,33 +595,12 @@ lucciola-printers-repair:
       lpstat -e 2>/dev/null | sed 's/^/  /' || echo "  (none: is the printer on and on this network?)"
       exit 0
     fi
-
     echo "Queues created by cups-browsed:"
     printf '  %s\n' "${STALE[@]}"
     echo
     read -rp "Remove them? [y/N] " ans
     case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
-
-    for q in "${STALE[@]}"; do
-      if sudo lpadmin -x "$q"; then
-        echo "  removed $q"
-      else
-        echo "  could not remove $q"
-      fi
-    done
-
-    if systemctl is-enabled cups-browsed >/dev/null 2>&1; then
-      echo
-      echo "cups-browsed is still enabled on this machine, so it would recreate"
-      echo "them. Disabling it."
-      sudo systemctl disable --now cups-browsed
-    fi
-
-    echo
-    echo "Printers CUPS can see now:"
-    lpstat -e 2>/dev/null | sed 's/^/  /'
-    echo
-    echo "Reopen any app that was already running: print dialogs cache this list."
+    sudo /usr/libexec/lucciola/admin printers-repair
 
 # Turn the automatic dock display rescue on or off (default: on).
 [group('Lucciola')]
@@ -770,8 +610,7 @@ lucciola-dock-rescue $STATE="status":
     SWITCH=/etc/margine/dock-dp-rescue
     case "$STATE" in
       on|off)
-        sudo mkdir -p /etc/margine
-        printf '%s\n' "$STATE" | sudo tee "$SWITCH" >/dev/null
+        sudo /usr/libexec/lucciola/admin dock-rescue "$STATE"
         echo "Automatic dock display rescue: $STATE"
         [ "$STATE" = off ] && echo "The manual command still works: ujust lucciola-dock-wake"
         ;;
@@ -818,7 +657,7 @@ lucciola-dock-wake:
     echo
     read -rp "Try it? [y/N] " ans
     case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
-    sudo /usr/libexec/margine/dock-dp-rescue --force
+    sudo /usr/libexec/lucciola/admin dock-wake
 
 # Run all the validators (the "is my system as shipped?" check).
 [group('Lucciola')]
@@ -1032,37 +871,18 @@ lucciola-keyring ACTION="status":
 [group('Lucciola')]
 lucciola-report:
     #!/usr/bin/bash
+    # One definition of the report, shared with Lucciola System's "Report a
+    # Problem": /usr/libexec/margine/system-report writes it and prints its path.
     set -uo pipefail
-    OUT="$HOME/lucciola-report.txt"
-    {
-      echo "=== Lucciola report ($(date -u +%FT%TZ)) ==="
-      echo
-      echo "--- image ---"
-      grep -E '^(PRETTY_NAME|VARIANT_ID|VERSION)=' /etc/os-release
-      rpm-ostree status -b 2>/dev/null | head -8
-      echo
-      echo "--- hardware ---"
-      echo "cpu: $(lscpu 2>/dev/null | grep 'Model name' | sed 's/.*: *//')"
-      echo "gpu: $(lspci 2>/dev/null | grep -iE 'vga|3d' | sed 's/.*: //' | head -2)"
-      echo "ram: $(free -h | awk '/Mem:/{print $2}')"
-      echo
-      echo "--- secure boot ---"
-      mokutil --sb-state 2>/dev/null || echo "mokutil unavailable"
-      echo
-      echo "--- flatpak ---"
-      echo "system apps: $(flatpak --system list --app 2>/dev/null | wc -l)"
-      systemctl is-active flatpak-preinstall.service 2>/dev/null | sed 's/^/preinstall: /'
-      echo
-      echo "--- recent errors (this boot) ---"
-      journalctl -b -p err --no-pager 2>/dev/null | tail -30
-    } > "$OUT" 2>&1
+    OUT="$(/usr/libexec/margine/system-report)" || { echo "Could not write the report."; exit 1; }
     echo "Report written to: $OUT"
     echo
     sed -n '1,12p' "$OUT"
     echo "  [...]"
     echo
     echo "Opening the bug-report page. Attach or paste $OUT into the Logs field."
-    xdg-open "https://github.com/daniel-g-carrasco/lucciola/issues/new/choose" >/dev/null 2>&1 ||       echo "Open manually: https://github.com/daniel-g-carrasco/lucciola/issues/new/choose"
+    xdg-open "https://github.com/daniel-g-carrasco/lucciola/issues/new/choose" >/dev/null 2>&1 || \
+      echo "Open manually: https://github.com/daniel-g-carrasco/lucciola/issues/new/choose"
 
 # Create + boot a throwaway test VM from an ISO (libvirt).
 [group('Lucciola')]
@@ -1288,17 +1108,15 @@ lucciola-update-unblock APP="":
       fi
       exit 0
     fi
-    sudo flatpak mask --remove "$APP" 2>/dev/null || true
+    # The same verb Lucciola System uses: unmask, update in the foreground,
+    # take the app back into unattended updates only when the update worked.
     echo "Updating $APP in the foreground (Ctrl+C aborts)..."
-    if flatpak update -y "$APP"; then
-      sudo sed -i "\\|^$APP |d" "$BLOCKED" 2>/dev/null || true
-      sudo rm -f "/var/lib/margine/update-watchdog/strikes-$APP" 2>/dev/null || true
+    if sudo /usr/libexec/lucciola/admin flatpak-unblock "$APP"; then
       rm -f "${XDG_STATE_HOME:-$HOME/.local/state}/margine/blocked-notified" 2>/dev/null || true
       echo "$APP updated and re-included in unattended updates."
       echo "(If its vendor download wedges them again, the watchdog will re-exclude it.)"
     else
       echo "Update failed or aborted; keeping $APP excluded from unattended updates."
-      sudo flatpak mask "$APP" >/dev/null 2>&1 || true
       exit 1
     fi
 
@@ -1431,31 +1249,60 @@ lucciola-darktable-bench MODE="quick" *RAWS:
 lucciola-docker ACTION="install":
     #!/usr/bin/bash
     set -euo pipefail
-    PKGS=(docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin)
     case "{{ ACTION }}" in
       status)
-        if rpm -q docker-ce >/dev/null 2>&1; then
-          echo "Docker CE: installed ($(rpm -q --qf '%{VERSION}' docker-ce)); docker.socket: $(systemctl is-enabled docker.socket 2>/dev/null || echo not-enabled)"
-        else
-          echo "Docker CE: not installed (podman answers to docker). Install: ujust lucciola-docker"
-        fi ;;
+        /usr/libexec/lucciola/feature docker status | sed -n 's/^detail=//p' ;;
       remove)
-        sudo rpm-ostree override reset podman-docker $(printf -- '--uninstall %s ' "${PKGS[@]}")
-        sudo rm -f /etc/yum.repos.d/docker-ce.repo /etc/sysctl.d/margine-docker-ce.conf \
-          /etc/systemd/system/sockets.target.wants/docker.socket
+        sudo /usr/libexec/lucciola/admin docker-off
         echo "Docker CE removed, podman-docker is back. Reboot to apply." ;;
       install)
-        sudo /usr/libexec/margine/layer-repo docker-ce \
-          https://download.docker.com/linux/fedora/docker-ce.repo \
-          https://download.docker.com/linux/fedora/gpg \
-          060A61C51B558A7F742B77AAC52FEB6B621E9F35
-        sudo rpm-ostree override remove podman-docker $(printf -- '--install %s ' "${PKGS[@]}")
-        printf 'net.ipv4.ip_forward = 1\n' | sudo tee /etc/sysctl.d/margine-docker-ce.conf >/dev/null
-        # The unit only exists in the new deployment: enable it by hand.
-        sudo mkdir -p /etc/systemd/system/sockets.target.wants
-        sudo ln -sf /usr/lib/systemd/system/docker.socket /etc/systemd/system/sockets.target.wants/docker.socket
+        sudo /usr/libexec/lucciola/admin docker-on
         echo "Docker CE layered. Reboot: lucciola-dev-groups then adds wheel users to the docker group." ;;
       *) echo "usage: ujust lucciola-docker [install|remove|status]"; exit 2 ;;
+    esac
+
+# The phone link: KDE Connect's service, tray indicator and Files extension
+# as a layer (kdeconnectd brings Qt6 and KF6, about 260 MB: not in the
+# image), the firewall service, an autostart entry for the indicator. The
+# Phone row of Lucciola System does the same through the same helper.
+# Phone link (KDE Connect): install (default) / remove / status.
+[group('Lucciola')]
+lucciola-phone ACTION="install":
+    #!/usr/bin/bash
+    set -euo pipefail
+    case "{{ ACTION }}" in
+      status)
+        /usr/libexec/lucciola/feature phone status | sed -n 's/^detail=//p' ;;
+      remove)
+        sudo /usr/libexec/lucciola/admin phone-off
+        echo "Phone link removed. Reboot to apply; the pairings in ~/.config/kdeconnect stay." ;;
+      install)
+        cat <<'EOF'
+    == Lucciola phone link (KDE Connect) ==
+    Your Android phone and this PC together, with the KDE Connect app on the
+    phone (Google Play or F-Droid), on the same Wi-Fi:
+      - the phone's notifications here, and this PC's on the phone
+      - one clipboard for both
+      - files, photos and links in a tap, either way; the phone's storage in Files
+      - music and video controlled from the phone, even from its lock screen
+      - the phone's battery in the tray, and a ring to find it
+      - commands on this PC from the phone (lock, suspend, ...)
+    This layers kdeconnectd, kde-connect (indicator and command line),
+    kde-connect-nautilus and fuse-sshfs with rpm-ostree (about 260 MB,
+    active after a restart), adds an autostart entry for the tray indicator
+    and the kdeconnect service to the firewall (ports 1714-1764).
+    Mouse and keyboard from the phone do not work under niri yet: the
+    RemoteDesktop portal it needs is not there.
+    Layered packages are reapplied on every system update. To undo:
+    ujust lucciola-phone remove (the pairings stay).
+    EOF
+        read -rp "Continue? [y/N] " ans
+        case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
+        sudo /usr/libexec/lucciola/admin phone-on
+        echo
+        echo "Phone link layered. Reboot; then open KDE Connect on the phone and pair:"
+        echo "the request arrives as a notification here, and both sides show the same key." ;;
+      *) echo "usage: ujust lucciola-phone [install|remove|status]"; exit 2 ;;
     esac
 
 # Tailscale on demand. Not in the image since 2026-10-10: it ran a daemon
@@ -1468,24 +1315,12 @@ lucciola-tailscale ACTION="install":
     set -euo pipefail
     case "{{ ACTION }}" in
       status)
-        if rpm -q tailscale >/dev/null 2>&1; then
-          echo "tailscale: installed; tailscaled: $(systemctl is-active tailscaled 2>/dev/null || true)"
-          tailscale status 2>/dev/null | head -3 || true
-        else
-          echo "tailscale: not installed. Install: ujust lucciola-tailscale"
-        fi ;;
+        /usr/libexec/lucciola/feature tailscale status | sed -n 's/^detail=//p'; tailscale status 2>/dev/null | head -3 || true ;;
       remove)
-        sudo rpm-ostree uninstall tailscale
-        sudo rm -f /etc/yum.repos.d/tailscale.repo /etc/systemd/system/multi-user.target.wants/tailscaled.service
+        sudo /usr/libexec/lucciola/admin tailscale-off
         echo "Tailscale removed. Reboot to apply." ;;
       install)
-        sudo /usr/libexec/margine/layer-repo tailscale \
-          https://pkgs.tailscale.com/stable/fedora/tailscale.repo \
-          https://pkgs.tailscale.com/stable/fedora/repo.gpg \
-          2596A99EAAB33821893C0A79458CA832957F5868
-        sudo rpm-ostree install --idempotent tailscale
-        sudo mkdir -p /etc/systemd/system/multi-user.target.wants
-        sudo ln -sf /usr/lib/systemd/system/tailscaled.service /etc/systemd/system/multi-user.target.wants/tailscaled.service
+        sudo /usr/libexec/lucciola/admin tailscale-on
         echo "Tailscale layered. Reboot, then: sudo tailscale up" ;;
       *) echo "usage: ujust lucciola-tailscale [install|remove|status]"; exit 2 ;;
     esac
@@ -1503,14 +1338,12 @@ lucciola-vscode ACTION="install":
     set -euo pipefail
     case "{{ ACTION }}" in
       status)
-        rpm -q code >/dev/null 2>&1 && echo "VS Code RPM: installed ($(rpm -q --qf '%{VERSION}' code))" || echo "VS Code RPM: not installed (the Flatpak com.visualstudio.code is in Bazaar)" ;;
+        /usr/libexec/lucciola/feature vscode status | sed -n 's/^detail=//p' ;;
       remove)
-        sudo rpm-ostree uninstall code
-        sudo /usr/libexec/margine/devmode repo-remove
+        sudo /usr/libexec/lucciola/admin vscode-off
         echo "VS Code RPM removed (a Flatpak VS Code, if installed, stays). Reboot to apply." ;;
       install)
-        sudo /usr/libexec/margine/devmode repo
-        sudo rpm-ostree install --idempotent code
+        sudo /usr/libexec/lucciola/admin vscode-on
         echo "VS Code RPM layered. Reboot to use it." ;;
       *) echo "usage: ujust lucciola-vscode [install|remove|status]"; exit 2 ;;
     esac
@@ -1524,11 +1357,15 @@ lucciola-vscode ACTION="install":
 lucciola-devtools ACTION="install":
     #!/usr/bin/bash
     set -euo pipefail
-    PKGS=(bcc bpftrace bpftop sysprof igt-gpu-tools gcc gcc-c++ make git-lfs git-credential-libsecret)
     case "{{ ACTION }}" in
-      status) for p in "${PKGS[@]}"; do printf '  %-14s %s\n' "$p" "$(rpm -q "$p" >/dev/null 2>&1 && echo installed || echo -)"; done ;;
-      remove) sudo rpm-ostree uninstall "${PKGS[@]}"; echo "Removed. Reboot to apply." ;;
-      install) sudo rpm-ostree install --idempotent "${PKGS[@]}"; echo "Layered. Reboot to use them." ;;
+      status)
+        /usr/libexec/lucciola/feature devtools status | sed -n 's/^detail=//p' ;;
+      remove)
+        sudo /usr/libexec/lucciola/admin devtools-off
+        echo "Removed. Reboot to apply." ;;
+      install)
+        sudo /usr/libexec/lucciola/admin devtools-on
+        echo "Layered. Reboot to use them." ;;
       *) echo "usage: ujust lucciola-devtools [install|remove|status]"; exit 2 ;;
     esac
 
@@ -1545,57 +1382,26 @@ lucciola-devtools ACTION="install":
 lucciola-vm ACTION="install":
     #!/usr/bin/bash
     set -euo pipefail
-    PKGS=(libvirt libvirt-nss qemu-kvm virt-manager virt-viewer virt-install edk2-ovmf swtpm dnsmasq
-          qemu-img qemu-device-display-virtio-gpu qemu-device-display-virtio-vga
-          qemu-device-usb-redirect qemu-char-spice podman-machine)
-    # Fedora's presets enable these when libvirt is installed (90-default.preset):
-    # the modular daemons, socket activated.
-    SOCKETS=()
-    for d in virtqemud virtnetworkd virtstoraged virtnodedevd virtsecretd virtinterfaced virtnwfilterd virtproxyd; do
-      SOCKETS+=("$d.socket" "$d-ro.socket" "$d-admin.socket")
-    done
-    SOCKETS+=(virtlogd.socket virtlogd-admin.socket virtlockd.socket virtlockd-admin.socket)
-    installed() { rpm -q libvirt-daemon qemu-kvm virt-manager >/dev/null 2>&1; }
     case "{{ ACTION }}" in
       status)
-        if installed; then
-          echo "VM tools: installed (libvirt $(rpm -q --qf '%{VERSION}' libvirt-daemon), QEMU $(rpm -q --qf '%{VERSION}' qemu-kvm))"
-          echo "virtqemud.socket: $(systemctl is-active virtqemud.socket 2>/dev/null || true)"
-          if [[ " $(id -nG) " == *" libvirt "* ]]; then echo "group libvirt: yes"; else echo "group libvirt: not yet (reboot, or run: ujust lucciola-vm)"; fi
-        elif rpm-ostree status --json | python3 -c 'import json,sys; sys.exit(0 if "libvirt" in json.load(sys.stdin)["deployments"][0].get("requested-packages", []) else 1)'; then
-          echo "VM tools: layered, active after a reboot."
-        else
-          echo "VM tools: not installed. Install: ujust lucciola-vm"
-        fi ;;
+        /usr/libexec/lucciola/feature vm status | sed -n 's/^detail=//p' ;;
       remove)
-        mapfile -t LAYERED < <(rpm-ostree status --json | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)["deployments"][0].get("requested-packages", [])))')
-        declare -A IS_LAYERED=()
-        for p in "${LAYERED[@]}"; do IS_LAYERED["$p"]=1; done
-        DROP=()
-        for p in "${PKGS[@]}"; do [[ -n "${IS_LAYERED[$p]:-}" ]] && DROP+=("$p"); done
-        if (( ${#DROP[@]} == 0 )); then echo "No VM package is layered: nothing to remove."; exit 0; fi
-        sudo rpm-ostree uninstall "${DROP[@]}"
-        for s in "${SOCKETS[@]}"; do sudo rm -f "/etc/systemd/system/sockets.target.wants/$s"; done
+        sudo /usr/libexec/lucciola/admin vm-off
         echo "VM tools removed. Reboot to apply. Your VMs' disks stay in /var/lib/libvirt/images"
         echo "and ~/.local/share/libvirt/images." ;;
       install)
-        if installed; then
-          # Booted into the layer: start what the next boot would start.
-          sudo systemctl enable --now "${SOCKETS[@]}" 2>/dev/null || sudo systemctl start virtqemud.socket virtnetworkd.socket virtstoraged.socket || true
-          sudo /usr/bin/lucciola-dev-groups
+        # Booted into the layer already: the verb starts the sockets and
+        # adds wheel users to the libvirt group instead of layering again.
+        if rpm -q libvirt-daemon qemu-kvm virt-manager >/dev/null 2>&1; then
+          sudo /usr/libexec/lucciola/admin vm-on
           echo "VM tools ready. virt-manager works now; log out and back in once so the"
           echo "libvirt group applies (qemu:///system without a password)."
-          exit 0
-        fi
-        echo "Layering the VM tools (about 290 MiB): ${PKGS[*]}"
-        sudo rpm-ostree install --idempotent "${PKGS[@]}"
-        # The units only exist in the new deployment: enable them by hand.
-        sudo mkdir -p /etc/systemd/system/sockets.target.wants
-        for s in "${SOCKETS[@]}"; do
-          sudo ln -sf "/usr/lib/systemd/system/$s" "/etc/systemd/system/sockets.target.wants/$s"
-        done
-        echo "VM tools layered. Reboot: lucciola-dev-groups then adds wheel users to the"
-        echo "libvirt group. Rootless VMs (qemu:///session, ujust lucciola-test-vm) need no group." ;;
+        else
+          echo "Layering the VM tools (about 290 MiB)..."
+          sudo /usr/libexec/lucciola/admin vm-on
+          echo "VM tools layered. Reboot: lucciola-dev-groups then adds wheel users to the"
+          echo "libvirt group. Rootless VMs (qemu:///session, ujust lucciola-test-vm) need no group."
+        fi ;;
       *) echo "usage: ujust lucciola-vm [install|remove|status]"; exit 2 ;;
     esac
 
@@ -1627,10 +1433,8 @@ lucciola-devmode ACTION="install":
       status)
         "$DEV" status ;;
       install)
-        mapfile -t PKGS < <("$DEV" packages)
         cat <<'EOF'
     == Lucciola developer layer ==
-
     System packages (layered with rpm-ostree, active after a restart):
       - code              VS Code, from Microsoft's repository. Its signing
                           key is checked against a known fingerprint, and
@@ -1642,43 +1446,29 @@ lucciola-devmode ACTION="install":
       - flatpak-builder   builds Flatpak apps
       - git-credential-libsecret
                           git keeps HTTPS passwords in the login keyring
-
     In /home/linuxbrew, no restart needed:
       - Homebrew, from Homebrew's own installer, owned by you. Lucciola
         upgrades its packages once a week, and Lucciola System lists the
         ones waiting.
-
     Already in Lucciola: Podman (podman-compose, and `docker` through
     podman-docker), Toolbox, Distrobox, git, just, adb and fastboot.
     Separate recipes: lucciola-docker (Docker CE), lucciola-vm (virtual
     machines), lucciola-devtools (eBPF tracing, sysprof).
-
     Layered packages are reapplied on every system update, which takes a
     little longer. ujust lucciola-update handles it; `bootc upgrade`
     refuses a system with layered packages.
-
     Safe to run again. To undo: ujust lucciola-devmode remove
-
+    The Features page of Lucciola System does the same.
     EOF
         read -rp "Continue? [y/N] " ans
         case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
-
         echo
-        echo "== VS Code repository =="
-        sudo "$DEV" repo
-
-        echo
-        echo "== Layering the system packages (rpm-ostree) =="
-        # --idempotent: a re-run must not fail on what is already layered.
-        # --allow-inactive: a package the image itself ships one day stays
-        # requested, and comes back as a layer if the image drops it.
-        sudo rpm-ostree install --idempotent --allow-inactive "${PKGS[@]}"
-
+        echo "== VS Code repository and system packages (rpm-ostree) =="
+        sudo /usr/libexec/lucciola/admin devmode-on
         echo
         echo "== Homebrew =="
         brew_rc=0
         "$DEV" brew-install || brew_rc=$?
-
         echo
         echo "== Done =="
         restart_note
@@ -1692,18 +1482,16 @@ lucciola-devmode ACTION="install":
           echo "Could not read what the system has layered (rpm-ostree status)." >&2
           exit 1
         fi
-        DROP=()
-        [ -n "$layered" ] && mapfile -t DROP <<<"$layered"
         HAS_BREW=0
         [ -x /home/linuxbrew/.linuxbrew/bin/brew ] && HAS_BREW=1
-        if (( ${#DROP[@]} == 0 && HAS_BREW == 0 )); then
+        if [ -z "$layered" ] && (( HAS_BREW == 0 )); then
           echo "The developer layer is not installed: nothing to remove."
-          [ -f /etc/yum.repos.d/vscode.repo ] && sudo "$DEV" repo-remove
+          [ -f /etc/yum.repos.d/vscode.repo ] && sudo /usr/libexec/lucciola/admin devmode-off
           exit 0
         fi
         echo "This will:"
-        if (( ${#DROP[@]} )); then
-          echo "  - rpm-ostree uninstall ${DROP[*]}"
+        if [ -n "$layered" ]; then
+          echo "  - rpm-ostree uninstall $(echo "$layered" | tr '\n' ' ')"
           echo "  - remove the VS Code repository"
         fi
         (( HAS_BREW )) && echo "  - ask, separately, whether to delete Homebrew"
@@ -1713,18 +1501,13 @@ lucciola-devmode ACTION="install":
         echo
         read -rp "Continue? [y/N] " ans
         case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
-
-        if (( ${#DROP[@]} )); then
-          sudo rpm-ostree uninstall "${DROP[@]}"
-        fi
-        sudo "$DEV" repo-remove
-
+        sudo /usr/libexec/lucciola/admin devmode-off
         if (( HAS_BREW )); then
           n="$("$DEV" brew-count)"
           echo
           read -rp "Delete Homebrew and the $n packages installed with it? [y/N] " ans
           case "$ans" in
-            [yY]|[yY][eE][sS]) "$DEV" brew-remove ;;
+            [yY]|[yY][eE][sS]) sudo /usr/libexec/lucciola/admin brew-remove ;;
             *) echo "Homebrew stays in /home/linuxbrew/.linuxbrew." ;;
           esac
         fi
@@ -1899,71 +1682,40 @@ koofr ACTION="install":
 lucciola-sunshine:
     #!/usr/bin/bash
     set -euo pipefail
-
     cat <<'EOF'
     == Lucciola Sunshine setup (EXPERIMENTAL) ==
-
     Sunshine is the host side of Moonlight game streaming. This sets it up
     the atomic-friendly way (no rpm-ostree layering):
-
       1. installs the Flatpak  dev.lizardbyte.app.Sunshine  (Flathub)
       2. enables uinput + a udev rule, so Sunshine can create the virtual
          gamepad/keyboard/mouse for the remote client
       3. grants the Flatpak device access + runs its bundled setup helper
       4. opens the Sunshine firewall ports (47984-48010, TCP + UDP)
-
     Heads-up:
       - This is a first cut, not yet validated end-to-end. If
         something is off, please report it.
       - It opens network ports and grants input-device access, which is
         why it is an explicit opt-in command and not a default.
-      - On Wayland (GNOME) the first stream prompts you to pick what to
-        share (the screen-capture portal). That is normal.
-
+      - On Wayland the first stream prompts you to pick what to share
+        (the screen-capture portal). That is normal.
     EOF
     read -rp "Continue? [y/N] " ans
     case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
-
-    echo; echo "== Ensuring full (unfiltered) Flathub at system level =="
-    sudo flatpak remote-add --if-not-exists --system flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-    sudo flatpak remote-modify --system flathub --no-filter || true
-    echo; echo "== Installing the Sunshine Flatpak =="
-    sudo flatpak install --system -y --or-update flathub dev.lizardbyte.app.Sunshine
-
-    echo; echo "== Enabling uinput (virtual input) =="
-    echo uinput | sudo tee /etc/modules-load.d/uinput.conf >/dev/null
-    sudo modprobe uinput || true
-    printf '%s\n' 'KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", TAG+="uaccess"' \
-      | sudo tee /etc/udev/rules.d/60-sunshine.rules >/dev/null
-    sudo udevadm control --reload-rules
-    sudo udevadm trigger --subsystem-match=misc || true
-
+    echo; echo "== Flatpak, virtual input and firewall (system part) =="
+    sudo /usr/libexec/lucciola/admin sunshine-on
     echo; echo "== Granting Flatpak device access + running its setup helper =="
     flatpak override --user --device=all dev.lizardbyte.app.Sunshine || true
     # The Flatpak ships a helper that wires udev + a user service; best-effort.
     flatpak run --command=additional-install.sh dev.lizardbyte.app.Sunshine || true
-
-    echo; echo "== Opening Sunshine firewall ports =="
-    if command -v firewall-cmd >/dev/null 2>&1; then
-      for p in 47984/tcp 47989/tcp 47990/tcp 48010/tcp 47998/udp 47999/udp 48000/udp 48002/udp 48010/udp; do
-        sudo firewall-cmd --permanent --add-port="$p" >/dev/null || true
-      done
-      sudo firewall-cmd --reload >/dev/null || true
-      echo "  firewalld: Sunshine ports opened."
-    else
-      echo "  firewall-cmd not found; open 47984-48010 (TCP + UDP) manually if needed."
-    fi
-
     echo
     cat <<'EOF'
     == Done ==
     Next steps:
       1. Log out and back in once (so the uinput udev access applies).
-      2. Launch Sunshine from the Activities grid.
+      2. Launch Sunshine from the launcher.
       3. Open the web UI at  https://localhost:47990  to set a username and
          password and pair your Moonlight client.
       4. To autostart on login, enable it in the Sunshine web UI.
-
     Roll back with:  ujust lucciola-sunshine-remove
     EOF
 
@@ -1974,15 +1726,7 @@ lucciola-sunshine-remove:
     set -euo pipefail
     echo "Removing Sunshine..."
     flatpak run --command=additional-uninstall.sh dev.lizardbyte.app.Sunshine || true
-    sudo flatpak uninstall --system -y dev.lizardbyte.app.Sunshine || true
-    sudo rm -f /etc/udev/rules.d/60-sunshine.rules
-    sudo udevadm control --reload-rules || true
-    if command -v firewall-cmd >/dev/null 2>&1; then
-      for p in 47984/tcp 47989/tcp 47990/tcp 48010/tcp 47998/udp 47999/udp 48000/udp 48002/udp 48010/udp; do
-        sudo firewall-cmd --permanent --remove-port="$p" >/dev/null 2>&1 || true
-      done
-      sudo firewall-cmd --reload >/dev/null 2>&1 || true
-    fi
+    sudo /usr/libexec/lucciola/admin sunshine-off
     echo "Done. (uinput stays enabled, which is harmless.)"
 
 # Netflix 1080p on Zen Browser: install the AMO-signed "Netflix 1080p UA"

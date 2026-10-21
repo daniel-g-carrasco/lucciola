@@ -7,6 +7,201 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (2026-10-21, Phone Camera in the Phone page, rebuilt)
+- **Phone Camera is a section of the Phone page**, not a window of its own
+  any more, and it is rebuilt: Lucciola drives scrcpy's own server on the
+  phone in raw-stream mode and decodes the bare H.264 with GStreamer
+  straight into PipeWire. "Lucciola Phone Cam" is a PipeWire video source
+  that the camera portal, Flatpak browsers, GNOME apps and calls see at
+  once, with no kernel module in the way; when the v4l2loopback device is
+  there the video is copied into it too, for apps that only speak V4L2.
+  The node outlives the phone: a change of lens or a dropped link keeps
+  Lucciola Phone Cam listed while the phone is picked up again, for a
+  minute and a half, before the stream gives up; the apps see a few
+  seconds of black and then the picture again, without picking the camera
+  anew. The sizes come from the server's own list, per lens, under a jar
+  name of Lucciola's: a server run with cleanup on, which is how the
+  scrcpy client runs it, deletes its jar at start, and it took ours with
+  it (the front camera "was not found"). Found on a real Pixel 8 while
+  rebuilding it: the node now flows with no app linked (pipewiresink with
+  async off: before, nothing moved until an app opened the camera, the
+  preview included), keeps flowing once an app links (pipewiresink no
+  longer lends its buffer pool upstream: apps got about seventeen frames
+  and then a frozen or black picture), never renegotiates its format (one
+  set of caps for the session: a mid-stream change made v4l2loopback
+  answer "device busy" and took the node down), and the preview and the
+  V4L2 copy run as pipelines of their own, so neither can hold the node
+  back. The picture stands upright: a phone's camera sensor sits sideways,
+  so the phone turns it by the sensor's own orientation (read from the
+  phone, 90 behind and 270 in front on a Pixel), and Rotate turns it a
+  quarter more for a phone on its side or upside down; a portrait picture
+  lands in the landscape frame between black bars, and the turn, like the
+  lens, changes without the node going away. A dark room no longer means a
+  black camera: in raw-stream mode the server sends nothing until the
+  camera's first frame, which a dark scene or the back camera's several
+  sensors take seconds to give, and the wait for it gave up after 2.5
+  seconds and hung up, so the server closed; now an accepted connection is
+  kept for up to 20 seconds. The watchdog counts bytes from the phone, not
+  decoded frames, over 10 seconds, so a dark scene at two frames a second
+  is not taken for a dropped link, and the software decoder, when it is
+  the one picked, runs one thread and holds no frames back. The resolution changes only
+  while the camera is stopped, since a new size is a new node and GNOME's
+  Camera closed when its node went away; the list offers 16:9 and 4:3 from
+  640 pixels wide up to 1080p, not the sensor's 12 megapixels. In the
+  phone's card: the
+  Camera row with the real state, Use as a Webcam (lens, rotation,
+  resolution, Start, preview), Stop while streaming. A Camera Over USB group covers a phone on
+  the cable with or without KDE Connect. The Phone Camera launcher stays and
+  opens the page.
+- **Over Wi-Fi**: Set Up Wireless shows a QR code the phone scans in
+  Wireless debugging (Pair device with QR code), pairs by itself when the
+  phone advertises the pairing service, and connects; typing the six-digit
+  code stays as the other way. Afterwards the page finds the phone through
+  adb's mDNS discovery and connects by itself, or sends a reminder to the
+  phone when wireless debugging is off. 720p at 4 Mbit/s over the air, 1080p
+  at 8 Mbit/s over the cable. qrencode joins the image for the QR code.
+- **The phone's microphone**: a switch in the camera dialog runs a second
+  stream (bare PCM from scrcpy's server) into a PipeWire audio source,
+  "Lucciola Phone Mic", any call can pick. Android 11 or later.
+- The guide's phone chapter says it, with the native USB webcam of recent
+  Pixels first for who has the cable.
+
+### Added (2026-10-21, Phone page)
+- **A Phone page in Lucciola System**, over KDE Connect's daemon on the
+  session bus: the name this PC shows to the phone (editable), the devices
+  on the network with their state (connected, paired but away, wanting to
+  pair with the key to compare, available), Pair, Accept and Reject,
+  battery, Ring the Phone, Send a File, the functions per device as
+  switches (phone notifications here, this PC's notifications on the
+  phone, clipboard, files and links, the phone in Files, media control,
+  battery, ring, commands, volume, ping), Add Ready-Made Commands (lock the
+  screen with Lucciola's lock, suspend, power off, mute, keep awake until
+  midnight and stop), Forget This Phone. Notifications to the phone start
+  off on Lucciola, written once through the daemon when a paired phone is
+  first seen: they carry their text, the user turns them on. The page
+  refreshes itself on the daemon's signals. Without the phone layer it
+  points to Features; KDE Connect's own window stays one row away.
+
+### Added (2026-10-21, phone link)
+- **Phone, the first row of the Features page of Lucciola System**, and
+  `ujust lucciola-phone`: KDE Connect's service (kdeconnectd), its tray
+  indicator and command line (kde-connect), the Files extension
+  (kde-connect-nautilus) and fuse-sshfs as an optional layer, about 260 MB,
+  with an autostart entry for the indicator and the kdeconnect service in
+  the firewall. With the KDE Connect app on an Android phone, same Wi-Fi:
+  notifications both ways, one clipboard, files and links in a tap, the
+  phone's storage in Files, media control, battery and ring, commands.
+  Mouse and keyboard from the phone wait for a RemoteDesktop portal under
+  niri. One list, `/usr/share/margine/phone-packages.txt`, for the helper,
+  the build's resolve check, the smoke-boot dry run and the upgrade smoke,
+  so a machine with the phone link always updates. The guide has a phone
+  chapter.
+
+### Added (2026-10-21, Lucciola System: Features and Apps)
+- **Two more pages in Lucciola System: Features and Apps.** Features
+  installs and removes the optional layers with a button each, the state
+  read from the system every time: Gaming (with the native variant as an
+  option), Sunshine, the Developer Layer (Homebrew included, installed as
+  you), VS Code, Docker CE, Tailscale, Virtual Machines, Developer Tools
+  and Alpaca (with the AMD GPU plugin when there is an AMD GPU). A banner
+  offers the restart when system packages wait for one. Apps trims the
+  default app set to Slim or Naked and brings the stock set back, shows the
+  apps excluded from automatic updates, removes unused runtimes, installs
+  Spola, and turns the per-app tweaks on and off (Netflix in 1080p in Zen,
+  darktable and Blender on an AMD GPU through ROCm). Hardware gained the
+  automatic dock display rescue switch, Wake a Dock Display, Repair Printer
+  Queues (shown with the leftover queues) and, on a home with Margine's
+  folder layout, Use the Standard Home Folders.
+- **One definition per feature**: `/usr/libexec/lucciola/feature` (status,
+  install, remove, for gaming, gaming-native, ai, devmode, vscode, devtools,
+  docker, tailscale, vm, sunshine, slim and naked) and
+  `/usr/libexec/lucciola/printers-repair`. The ujust recipes keep their
+  explanations and their one question, then call the same verbs of the
+  privileged helper the window calls (`<feature>-on`/`-off`, `apps-slim`,
+  `apps-naked`, `apps-restore`, `brew-remove`, `printers-repair`,
+  `dock-wake`, `dock-rescue`, 27 new polkit actions, one each). No recipe
+  layers packages or installs system Flatpaks on its own any more;
+  `lucciola-update-unblock` goes through `flatpak-unblock` too.
+- Tests: the dispatcher's plans for every new verb, the helper's shape (no
+  prompts, root checked, every feature known), each recipe reaching the
+  dispatcher, and the pure functions behind the pages (feature states,
+  the gaming variants, the app profiles, the dock switch, the printer
+  queues, the home layout, the tweaks).
+
+### Added (2026-10-21, Lucciola System pages)
+- **Lucciola System has pages now: Overview, Startup & Security, Login,
+  Hardware**, behind a sidebar that folds on a narrow window. Startup &
+  Security shows Secure Boot and whether Lucciola's key is registered
+  (with Register the Key at the Next Restart… and Stop Reminding Me),
+  the disk unlock by the TPM (enable, typing the current passphrase once,
+  or go back to asking it; only with Secure Boot on and the key
+  registered), the boot menu lock (set a password, or remove it) and the
+  kernel (CachyOS or Fedora's, what is followed and what is staged, with
+  the switch). Login opens the fingerprint panel of Settings, shows the
+  keyring and how it opens at login (store the password sealed to the TPM,
+  or remove it) and has the automatic login switch, with its warning.
+  Hardware takes the CPU scheduler in: what runs now and at startup, the
+  mode, a chooser that lists the schedulers only when asked (asking
+  scxctl starts the service), and the way back to the kernel's own
+  scheduler. Every page reads the real state when shown and after each
+  action; nothing is remembered. The guide's commands for TPM, GRUB,
+  kernel, keyring and autologin now have a button.
+- **One polkit action per verb for all of it**: `kernel`,
+  `tpm-unlock-status/-enable/-disable`, `grub-lock-status/-on/-off`,
+  `autologin-on/-off`, `secureboot-enroll/-never`, `scheduler`,
+  `scheduler-off` join `update`, `rollback` and `flatpak-unblock` in
+  `/usr/libexec/lucciola/admin`. The two `*-status` verbs only read and
+  need no password from an active user. Secrets never travel as
+  arguments: the window writes the disk passphrase, the boot-menu
+  password and the keyring password on the helper's standard input, and
+  they reach `systemd-cryptenroll` as a root-only key file
+  (`lucciola-tpm-unlock` learned `LUCCIOLA_UNLOCK_KEY_FILE`), `grub-lock`
+  on its stdin, `lucciola-keyring` on its stdin when not at a terminal.
+  `autologin-on` takes the user from pkexec, never from an argument.
+- **The CPU scheduler's own window and its polkit rule are gone.**
+  `49-margine-scheduler.rules` gave `auth_admin_keep` on
+  `org.freedesktop.policykit.exec` for one program, and polkit keeps such
+  a grant for the action id, not the program: after one scheduler prompt
+  the same process could run anything through pkexec for a few minutes
+  without a prompt. The scheduler has its two actions now, the launcher
+  "Lucciola CPU Scheduler" opens the Hardware page, and `ujust
+  lucciola-scheduler` goes through the same helper. The old window also
+  started `scx_loader.service` just by being opened (every poll asked
+  scxctl); the page reads `/sys/kernel/sched_ext` and the service's state
+  instead.
+
+### Changed (2026-10-21, Lucciola System)
+- **Lucciola System speaks to people who never open a terminal.** Pending
+  app updates are named by app, not by Flatpak id; the texts no longer
+  quote commands; the rows are either information or a link, and the
+  actions are button rows (Run System Check…, Roll Back…, Update Apps
+  Now, Update Command-Line Tools), as the HIG asks. While it checks, it
+  shows a spinner instead of a frozen icon; when the registry cannot be
+  reached it says so (offline, too slow, unreachable) and offers Try
+  Again; it refreshes on its own every ten minutes and when the window
+  comes back after a while. The window opens at once and About no longer
+  freezes it while `lucciola-status` runs. A long operation shows a
+  sentence and a spinner with the output under Details; the dialog can be
+  closed and a message follows, with the log one click away if it failed.
+  The menu gains Keyboard Shortcuts, Help (the guide, offline too) and
+  Report a Problem…, which writes `~/lucciola-report.txt` and offers the
+  issue page; `ujust lucciola-report` now calls the same
+  `system-report`. The System Check results can be copied. Apps the
+  update watchdog excluded are listed under Apps with Update Now, which
+  takes them back into automatic updates; the notification that used to
+  quote a command now points there and opens Lucciola System when
+  clicked, as the "update ready" ones do.
+- **Privileged actions go through `/usr/libexec/lucciola/admin`**, one
+  polkit action each (`dev.lucciola.admin.update`, `.rollback`,
+  `.flatpak-unblock`): the authentication dialog says what is about to
+  happen, an administrator can allow one action without the others, and
+  an active user keeps the authentication for a few minutes. The helper
+  validates its arguments, runs fixed argument vectors and never a
+  shell; `tests/system-logic.test.sh` checks the refusals and that every
+  verb has its policy. The toolkit-free part of the app lives in
+  `/usr/share/lucciola/system/lucciola_system.py`, tested without a
+  display.
+
 ### Changed (2026-10-21, app icons)
 - **Six app icons in one family style**: Lucciola System (the firefly),
   Welcome (the light mark), the guide (an open book), Phone Camera (an eye),

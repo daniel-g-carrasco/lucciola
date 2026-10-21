@@ -77,8 +77,8 @@ These five cut across almost every touchpoint below:
 | Notification icon and sender (lock screen included) | `build_files/system_files/usr/libexec/margine/margine-notify` | `app_icon`, `image-path`, `APP_NAME` |
 | Lucciola System app (name/icon/id) | `…/applications/dev.margine.System.desktop` + `…/icons/hicolor/scalable/apps/dev.margine.System.svg` (family style, see below) + `…/libexec/margine/system-gui` | `dev.margine.System`, `Lucciola System` |
 | Lucciola Welcome, the first-login window (name/icon/id/look) | `…/applications/dev.margine.Welcome.desktop` + `…/icons/hicolor/scalable/apps/dev.margine.Welcome.svg` (family style, see below) + `…/libexec/margine/welcome` (texts: `lucciola/system_files/usr/share/lucciola/welcome/content.json`, window title included), opened by `lucciola/system_files/usr/libexec/lucciola/session-start` | `dev.margine.Welcome`, `Lucciola Welcome`, `Welcome to Lucciola` |
-| Lucciola CPU Scheduler, system update launcher (names/icons) | `…/applications/margine-scheduler.desktop` + `…/icons/hicolor/scalable/apps/margine-scheduler.svg`, `…/libexec/margine/scheduler-picker`, `…/applications/margine-system-update.desktop` + `…/icons/hicolor/scalable/apps/margine-system-update.svg` (family style, see below) | `Lucciola CPU Scheduler`, `Lucciola system update` |
-| Phone Camera app (name/icon/id), virtual webcam label | `…/applications/dev.margine.PhoneCam.desktop` + `…/icons/hicolor/scalable/apps/dev.margine.PhoneCam.svg` + `…/libexec/margine/phone-cam-gui` + `…/modprobe.d/margine-phone-cam.conf` | `dev.margine.PhoneCam`, `Lucciola Phone Cam` |
+| Lucciola CPU Scheduler, system update launcher (names/icons) | `…/applications/margine-scheduler.desktop` + `…/icons/hicolor/scalable/apps/margine-scheduler.svg`, `…/libexec/margine/system-gui --page hardware` (the Hardware page of Lucciola System), `…/applications/margine-system-update.desktop` + `…/icons/hicolor/scalable/apps/margine-system-update.svg` (family style, see below) | `Lucciola CPU Scheduler`, `Lucciola system update` |
+| Phone Camera app (name/icon/id), virtual webcam label | `…/applications/dev.margine.PhoneCam.desktop` + `…/icons/hicolor/scalable/apps/dev.margine.PhoneCam.svg` (family style, see below) + `…/libexec/margine/system-gui` (the Camera section of the Phone page; the launcher opens it) + `…/modprobe.d/margine-phone-cam.conf` | `dev.margine.PhoneCam`, `Lucciola Phone Cam` |
 | fastfetch / MOTD / `/etc/issue` | `build_files/50-branding/install.sh`, `lucciola/assets/fastfetch-logo.txt`, `…/fastfetch/margine.jsonc`, `build_files/60-ujust-services/install.sh` | `ascii-logo.txt`, `no-show-user-motd`, `/etc/issue` |
 | Command names: `lucciola-*` in /usr/bin and ujust, `margine-*` kept as links and aliases | `build_files/system_files/usr/bin/`, `build_files/40-spec-scripts/install.sh`, `build_files/60-custom.just` | `lucciola-status`, `alias margine-` |
 | **Lucciola**: public name, login session, validator name | `lucciola/build.sh`, `lucciola/system_files/usr/share/margine/product-name` | `NAME="Lucciola"`, `lucciola.desktop`, `product-name` |
@@ -639,8 +639,9 @@ All under `build_files/system_files/`. All autostart entries follow Golden Rules
 - **`/etc/issue`:** first line `Lucciola \r (\m): Fedora Silverblue + CachyOS signed
   kernel`, second line `\d \t` (emergency console only). The kernel reserve
   (`:fedora-kernel`, `/usr/share/margine/kernel-flavor` = `fedora`) writes
-  `Fedora's kernel` in place of `CachyOS signed kernel`; the CPU Scheduler's
-  description and `lucciola-status` name the kernel that runs the same way.
+  `Fedora's kernel` in place of `CachyOS signed kernel`; the Startup & Security
+  page of Lucciola System and `lucciola-status` name the kernel that runs the
+  same way.
 - **ujust:** recipes live in `build_files/60-custom.just`, mostly under
   `[group('Lucciola')]` (`lucciola-bootstrap`, `lucciola-ai`, `lucciola-test-vm`, …;
   `lucciola-gaming` sits under `[group('Gaming')]`), discoverable via
