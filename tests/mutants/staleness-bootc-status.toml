@@ -1,0 +1,7 @@
+# Review R7: `bootc status` needs root, so the user timer exited quietly
+# without checking anything. The helper reads rpm-ostree's status.
+name = "staleness-bootc-status"
+file = "build_files/system_files/usr/libexec/margine-staleness-check"
+old = '["rpm-ostree", "status", "--booted", "--json"]'
+new = '["bootc", "status", "--json"]'
+must_fail = "bash tests/staleness.test.sh"

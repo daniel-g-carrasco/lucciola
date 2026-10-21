@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # flatpak-remote-tidy: the fedora remotes of a stock Fedora start go, unless
 # apps came from them; Flathub and unknown remotes are never touched.
-set -u
+set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 tidy="$here/build_files/system_files/usr/libexec/margine/flatpak-remote-tidy"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT

@@ -1,0 +1,56 @@
+# Shell scripts allowed to run without `set -euo pipefail`, each with the
+# reason. Read by .github/scripts/check-strict-mode.py (lint, the policy
+# job): every other tracked shell script under build_files/, lucciola/,
+# .github/scripts/, .github/smoke/ and tests/ must set -e, -u and pipefail
+# in its first 30 lines. An entry here without a reason, for a file that is
+# gone, or for a script that is strict after all, fails the check.
+#
+#   <path>  <why -e (or -u, or pipefail) would be wrong here>
+#
+# Two families account for nearly all of it. Validators, probes and
+# diagnostics run every check and count or print the failures: with -e the
+# first failing check would end the run and the rest would never be
+# reported, which is the "check that cannot fail" shape in reverse (a check
+# that cannot finish). Helpers that decide what to do from the result of
+# each command (a missing file, a pgrep with no match, an unmet condition)
+# handle every failure on the spot, and -e would turn a handled case into
+# an exit before the handling.
+
+# -- validators, probes, diagnostics: every check runs, failures are counted
+build_files/40-spec-scripts/scripts/validate-margine-system          runs every A.* check and counts the failures; -e would stop at the first and report nothing after it
+build_files/40-spec-scripts/scripts/validate-staged-deployment        same shape as validate-margine-system: all checks, then the verdict
+build_files/40-spec-scripts/scripts/validate-atomic-layout            diagnostic with conditional failures (set -u, pipefail): every check must run
+build_files/40-spec-scripts/scripts/validate-cachyos-kernel           diagnostic with conditional failures: every check must run
+build_files/40-spec-scripts/scripts/validate-gaming-runtime           diagnostic with conditional failures: every check must run
+build_files/40-spec-scripts/scripts/validate-hardware-media-stack     diagnostic with conditional failures: every check must run
+build_files/40-spec-scripts/scripts/diagnose-margine-firstboot        read-only dump: a command that fails on this machine is part of the picture, not the end of it
+build_files/40-spec-scripts/scripts/collect-diagnostics               read-only dump, same as diagnose-margine-firstboot
+build_files/40-spec-scripts/scripts/update-all                        runs the update phases in turn and counts soft failures; one phase failing must not skip the diagnostics after it
+.github/smoke/gui-probe.sh                                            prints one MARGINE-GUI-SMOKE marker per check and a verdict; -e would lose every marker after the first FAIL
+.github/smoke/security-probe.sh                                       prints one MARGINE-SEC marker per check (Secure Boot, MOK, policy, signature, listeners, SELinux) and a verdict
+.github/smoke/user-smoke-probe.sh                                     prints one MARGINE-USER-SMOKE marker per check and a verdict
+.github/scripts/check-flatpak-fixes.sh                                collects every broken invariant before exiting 1, so a run names all of them
+build_files/system_files/usr/libexec/margine/darktable-bench/bench    a benchmark run records a configuration that fails and goes on with the next
+build_files/system_files/usr/bin/lucciola-status                      status page: prints what each source answers, and "unknown" where one does not
+build_files/system_files/usr/libexec/margine-first-boot-status        first-boot report: every probe is reported, a failing one as a failing one
+build_files/system_files/usr/libexec/margine-update-watchdog          a failed check is what it reports (and masks the timer on); -e would end it before the report
+
+# -- helpers that handle each command's result themselves
+build_files/system_files/usr/libexec/margine/dock-dp-rescue           udev helper with explicit gates: a sysfs read that fails means "do nothing", never an abort halfway through a driver rebind
+build_files/system_files/usr/libexec/margine/first-boot-bootstrap     first-login wrapper: the bootstrap's own exit must not become the autostart entry's
+build_files/system_files/usr/libexec/margine/flatpak-repo-repair      repair steps go on after one fails and record the result for the next boot
+build_files/system_files/usr/libexec/margine/flatpak-update-precheck  ExecCondition: a sysfs file that is not there is a condition answered no, not an error
+build_files/system_files/usr/libexec/margine/grub-lock                every step (write, verify, remove) reports its own failure in words and chooses the exit code
+build_files/system_files/usr/libexec/margine/kernel-switch            every refusal (no x86-64-v3, no key, pins) is a handled case with its message
+build_files/system_files/usr/libexec/margine/mok-enroll               mokutil's answers decide the next step; a non-zero one is an answer, not an error
+build_files/system_files/usr/libexec/margine/signed-origin            the rebase's failure is the reported outcome (exit 1 after the message), every other failure a no-op
+build_files/system_files/usr/bin/lucciola-dev-groups                  runs at every boot over the wheel members; one usermod failing must not skip the others
+build_files/system_files/usr/libexec/margine/keyring-legacy-aside     ExecStartPre of oo7-daemon: every step is `|| exit 0`, a missing keyring is the normal case
+lucciola/system_files/usr/libexec/lucciola/autologin-session          greetd session launcher: falls back on every missing piece (desktop file, Exec line) instead of exiting
+lucciola/system_files/usr/libexec/lucciola/default-avatar             loop over the accounts: one bad account must not stop the others
+lucciola/system_files/usr/libexec/lucciola/login-migrate              each step handled in place, the marker written only on success, so a failure is retried next boot
+lucciola/system_files/usr/libexec/lucciola/ptyxis-palette             Noctalia post-hook: every missing piece (ptyxis, the profile) is `|| exit 0`
+lucciola/system_files/usr/libexec/lucciola/lock                       a pgrep with no match is the case it exists for (start Noctalia again), then exec
+lucciola/system_files/usr/libexec/lucciola/session-start              session start: must reach the exec of the shell whatever the seeding steps before it meet
+lucciola/system_files/usr/lib/systemd/user-environment-generators/90-lucciola-drop-missing-preload  environment generator: must always exit 0 with its output, every path handled
+build_files/system_files/usr/bin/lucciola-fetch                       one exec line, no shell logic to be strict about (margine-fetch is a link to it)

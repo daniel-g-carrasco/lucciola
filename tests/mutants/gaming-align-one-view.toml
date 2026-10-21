@@ -1,0 +1,8 @@
+# The alignment throws away a view of the repositories whose builds cannot
+# be downloaded and plans again on fresh metadata: one view only is the
+# build of 2026-10-21 that failed at random on expat-2.8.5.
+name = "gaming-align-one-view"
+file = "build_files/custom-kernel/gaming-align.sh"
+old = '''  local rounds=${1:-4} pause=${2:-60} round rc'''
+new = '''  local rounds=1 pause=${2:-60} round rc'''
+must_fail = "bash tests/gaming-align.test.sh"

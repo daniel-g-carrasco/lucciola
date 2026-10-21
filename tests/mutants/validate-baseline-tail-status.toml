@@ -1,0 +1,12 @@
+# Review R6: the dependency check read tail's status instead of dnf's and
+# announced success after a failed depsolve.
+name = "validate-baseline-tail-status"
+file = "build_files/40-spec-scripts/scripts/validate-baseline-packages"
+old = '''    rc=0
+    out="$(dnf install -y --setopt=tsflags=test $INSTALL_PKGS 2>&1)" || rc=$?
+    printf "%s\n" "$out" | tail -5
+'''
+new = '''    rc=0
+    dnf install -y --setopt=tsflags=test $INSTALL_PKGS 2>&1 | tail -5
+'''
+must_fail = "bash tests/pipeline-status.test.sh"

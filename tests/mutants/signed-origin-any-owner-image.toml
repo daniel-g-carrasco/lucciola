@@ -1,0 +1,8 @@
+# Second review's mutation table: the migration to the signed transport
+# must act on this repository's image only, never on any image of the
+# same owner (Margine's repository shares the key, not the policy scope).
+name = "signed-origin-any-owner-image"
+file = "build_files/system_files/usr/libexec/margine/signed-origin"
+old = '  "$REPO":*) tag="${image##*:}" ;;'
+new = '  ghcr.io/daniel-g-carrasco/*:*) tag="${image##*:}" ;;'
+must_fail = "bash tests/signed-origin.test.sh"
