@@ -1,0 +1,25 @@
+#!/usr/bin/bash
+# Drop the Flatpak remotes a stock Fedora starting system leaves behind.
+# Silverblue and Kinoite add "fedora" and "fedora-testing" at boot
+# (flatpak-add-fedora-repos.service, which this image masks); after a move
+# to Lucciola they stay in /var. Flathub is the one remote Lucciola uses:
+# Fedora's registry duplicates its apps with builds that lack codecs, and a
+# second remote makes "install X" ambiguous. A remote with apps installed
+# from it is left alone: that is the user's choice. Runs before every
+# preinstall (ExecStartPre, non-fatal), so it is idempotent and quiet.
+set -u
+FLATPAK="${FLATPAK:-flatpak}"
+remotes="$($FLATPAK remotes --system --columns=name 2>/dev/null)" || exit 0
+origins="$($FLATPAK list --system --columns=origin 2>/dev/null)" || origins=""
+has() { local needle="$1" line; while IFS= read -r line; do [[ "$line" == "$needle" ]] && return 0; done <<<"$2"; return 1; }
+for r in fedora fedora-testing; do
+  has "$r" "$remotes" || continue
+  if has "$r" "$origins"; then
+    echo "flatpak-remote-tidy: the $r remote stays: apps are installed from it"
+    continue
+  fi
+  if $FLATPAK remote-delete --system "$r"; then
+    echo "flatpak-remote-tidy: removed the $r remote left by the starting system (no app came from it)"
+  fi
+done
+exit 0

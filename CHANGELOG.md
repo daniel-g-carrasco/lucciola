@@ -36,6 +36,38 @@ stable release is cut.
   shared helpers, so its installs carry `SOURCE_DATE_EPOCH` like every
   other step. Bumping `NOCTALIA_VR` when upstream moves stays a reviewed
   change with a test boot (release checklist).
+### Changed (validator)
+- **Apps still downloading are pending, not failures.** Since the first
+  preinstall run no longer holds the boot, `lucciola-validate-margine-system`
+  run in those minutes reports an app the run has not reached yet as a
+  warning, not as a missing app; once the run has passed, a missing app is
+  a failure as before.
+- **Stock Fedora starting points.** The "fedora" and "fedora-testing"
+  Flatpak remotes a Silverblue or Kinoite install leaves behind are removed
+  before the first preinstall, unless apps were installed from them.
+### Fixed (2026-10-20, layering)
+- **An outage of Cisco's openh264 mirror no longer fails `rpm-ostree
+  install`.** rpm-ostree fetches the metadata of every enabled repository
+  before it layers anything and ignores `skip_if_unavailable`; on
+  2026-10-20 Cisco's mirror was down for over ten minutes and every
+  layering failed, in the upgrade test as on installed systems. The image
+  now ships `fedora-cisco-openh264` disabled: its openh264 comes from
+  negativo17 and updates with the image, nothing is layered from Cisco.
+  `validate-margine-system` checks it (9f). The upgrade test also makes
+  three attempts at layering, 45 seconds apart, for the older images it
+  starts from, which still have the repository on.
+
+### Fixed (2026-10-20, lint)
+- **The MOK signer test runs whole on the lint runner.** The runner has no
+  `systemd-sbsign` and keeps its kernel image root-only, so the test put
+  no `vmlinuz` in its tree; `finalize.sh` then refused the list ("no
+  vmlinuz checksum") and the three refusal checks passed for that reason
+  instead of their own. The lint job now installs `systemd-sbsign` and
+  signs systemd-boot's EFI binary in place of the kernel, and
+  `MOK_TEST_REQUIRE_PE` makes a skip a failure there. Without the tool the
+  test stands a stub in for `vmlinuz` and still exercises the install
+  step, and every refusal is checked by its reason. Changes under
+  `tests/` alone no longer rebuild the image.
 
 ### Fixed (2026-10-20, SBOM)
 - **scrcpy is in the SBOM.** It is installed from its release tarball, not

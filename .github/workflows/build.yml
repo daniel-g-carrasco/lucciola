@@ -77,6 +77,9 @@ on:
       - 'docs/**'
       - 'tools/**'
       - 'site/README.md'
+      # The tests of the build scripts and system files run in lint.yml
+      # and mutation.yml; nothing in the image reads them.
+      - 'tests/**'
   pull_request:
     # Opt-in per-PR build: only PRs explicitly labeled `vm-test` build
     # the image and publish a `:pr-N` tag, so daniel can rebase the
