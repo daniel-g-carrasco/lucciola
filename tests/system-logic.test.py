@@ -297,6 +297,7 @@ check("a stream id gives the server its own socket", "scid=0000002a" in ls.serve
 check("webcam_status: a dropped link says the node stays listed",
       "stays listed" in ls.webcam_status("/dev/video21", {"size": "1280x720", "facing": "back", "wireless": True, "state": "reconnecting"}, True, True))
 check("reconnect window: long enough for a Wi-Fi hiccup, short enough to give up", 30 <= ls.RECONNECT_SECONDS <= 300 and 3 <= ls.STALL_SECONDS <= 30)
+check("first frame window: room for a dark scene or the back camera's several sensors", 10 <= ls.FIRST_FRAME_SECONDS <= 60 and ls.STALL_SECONDS >= 8)
 check("size_key sorts by pixels", ls.size_key("1920x1080") > ls.size_key("1280x720"))
 check("webcam sizes: 16:9 and 4:3 from 640 wide to 1080p, the sensor's 12 MP and 2:1 shapes left out",
       ls.webcam_sizes(["4032x3024", "2560x1280", "1920x1080", "1440x1080", "1280x960", "1280x720", "1080x1080", "640x480", "352x288"])

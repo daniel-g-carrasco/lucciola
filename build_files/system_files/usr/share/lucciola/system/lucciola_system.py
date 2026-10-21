@@ -806,7 +806,12 @@ MIC_BUFFER_NS = 200_000_000
 # How long a stream keeps its PipeWire node and tries the phone again after
 # the link drops, and after how many seconds without data it is tried again.
 RECONNECT_SECONDS = 90
-STALL_SECONDS = 6
+# Counted in bytes from the phone, not decoded frames: a dark scene still
+# sends small frames, a dropped link sends nothing.
+STALL_SECONDS = 10
+# How long a new stream may take to hand over its first frame: a dark scene
+# or the back camera's several sensors take seconds.
+FIRST_FRAME_SECONDS = 20
 
 
 def video_caps(size, fmt="I420", rate=True):

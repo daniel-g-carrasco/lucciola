@@ -36,7 +36,15 @@ stable release is cut.
   phone, 90 behind and 270 in front on a Pixel), and Rotate turns it a
   quarter more for a phone on its side or upside down; a portrait picture
   lands in the landscape frame between black bars, and the turn, like the
-  lens, changes without the node going away. The resolution changes only
+  lens, changes without the node going away. A dark room no longer means a
+  black camera: in raw-stream mode the server sends nothing until the
+  camera's first frame, which a dark scene or the back camera's several
+  sensors take seconds to give, and the wait for it gave up after 2.5
+  seconds and hung up, so the server closed; now an accepted connection is
+  kept for up to 20 seconds. The watchdog counts bytes from the phone, not
+  decoded frames, over 10 seconds, so a dark scene at two frames a second
+  is not taken for a dropped link, and the software decoder, when it is
+  the one picked, runs one thread and holds no frames back. The resolution changes only
   while the camera is stopped, since a new size is a new node and GNOME's
   Camera closed when its node went away; the list offers 16:9 and 4:3 from
   640 pixels wide up to 1080p, not the sensor's 12 megapixels. In the

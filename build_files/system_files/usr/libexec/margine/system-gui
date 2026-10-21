@@ -685,10 +685,13 @@ class PhoneStream:
             self._release_later(old)
 
     def _connect(self, feed, gen):
-        """adb forward accepts at once; the server on the phone listens a
-        moment later and sends its first bytes on its own: connect until
-        bytes come."""
-        deadline = time.monotonic() + 15
+        """adb forward accepts at once and dials the server's socket; while
+        the server is not listening yet adb hangs up (EOF): dial again. Once
+        the server has the connection it sends nothing until the camera
+        hands over its first frame, which takes seconds for a dark scene or
+        a multi-camera lens: wait on that connection, never drop it, or the
+        server takes the hang-up as the end and closes."""
+        deadline = time.monotonic() + ls.FIRST_FRAME_SECONDS
         while time.monotonic() < deadline:
             if gen != self._gen:
                 raise Stopped("stopped")
@@ -697,8 +700,18 @@ class PhoneStream:
             sock = None
             try:
                 sock = socket.create_connection(("127.0.0.1", feed["port"]), timeout=2)
-                sock.settimeout(2.5)
-                if sock.recv(1, socket.MSG_PEEK):
+                sock.settimeout(0.5)
+                while time.monotonic() < deadline:
+                    if gen != self._gen:
+                        raise Stopped("stopped")
+                    if feed["server"].poll() is not None:
+                        raise RuntimeError("the phone's server stopped at once")
+                    try:
+                        first = sock.recv(1, socket.MSG_PEEK)
+                    except socket.timeout:
+                        continue  # connected, the camera is still starting
+                    if not first:
+                        break  # adb hung up: the server was not listening yet
                     sock.settimeout(None)
                     sock, ready = None, sock
                     return ready
@@ -713,15 +726,18 @@ class PhoneStream:
     def _build_feed_pipeline(self, feed):
         fd = feed["sock"].fileno()
         if self.mode == "camera":
-            desc = (f"fdsrc fd={fd} ! h264parse ! decodebin ! videoconvert ! videoscale "
+            desc = (f"fdsrc fd={fd} ! identity name=watch ! h264parse ! decodebin name=decoder ! videoconvert ! videoscale "
                     f"! capsfilter caps=\"{ls.video_caps(self.size, 'I420', rate=False)}\" "
-                    f"! identity name=watch ! intervideosink channel={self._channel} sync=false")
+                    f"! intervideosink channel={self._channel} sync=false")
         else:
-            desc = (f"fdsrc fd={fd} do-timestamp=true ! rawaudioparse use-sink-caps=false format=pcm pcm-format=s16le "
+            desc = (f"fdsrc fd={fd} do-timestamp=true ! identity name=watch ! rawaudioparse use-sink-caps=false format=pcm pcm-format=s16le "
                     f"sample-rate={ls.MIC_RATE} num-channels={ls.MIC_CHANNELS} ! audioconvert "
-                    f"! capsfilter caps=\"{ls.MIC_CAPS}\" ! identity name=watch ! interaudiosink channel={self._channel} sync=false")
+                    f"! capsfilter caps=\"{ls.MIC_CAPS}\" ! interaudiosink channel={self._channel} sync=false")
         pipeline = Gst.parse_launch(desc)
         pipeline.get_by_name("watch").connect("handoff", self._on_data)
+        decoder = pipeline.get_by_name("decoder")
+        if decoder is not None:
+            decoder.connect("deep-element-added", self._on_decoder_element)
         bus = pipeline.get_bus()
         bus.add_signal_watch()
         bus.connect("message::error", self._on_feed_message, feed)
@@ -734,6 +750,15 @@ class PhoneStream:
 
     def _on_data(self, _identity, _buffer):
         self._last_data = time.monotonic()
+
+    @staticmethod
+    def _on_decoder_element(_bin, _sub, element):
+        # The software decoder runs one frame per thread and holds that many
+        # back: at a dark scene's two frames a second that is seconds of
+        # black. One thread hands each frame on as it comes.
+        factory = element.get_factory()
+        if factory is not None and factory.get_name() == "avdec_h264":
+            element.set_property("max-threads", 1)
 
     def _on_feed_message(self, _bus, message, feed):
         if message.type == Gst.MessageType.ERROR:
@@ -802,7 +827,7 @@ class PhoneStream:
         if gen != self._gen:
             return False
         feed = self._feed
-        if feed is not None and time.monotonic() - self._last_data > ls.STALL_SECONDS:
+        if feed is not None and feed["live"] and time.monotonic() - self._last_data > ls.STALL_SECONDS:
             self._lost(feed, f"no data from the phone for {ls.STALL_SECONDS} seconds")
         return True
 
