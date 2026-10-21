@@ -143,6 +143,11 @@ jobs:
         # library is gone (Margine's Wayland Scroll Factor line after a move).
         run: bash tests/drop-missing-preload.test.sh
 
+      - name: Stock-Fedora Flatpak remotes tidy
+        # The fedora remotes a Silverblue/Kinoite start leaves behind go,
+        # unless apps came from them. See tests/flatpak-remote-tidy.test.sh.
+        run: bash tests/flatpak-remote-tidy.test.sh
+
       - name: Developer layer helper (ujust lucciola-devmode)
         # Reads the package list, picks what remove may drop, installs and
         # deletes Homebrew: tested on temp files with a fake installer.
@@ -204,6 +209,56 @@ jobs:
         # pins) and that it warns about TPM unlock first, is tested.
         run: bash tests/kernel-switch.test.sh
 
+      - name: Pinned Fedora build (the repositories, then Koji)
+        # Noctalia and the kernel reserve's kernel-devel are pinned to a
+        # build the repositories drop. From where each is installed, that
+        # Koji's copy is checked against the release key before dnf sees
+        # it, and what refuses (bad signature, another key, a 404) is
+        # tested with fake dnf5, curl and rpmkeys.
+        run: bash tests/pinned-fedora-build.test.sh
+
+      - name: MOK key only in the signing stage
+        # The private key is mounted in one RUN, the mok-sign stage's: FROM
+        # the clean base, no network, the signer alone. Package installs and
+        # build steps never see it (review N1). See tests/mok-secret-scope.test.sh.
+        run: bash tests/mok-secret-scope.test.sh
+
+      - name: MOK signer and the step that installs its output
+        # Module signatures as the kernel reads them, vmlinuz via
+        # systemd-sbsign, refused paths (links to the key included), and
+        # finalize.sh refusing files that changed after signing.
+        # The runner ships no systemd-sbsign and keeps its kernel image
+        # root-only, so the tool comes from systemd-repart and systemd-boot's
+        # EFI binary stands in for vmlinuz; MOK_TEST_REQUIRE_PE turns the
+        # test's skip into a failure, so the vmlinuz path is always run here
+        # (the first run after review N1 skipped it and failed on the
+        # install step instead, 2026-10-20). See tests/mok-sign.test.sh.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends systemd-repart systemd-boot-efi sbsigntool
+          TEST_PE=/usr/lib/systemd/boot/efi/systemd-bootx64.efi MOK_TEST_REQUIRE_PE=1 bash tests/mok-sign.test.sh
+
+      - name: scrcpy pin from upstream's signed checksums
+        # SCRCPY_SHA256 comes from SHA256SUMS.txt signed by the maintainer's
+        # pinned key, never from hashing the download (review N2).
+        # See tests/scrcpy-signed-sha.test.sh.
+        run: |
+          python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml
+          bash tests/scrcpy-signed-sha.test.sh
+
+      - name: Security scan and SBOM read the image that ships
+        # The chunked image, whose config the push checks, not the one
+        # before chunking (review N3). See tests/scan-what-ships.test.sh.
+        run: |
+          python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml
+          bash tests/scan-what-ships.test.sh
+
+      - name: Components installed outside RPM reach the SBOM
+        # scrcpy and the other downloads the build unpacks are recorded in
+        # the image and merged into the published SBOM, checked against the
+        # files (review N9). See tests/sbom-components.test.sh.
+        run: bash tests/sbom-components.test.sh
+
       - name: Flatpak repair gate (flatpak-preinstall.service)
         # Relabel and repair run on a first boot, after a failed run or on a
         # broken repo, once per boot at most, and never on a settled boot.
@@ -252,7 +307,13 @@ jobs:
           FLATPAK_TEST_REQUIRED: "1"
         run: |
           set -euo pipefail
-          dnf -y -q install flatpak ostree python3
+          # Fedora's mirrors answer 503 now and then (updates-testing on
+          # 2026-10-20): three attempts, then the packages must be there.
+          for i in 1 2 3; do
+            dnf -y -q install flatpak ostree python3 && break
+            echo "dnf attempt $i failed, retrying in 30 s"; sleep 30
+          done
+          rpm -q flatpak ostree python3
           bash tests/flatpak-preinstall-keep.test.sh
 
   build-inputs-need-vm-test:

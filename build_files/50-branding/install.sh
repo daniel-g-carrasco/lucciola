@@ -141,37 +141,12 @@ sed -i '0,/^\[Daemon\]/s//[Daemon]\nDeviceScale=1/' "$conf"
 grep -qx 'Theme=lucciola' "$conf" && grep -qx 'DeviceScale=1' "$conf" \
   || { log "ERROR: $conf does not select the lucciola theme at DeviceScale=1: $(tr '\n' ' ' < "$conf")"; exit 1; }
 log "Set Plymouth default theme: lucciola, DeviceScale=1"
-# THE initramfs of the build (2026-10-18: custom-kernel no longer makes a
-# first one that this run always replaced). Output goes to
-# /usr/lib/modules/<KVER>/initramfs.img, the bootc/ostree-expected path.
-# regenerate_initramfs (00-common.sh): generic (custom-kernel's
-# 01-margine-no-hostonly.conf), --add ostree (without which switch-root
-# fails, see custom-kernel/install.sh), zstd, and byte-reproducible (same
-# packages, same bytes, whatever the build date).
-command -v dracut >/dev/null 2>&1 || { log "ERROR: dracut missing: no initramfs, no boot"; exit 1; }
-for kver_dir in /usr/lib/modules/*/; do
-  kver=$(basename "$kver_dir")
-  regenerate_initramfs "$kver" || { log "ERROR: dracut failed for $kver"; exit 1; }
-  [[ -s "${kver_dir}initramfs.img" ]] || { log "ERROR: no initramfs written for $kver"; exit 1; }
-  # The splash is only what the initramfs carries: the theme, its plugin,
-  # the text renderer and the configuration with DeviceScale.
-  ird="$(lsinitrd "${kver_dir}initramfs.img" 2>/dev/null || true)"
-  for want in usr/share/plymouth/themes/lucciola/lucciola.script usr/share/plymouth/themes/lucciola/wordmark-720.png \
-              usr/lib64/plymouth/script.so usr/lib64/plymouth/label-freetype.so; do
-    grep -q " ${want}\$" <<<"$ird" || { log "ERROR: the initramfs for $kver lacks $want"; exit 1; }
-  done
-  lsinitrd -f etc/plymouth/plymouthd.conf "${kver_dir}initramfs.img" 2>/dev/null | grep -qx 'DeviceScale=1' \
-    || { log "ERROR: the initramfs for $kver has no DeviceScale=1 in plymouthd.conf"; exit 1; }
-  log "Wrote ${kver_dir}initramfs.img ($(du -h "${kver_dir}initramfs.img" | cut -f1), Plymouth theme lucciola)"
-done
-# vmlinuz must still be the bytes custom-kernel signed (its checksum,
-# left in this RUN's /tmp): a rewrite would ship a kernel Secure Boot
-# rejects with the cryptic "bad shim signature".
-if [[ -f /tmp/vmlinuz.sha ]]; then
-  sha256sum -c /tmp/vmlinuz.sha >/dev/null || { log "ERROR: vmlinuz changed after signing"; exit 1; }
-  rm -f /tmp/vmlinuz.sha
-  log "vmlinuz still the signed bytes after dracut"
-fi
+# The initramfs that carries this theme is written by custom-kernel/
+# finalize.sh in the Containerfile's last RUN (2026-10-20): it packs the
+# kernel modules, so it must come after the MOK-signed ones are in place,
+# and the signing happens in a stage of its own after this step (review
+# N1). finalize.sh checks that the theme, its plugins and DeviceScale=1
+# made it in.
 
 # (d) GDM login screen background — system dconf override.
 mkdir -p /etc/dconf/db/gdm.d /etc/dconf/profile

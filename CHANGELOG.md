@@ -94,6 +94,128 @@ stable release is cut.
   notifies when it is false. Only jobs that run on every pull request may
   be required: one that does not run blocks the merge forever (the pitfall
   is written in the script). `tests/repo-guard.test.sh`.
+### Fixed (2026-10-20, build)
+- **The pinned Noctalia build could leave the repositories and stop every
+  image build.** `NOCTALIA_VR` pins noctalia to 5.3.0-1, which Fedora 45
+  offers only in updates-testing (FEDORA-2026-04f44a27d9) while it is a
+  pre-release: at the release (27 October) that repository goes away, and
+  a newer Noctalia obsoleting the update before then would have had the
+  same effect; from that day every build of the image, security updates
+  included, failed on the install, at the worst possible time. Fedora
+  keeps every build in Koji, with a copy signed by the release key. The
+  install now asks the repositories for the exact build first and, when
+  they no longer have it, fetches that copy, checks it with `rpmkeys`
+  against the Fedora release key in the image (dnf does not check a local
+  file) and installs it in the same transaction as niri,
+  xwayland-satellite and ddcutil, weak dependencies off as before; the
+  build then checks that the installed noctalia is the pinned one. The log
+  says which path was taken; a bad signature, a signature by another key,
+  or a build Koji does not have fail the build at once, naming the URL.
+  The kernel reserve's kernel-devel install, which already did this for
+  Fedora's kernel, uses the same helpers (`fetch_signed_rpm`,
+  `verify_fedora_signature`, `dnf_install_pinned` in
+  build_files/00-common.sh): it now also insists that the signer is the
+  release key and not any key the rpmdb holds, and a 404 from Koji fails
+  at once instead of after five retries. Tested with fake dnf5, curl and
+  rpmkeys (tests/pinned-fedora-build.test.sh, run by lint); the real
+  signed copy of noctalia-5.3.0-1.fc45 was fetched and verified with the
+  same helpers in a Fedora 45 container. The Lucciola step now sources the
+  shared helpers, so its installs carry `SOURCE_DATE_EPOCH` like every
+  other step. Bumping `NOCTALIA_VR` when upstream moves stays a reviewed
+  change with a test boot (release checklist).
+### Changed (validator)
+- **Apps still downloading are pending, not failures.** Since the first
+  preinstall run no longer holds the boot, `lucciola-validate-margine-system`
+  run in those minutes reports an app the run has not reached yet as a
+  warning, not as a missing app; once the run has passed, a missing app is
+  a failure as before.
+- **Stock Fedora starting points.** The "fedora" and "fedora-testing"
+  Flatpak remotes a Silverblue or Kinoite install leaves behind are removed
+  before the first preinstall, unless apps were installed from them.
+### Fixed (2026-10-20, layering)
+- **An outage of Cisco's openh264 mirror no longer fails `rpm-ostree
+  install`.** rpm-ostree fetches the metadata of every enabled repository
+  before it layers anything and ignores `skip_if_unavailable`; on
+  2026-10-20 Cisco's mirror was down for over ten minutes and every
+  layering failed, in the upgrade test as on installed systems. The image
+  now ships `fedora-cisco-openh264` disabled: its openh264 comes from
+  negativo17 and updates with the image, nothing is layered from Cisco.
+  `validate-margine-system` checks it (9f). The upgrade test also makes
+  three attempts at layering, 45 seconds apart, for the older images it
+  starts from, which still have the repository on.
+
+### Fixed (2026-10-20, lint)
+- **The MOK signer test runs whole on the lint runner.** The runner has no
+  `systemd-sbsign` and keeps its kernel image root-only, so the test put
+  no `vmlinuz` in its tree; `finalize.sh` then refused the list ("no
+  vmlinuz checksum") and the three refusal checks passed for that reason
+  instead of their own. The lint job now installs `systemd-sbsign` and
+  signs systemd-boot's EFI binary in place of the kernel, and
+  `MOK_TEST_REQUIRE_PE` makes a skip a failure there. Without the tool the
+  test stands a stub in for `vmlinuz` and still exercises the install
+  step, and every refusal is checked by its reason. Changes under
+  `tests/` alone no longer rebuild the image.
+
+### Fixed (2026-10-20, SBOM)
+- **scrcpy is in the SBOM.** It is installed from its release tarball, not
+  an RPM, so the published SBOM listed its files and no scrcpy package: no
+  version, licence or advisory could be matched to it. The build now
+  records each component it installs outside RPM (scrcpy, the uBlock Origin
+  seed, the MoreWaita icon) in `/usr/share/margine/sbom/` with version,
+  supplier, download URL and checksum, licence, purl, CPE and its files,
+  and CI merges those records into the SBOM after checking each file
+  against the image (`.github/scripts/sbom-add-components.py`); a build
+  without scrcpy's record fails. `tests/sbom-components.test.sh`.
+
+### Fixed (2026-10-20, checks)
+- **The security scan and the SBOM describe the image that is published.**
+  Both read the image as built, before chunking; the chunker then rebuilds
+  the image from its files (it prunes `/run` and `/sysroot`), and that is
+  what is pushed and signed. A scan of the published image of 2026-10-20
+  differed from the baseline the build had called clean. They now run on
+  the chunked image, loaded once and checked against the config its
+  manifest names, and the push refuses a registry manifest with another
+  config, so the digest the signature covers is the image that was scanned.
+  The residue baseline is empty (what it held lived in `/run`). Same for
+  the kernel reserve. `tests/scan-what-ships.test.sh`.
+
+### Security (2026-10-20, scrcpy updates)
+- **A scrcpy update is pinned only if upstream signed it.** Renovate
+  proposes new scrcpy releases and merges them by itself; the companion
+  workflow pinned whatever sha256 the release download had, so the pin
+  proved nothing about who published the bytes, and a release made with a
+  stolen GitHub account would have been built (as root, in the image
+  build) and shipped by automation alone. The pin now comes from the
+  release's `SHA256SUMS.txt`, after its OpenPGP signature checks out
+  against the scrcpy maintainer's key pinned in `.github/keys`
+  (`.github/scripts/scrcpy-signed-sha.sh`); the Renovate PR is checked
+  again with main's copy of the script, and a release without signed
+  checksums or signed by another key leaves the PR red, unmerged and
+  unbuilt until someone looks. `tests/scrcpy-signed-sha.test.sh`.
+
+### Security (2026-10-20, kernel signing)
+- **The MOK private key no longer shares a build step with anything
+  else.** The key that signs the kernel and its modules was mounted in the
+  RUN that installed the CachyOS kernel from COPR and RPM Fusion's release
+  RPM from a URL, and that then ran every build script, the downloaded
+  scrcpy included: any package scriptlet or downloaded program could read
+  it, and with it sign kernels every machine with the key enrolled would
+  boot. That RUN now has no secret: it lists what must be signed. A stage
+  of its own (`mok-sign`), FROM the clean base, with no network and nothing
+  installed, runs only `custom-kernel/mok-sign.sh`, with the key mounted
+  and the files to sign as read-only data; it refuses paths that leave the
+  kernel's directory or go through a symbolic link. The last RUN
+  (`custom-kernel/finalize.sh`) puts the signed vmlinuz and modules in
+  place only if the image still holds exactly the files that were signed,
+  checks the signatures and writes the initramfs (moved from 50-branding,
+  since it packs the signed modules). Modules are signed with openssl the
+  way the kernel's `sign-file` does, byte for byte, instead of running the
+  COPR's `sign-file` with the key. The build stops if the key is ever
+  mounted where build steps run. Signed as before: same key, same
+  signatures, same Secure Boot behaviour. Whether earlier builds exposed
+  the key cannot be told from the image; rotating it would need a migration
+  for every enrolled machine and is a separate decision.
+  `tests/mok-secret-scope.test.sh`, `tests/mok-sign.test.sh`.
 ### Fixed (2026-10-20, second review)
 - **`ujust lucciola-autologin` changes both login screens or neither.** It
   writes greetd's config and mirrors the choice into GDM's, and wrote them

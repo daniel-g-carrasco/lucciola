@@ -80,6 +80,13 @@ if retry_curl "$UBLOCK_URL" "$UBLOCK_TMP" \
    && echo "${UBLOCK_SHA256}  ${UBLOCK_TMP}" | sha256sum -c - >/dev/null 2>&1; then
   install -Dm0644 "$UBLOCK_TMP" "$UBLOCK_DEST"
   log "Baked uBlock Origin ${UBLOCK_VER} -> $UBLOCK_DEST"
+  # Not an RPM: recorded for the SBOM (review N9, see 70-phone-cam).
+  python3 /ctx/sbom-component.py --name ublock-origin --version "${UBLOCK_VER}" \
+    --supplier "Person: Raymond Hill" --url "$UBLOCK_URL" --sha256 "$UBLOCK_SHA256" \
+    --license GPL-3.0-or-later --purl "pkg:generic/ublock-origin@${UBLOCK_VER}?download_url=${UBLOCK_URL}" \
+    --cpe "cpe:2.3:a:ublockorigin:ublock_origin:${UBLOCK_VER}:*:*:*:*:*:*:*" \
+    --note "Firefox extension (signed XPI from addons.mozilla.org), seeded into new Zen profiles." \
+    "$UBLOCK_DEST"
 else
   log "WARN: uBlock XPI download/verify failed; Zen ships without the uBlock seed (configure-zen-browser will skip it)"
 fi

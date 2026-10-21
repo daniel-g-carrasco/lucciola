@@ -7,6 +7,7 @@
 # #22 / docs/history/margine/build-sh-decomposition.md for the rationale.
 set -euo pipefail
 . /ctx/00-common.sh
+refuse_signing_key
 
 log "==== Margine build orchestrator: starting ===="
 
