@@ -43,8 +43,9 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
+gi.require_version("Gst", "1.0")
 
-from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, Gst, Gtk  # noqa: E402
 
 sys.path.insert(0, "/usr/share/lucciola/system")
 import lucciola_system as ls  # noqa: E402
@@ -91,6 +92,18 @@ KDEC_DAEMON = "org.kde.kdeconnect.daemon"
 KDEC_DEVICE = "org.kde.kdeconnect.device"
 KDEC_CONFIG = os.path.expanduser("~/.config/kdeconnect")
 KDEC_DOWNLOAD = "https://kdeconnect.kde.org/download.html"
+# The phone as a webcam: adb (android-tools), scrcpy (pinned release bundle
+# behind /usr/bin/scrcpy), the v4l2loopback device the image loads at boot
+# ("Lucciola Phone Cam", exclusive_caps=1: apps see it only while fed), and
+# pw-loopback for the phone's microphone as a PipeWire source. All as the
+# user, no privilege. Phone Camera was a window of its own until 2026-10-21.
+SCRCPY = "/usr/bin/scrcpy"
+ADB = "/usr/bin/adb"
+PW_LOOPBACK = "/usr/bin/pw-loopback"
+CAM_LABEL = "Lucciola Phone Cam"
+MIC_SINK = "lucciola_phone_mic"
+MIC_SOURCE = "lucciola_phone_mic_src"
+MIC_LABEL = "Lucciola Phone Mic"
 REFRESH_EVERY = 10 * 60   # seconds between unasked refreshes
 REFRESH_ON_FOCUS = 5 * 60  # refresh when the window comes back after this long
 
@@ -296,6 +309,317 @@ def preferences_page():
     return page
 
 
+def find_loopback_device():
+    """The image pins /dev/video21, but discover by label so manual setups
+    (a different video_nr) keep working; the older labels still count."""
+    base = "/sys/class/video4linux"
+    try:
+        entries = sorted(os.listdir(base))
+    except FileNotFoundError:
+        return None
+    fallback = None
+    for entry in entries:
+        name = read_file(os.path.join(base, entry, "name")).strip()
+        if name.startswith(ls.CAM_LABELS[:2]):
+            return f"/dev/{entry}"
+        if name.startswith("Phone Cam") and fallback is None:
+            fallback = f"/dev/{entry}"
+    return fallback
+
+
+class CameraSession:
+    """The phone's camera, and its microphone, running into the loopback
+    device and a PipeWire source: one at a time, owned by the window, so it
+    keeps going when its dialog closes. Lessons from the first runs stay:
+    always constrain the size (an unconstrained phone pushes its whole
+    sensor and the apps give up), start the producer before the app looks."""
+
+    def __init__(self):
+        self.proc = None
+        self.mic_proc = None
+        self.loop_proc = None
+        self.device = None
+        self.serial = None
+        self.label = ""
+        self.wireless = False
+        self.facing = "back"
+        self.size = ""
+        self.restarting = False
+
+    @property
+    def running(self):
+        return self.proc is not None
+
+    @property
+    def mic_running(self):
+        return self.mic_proc is not None
+
+    def info(self):
+        return {"size": self.size, "facing": self.facing, "wireless": self.wireless, "label": self.label, "serial": self.serial} if self.running else None
+
+    def start(self, device, serial, label, wireless, facing, size, on_exit):
+        argv = [SCRCPY, "-s", serial, "--video-source=camera", f"--camera-facing={facing}", f"--camera-size={size}",
+                f"--v4l2-sink={device}", "--no-playback", "--no-window"]
+        if wireless:
+            argv.append("--video-bit-rate=4M")
+        proc = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE)
+        self.proc, self.device, self.serial, self.label = proc, device, serial, label
+        self.wireless, self.facing, self.size = wireless, facing, size
+        proc.wait_async(None, on_exit, proc)
+
+    def stop(self):
+        if self.proc is not None:
+            proc, self.proc = self.proc, None
+            proc.send_signal(2)  # SIGINT: scrcpy cleans up the sink
+        self.stop_mic()
+
+    def start_mic(self, serial):
+        """A PipeWire sink the phone's microphone plays into, with a source
+        on its other side that calls list as "Lucciola Phone Mic"."""
+        flags = Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE
+        if self.loop_proc is None:
+            self.loop_proc = Gio.Subprocess.new([
+                PW_LOOPBACK, "--name", MIC_LABEL,
+                "--capture-props", f'media.class=Audio/Sink node.name={MIC_SINK} node.description="{MIC_LABEL} (input)"',
+                "--playback-props", f'media.class=Audio/Source node.name={MIC_SOURCE} node.description="{MIC_LABEL}"',
+            ], flags)
+        launcher = Gio.SubprocessLauncher.new(flags)
+        launcher.setenv("PULSE_SINK", MIC_SINK, True)
+        launcher.setenv("PIPEWIRE_NODE", MIC_SINK, True)
+        self.mic_proc = launcher.spawnv([SCRCPY, "-s", serial, "--no-video", "--audio-source=mic", "--no-window"])
+
+    def stop_mic(self):
+        for attr in ("mic_proc", "loop_proc"):
+            proc = getattr(self, attr)
+            if proc is not None:
+                setattr(self, attr, None)
+                proc.send_signal(2)
+
+
+class CameraDialog(Adw.Dialog):
+    """Lens, resolution, Start, the preview, the microphone switch and the
+    two remedies, for one phone. Closing it leaves the stream running."""
+
+    def __init__(self, win, target):
+        super().__init__()
+        self._win = win
+        self._target = target
+        self._session = win._cam
+        self._preview = None
+        self._loading = False
+        self._restart_id = None
+        Gst.init(None)
+        self.set_title("Phone Camera")
+        self.set_content_width(520)
+        self.set_content_height(700)
+        toolbar = Adw.ToolbarView()
+        toolbar.add_top_bar(Adw.HeaderBar())
+        page = preferences_page()
+        toolbar.set_content(page)
+        self.set_child(toolbar)
+
+        status = Adw.PreferencesGroup(title="Phone")
+        page.add(status)
+        info_row(status, target["label"], "phone-symbolic", "Over Wi-Fi" if target["wireless"] else "Over USB")
+
+        camera = Adw.PreferencesGroup(title="Camera")
+        page.add(camera)
+        self._facing = Adw.ComboRow(title="Lens")
+        self._facing.add_prefix(icon("camera-switch-symbolic"))
+        self._facing.set_model(Gtk.StringList.new(["Back", "Front"]))
+        self._facing.set_selected(1 if self._session.running and self._session.facing == "front" else 0)
+        self._facing.connect("notify::selected", self._on_setting_changed)
+        camera.add(self._facing)
+        self._size = Adw.ComboRow(title="Resolution", subtitle="720p over Wi-Fi, 1080p over USB; huge sizes fail in call apps")
+        self._size.add_prefix(icon("view-fullscreen-symbolic"))
+        self._set_sizes(list(ls.CAM_DEFAULT_SIZES))
+        self._size.connect("notify::selected", self._on_setting_changed)
+        camera.add(self._size)
+
+        run = Adw.PreferencesGroup()
+        page.add(run)
+        self._button = Gtk.Button()
+        self._button.add_css_class("pill")
+        self._button.set_halign(Gtk.Align.CENTER)
+        self._button.connect("clicked", self._on_start_stop)
+        run.add(self._button)
+        self._picture = Gtk.Picture()
+        self._picture.set_size_request(-1, 240)
+        self._picture.add_css_class("card")
+        self._picture.set_visible(False)
+        run.add(self._picture)
+
+        mic = Adw.PreferencesGroup(title="Microphone")
+        page.add(mic)
+        self._mic = Adw.SwitchRow(title="Phone Microphone", subtitle=f"The phone's microphone as {MIC_LABEL}, to pick in a call; Android 11 or later")
+        self._mic.set_active(self._session.mic_running)
+        self._mic.connect("notify::active", self._on_mic_toggled)
+        mic.add(self._mic)
+
+        fix = Adw.PreferencesGroup(title="Troubleshooting")
+        page.add(fix)
+        button_row(fix, "Camera Not Listed in Apps? Refresh the Camera Service", "view-refresh-symbolic", self._on_refresh_wireplumber)
+        button_row(fix, "Set Up USB Debugging on the Phone", "help-about-symbolic", self._on_usb_steps)
+
+        self.connect("closed", self._on_closed)
+        self._sync_button()
+        if self._session.running and self._session.serial == target["serial"]:
+            GLib.timeout_add(300, self._start_preview)
+        in_thread(self._load_sizes)
+
+    # sizes
+    def _set_sizes(self, sizes):
+        self._loading = True
+        self._size.set_model(Gtk.StringList.new(sizes))
+        want = self._session.size if self._session.running else ls.default_size(sizes, self._target["wireless"])
+        self._size.set_selected(sizes.index(want) if want in sizes else 0)
+        self._loading = False
+
+    def _load_sizes(self):
+        rc, out, _ = run([SCRCPY, "-s", self._target["serial"], "--list-camera-sizes"], timeout=25)
+        sizes = ls.camera_sizes(out) if rc == 0 else []
+        if sizes:
+            on_main(self._set_sizes, sizes)
+
+    def _chosen(self):
+        facing = "front" if self._facing.get_selected() == 1 else "back"
+        item = self._size.get_selected_item()
+        return facing, (item.get_string() if item else ls.CAM_DEFAULT_SIZES[1])
+
+    # start / stop
+    def _sync_button(self):
+        running = self._session.running
+        self._button.set_label("Stop Camera" if running else "Start Camera")
+        self._button.remove_css_class("suggested-action" if running else "destructive-action")
+        self._button.add_css_class("destructive-action" if running else "suggested-action")
+
+    def _on_start_stop(self, _button):
+        if self._session.running:
+            self._session.restarting = False
+            self._session.stop()
+            self._stop_preview()
+            self._sync_button()
+            self._win._phone_refresh_soon()
+            return
+        self._start()
+
+    def _start(self):
+        device = find_loopback_device()
+        if device is None:
+            self._win._toast("The virtual camera is missing: register Lucciola's key in Startup & Security")
+            return
+        facing, size = self._chosen()
+        try:
+            self._session.start(device, self._target["serial"], self._target["label"], self._target["wireless"], facing, size, self._win._on_camera_exit)
+        except GLib.Error as e:
+            self._win._toast(f"Could not start the camera: {e.message}")
+            return
+        self._sync_button()
+        GLib.timeout_add(700, self._start_preview)
+        self._win._toast(f"Camera running: pick {CAM_LABEL} in any app")
+        self._win._phone_refresh_soon()
+
+    def _on_setting_changed(self, *_args):
+        # A change while streaming restarts the producer with the new
+        # parameters (a first-user finding: it applied only to the next start).
+        if not self._session.running or self._loading:
+            return
+        if self._restart_id:
+            GLib.source_remove(self._restart_id)
+        self._restart_id = GLib.timeout_add(400, self._restart)
+
+    def _restart(self):
+        self._restart_id = None
+        if self._session.running:
+            self._session.restarting = True
+            proc, self._session.proc = self._session.proc, None
+            proc.send_signal(2)
+            self._stop_preview()
+            GLib.timeout_add(400, self._deferred_start)
+        return False
+
+    def _deferred_start(self):
+        self._session.restarting = False
+        if not self._session.running:
+            self._start()
+            # A format change leaves PipeWire's node with stale caps: refresh.
+            GLib.timeout_add(900, lambda: (self._session.running and run(["systemctl", "--user", "restart", "wireplumber"], timeout=10), False)[1])
+        return False
+
+    # preview
+    def _start_preview(self):
+        if not self._session.running or self._preview is not None:
+            return False
+        try:
+            pipeline = Gst.parse_launch(f"v4l2src device={self._session.device} ! videoconvert ! gtk4paintablesink name=lucciola_sink")
+        except GLib.Error:
+            self._win._toast("Preview unavailable")
+            return False
+        sink = pipeline.get_by_name("lucciola_sink")
+        self._picture.set_paintable(sink.get_property("paintable"))
+        self._picture.set_visible(True)
+        pipeline.set_state(Gst.State.PLAYING)
+        self._preview = pipeline
+        return False
+
+    def _stop_preview(self):
+        if self._preview is not None:
+            self._preview.set_state(Gst.State.NULL)
+            self._preview = None
+        self._picture.set_paintable(None)
+        self._picture.set_visible(False)
+
+    # microphone
+    def _on_mic_toggled(self, switch, _pspec):
+        if switch.get_active() == self._session.mic_running:
+            return
+        if switch.get_active():
+            try:
+                self._session.start_mic(self._target["serial"])
+                self._win._toast(f"{MIC_LABEL} is available in calls")
+            except GLib.Error as e:
+                switch.set_active(False)
+                self._win._toast(f"Could not start the microphone: {e.message}")
+        else:
+            self._session.stop_mic()
+
+    # remedies
+    def _on_refresh_wireplumber(self, _row):
+        rc, _, _ = run(["systemctl", "--user", "restart", "wireplumber"], timeout=10)
+        self._win._toast("Camera service refreshed: reopen the app that needed the camera" if rc == 0 else "Could not restart the camera service")
+
+    def _on_usb_steps(self, _row):
+        steps = (
+            ("1", "Enable Developer Options", "Settings, About phone, tap Build number seven times"),
+            ("2", "Turn on USB Debugging", "Settings, System, Developer options, USB debugging"),
+            ("3", "Connect With a Data Cable", "Some charging cables carry no data: if nothing happens, try another"),
+            ("4", "Authorize This Computer", "On the phone, accept Allow USB debugging and tick Always allow"),
+        )
+        page = preferences_page()
+        group = Adw.PreferencesGroup(title="Set Up USB Debugging", description="Once per phone; afterwards it just connects. Over Wi-Fi, the Phone page has Set Up Wireless instead.")
+        page.add(group)
+        for number, title, subtitle in steps:
+            row = Adw.ActionRow(title=title, subtitle=subtitle)
+            badge = Gtk.Label(label=number)
+            badge.add_css_class("title-3")
+            badge.set_width_chars(2)
+            row.add_prefix(badge)
+            group.add(row)
+        toolbar = Adw.ToolbarView()
+        toolbar.add_top_bar(Adw.HeaderBar())
+        toolbar.set_content(page)
+        dialog = Adw.Dialog()
+        dialog.set_title("Phone Setup")
+        dialog.set_content_width(460)
+        dialog.set_child(toolbar)
+        dialog.present(self)
+
+    def _on_closed(self, _dialog):
+        if self._restart_id:
+            GLib.source_remove(self._restart_id)
+        self._stop_preview()
+
+
 class SystemWindow(Adw.ApplicationWindow):
     def __init__(self, app, start_page="overview"):
         super().__init__(application=app)
@@ -329,6 +653,11 @@ class SystemWindow(Adw.ApplicationWindow):
         self._phone_signal_ids = []
         self._phone_refresh_pending = False
         self._phone_name_guard = False
+        self._cam = CameraSession()
+        self._adb_devices = []
+        self._adb_services = []
+        self._cam_device = None
+        self._usb_rows = []
         self._current_page = "overview"
 
         for name, cb in (
@@ -1398,11 +1727,11 @@ class SystemWindow(Adw.ApplicationWindow):
 
         tools = Adw.PreferencesGroup(title="More Tools")
         page.add(tools)
-        cam = Adw.ActionRow(title="Phone Camera", subtitle="Use an Android phone as a webcam")
+        cam = Adw.ActionRow(title="Phone Camera", subtitle="Use an Android phone as a webcam, from the Phone page")
         cam.add_prefix(icon("camera-web-symbolic"))
         cam.add_suffix(icon("go-next-symbolic"))
         cam.set_activatable(True)
-        cam.connect("activated", lambda *_: self._launch_desktop("dev.margine.PhoneCam.desktop"))
+        cam.connect("activated", lambda *_: self.show_page("phone"))
         tools.add(cam)
         return page
 
@@ -1982,6 +2311,13 @@ class SystemWindow(Adw.ApplicationWindow):
         self._phone_devices_group = Adw.PreferencesGroup(title="Devices")
         page.add(self._phone_devices_group)
 
+        self._phone_usb_group = Adw.PreferencesGroup(
+            title="Camera Over USB",
+            description="A phone on the cable with USB debugging on can be the webcam with or without KDE Connect.",
+        )
+        page.add(self._phone_usb_group)
+        self._phone_usb_group.set_visible(False)
+
         more = Adw.PreferencesGroup(title="More")
         page.add(more)
         row = Adw.ActionRow(title="Get KDE Connect for the Phone", subtitle="Android, from Google Play or F-Droid; iPhone with fewer functions")
@@ -2031,11 +2367,27 @@ class SystemWindow(Adw.ApplicationWindow):
         self._phone_missing.set_visible(not installed)
         for group in (self._phone_pc, self._phone_devices_group, self._phone_more):
             group.set_visible(installed)
-        if not installed:
-            return
         self._phone_look_button.set_sensitive(False)
 
+        def camera_worker():
+            # The camera side: the loopback device, the phones adb sees,
+            # the wireless debugging services on the network.
+            self._cam_device = find_loopback_device()
+            _, out, _ = run([ADB, "devices", "-l"], timeout=15)
+            self._adb_devices = ls.adb_devices(out)
+            _, out, _ = run([ADB, "mdns", "services"], timeout=10)
+            self._adb_services = ls.mdns_services(out)
+
+        if not installed:
+            def worker_usb():
+                camera_worker()
+                on_main(self._set_phone, gen, "", [])
+
+            in_thread(worker_usb)
+            return
+
         def worker():
+            camera_worker()
             name = self._kdec_call(KDEC_PATH, KDEC_DAEMON, "announcedName")
             name = name[0] if name else ""
             ids = self._kdec_call(KDEC_PATH, KDEC_DAEMON, "devices", GLib.Variant("(bb)", (False, False)))
@@ -2067,6 +2419,7 @@ class SystemWindow(Adw.ApplicationWindow):
                 devices.append({
                     "id": dev_id, "path": path, "name": props.get("name") or dev_id, "type": props.get("type") or "",
                     "state": state, "key": props.get("verificationKey") or "",
+                    "addresses": list(props.get("reachableAddresses") or []),
                     "battery": battery.get("charge") if battery.get("hasBattery", True) else None,
                     "charging": bool(battery.get("isCharging", False)),
                     "functions": functions,
@@ -2088,6 +2441,7 @@ class SystemWindow(Adw.ApplicationWindow):
         for row in self._phone_rows:
             self._phone_devices_group.remove(row)
         self._phone_rows = []
+        self._set_usb_camera_rows()
         if not devices:
             row = Adw.ActionRow(title="No phone yet", subtitle="Open KDE Connect on the phone, on the same Wi-Fi: this PC appears there, and the phone appears here")
             row.add_prefix(icon("phone-symbolic"))
@@ -2123,6 +2477,8 @@ class SystemWindow(Adw.ApplicationWindow):
                 row.add_row(switch)
             if any(p == "kdeconnect_runcommand" for p, *_ in device["functions"]):
                 button_row(row, "Add Ready-Made Commands", "utilities-terminal-symbolic", lambda *_: self._on_phone_commands(device))
+            if state == "connected" and "phone" in device["type"]:
+                self._add_camera_rows(row, device)
             button_row(row, "Forget This Phone…", "edit-delete-symbolic", lambda *_: self._on_phone_unpair(device), "destructive-action")
             return row
         row = Adw.ActionRow(title=device["name"], subtitle=subtitle)
@@ -2247,6 +2603,189 @@ class SystemWindow(Adw.ApplicationWindow):
             on_main(self._toast, f"This PC is {name} to the phone now")
 
         in_thread(worker)
+
+    # ── the phone as a webcam ────────────────────────────────────────
+
+    def _usb_phones(self):
+        return [d for d in self._adb_devices if not d["wireless"]]
+
+    def _wireless_device_for(self, device):
+        """An adb device already connected over the network at one of the
+        phone's addresses, as adb lists it."""
+        for d in self._adb_devices:
+            if d["wireless"] and any(d["serial"].startswith(a + ":") for a in device["addresses"]):
+                return d
+        return None
+
+    def _add_camera_rows(self, expander, device):
+        stream = self._cam.info()
+        own_stream = stream if stream and (stream["serial"].split(":")[0] in device["addresses"] or not stream["wireless"]) else None
+        usb = [d for d in self._usb_phones() if d["state"] == "device"]
+        wireless = self._wireless_device_for(device) or ls.connect_service_for(self._adb_services, device["addresses"])
+        status = ls.webcam_status(self._cam_device, own_stream, bool(usb), wireless is not None)
+        cam_row = info_row(expander, "Camera", "camera-web-symbolic", status)
+        cam_row.set_subtitle_lines(3)
+        if self._cam_device is None:
+            button_row(expander, "Register Lucciola's Key", "security-high-symbolic", lambda *_: self.show_page("startup"))
+            return
+        button_row(expander, "Use as a Webcam…", "camera-web-symbolic", lambda *_: self._on_phone_webcam(device), "suggested-action")
+        if wireless is None:
+            button_row(expander, "Set Up Wireless…", "network-wireless-symbolic", lambda *_: self._on_phone_wireless_setup(device))
+        if own_stream:
+            button_row(expander, "Stop the Camera", "media-playback-stop-symbolic", lambda *_: self._stop_camera(), "destructive-action")
+
+    def _set_usb_camera_rows(self):
+        for row in self._usb_rows:
+            self._phone_usb_group.remove(row)
+        self._usb_rows = []
+        phones = self._usb_phones()
+        show = bool(phones) or not os.path.exists(KDECONNECTD)
+        self._phone_usb_group.set_visible(show)
+        if not show:
+            return
+        if self._cam_device is None:
+            row = Adw.ActionRow(title="Virtual camera missing", subtitle="Lucciola's key must be registered for the camera module to load: Startup & Security")
+            row.add_prefix(icon("dialog-warning-symbolic"))
+            self._phone_usb_group.add(row)
+            self._usb_rows.append(row)
+            return
+        for d in phones:
+            label = d["model"] or d["serial"]
+            if d["state"] == "device":
+                row = Adw.ActionRow(title=label, subtitle="Connected over USB and authorized")
+                button = Gtk.Button(label="Use as a Webcam…", valign=Gtk.Align.CENTER)
+                button.connect("clicked", lambda *_, t={"serial": d["serial"], "label": label, "wireless": False}: self._open_camera(t))
+                row.add_suffix(button)
+            elif d["state"] == "unauthorized":
+                row = Adw.ActionRow(title=label, subtitle="Accept the USB debugging prompt on the phone")
+            else:
+                row = Adw.ActionRow(title=label, subtitle=f"adb says {d['state']}")
+            row.add_prefix(icon("phone-symbolic"))
+            self._phone_usb_group.add(row)
+            self._usb_rows.append(row)
+        if not phones:
+            row = Adw.ActionRow(title="No phone on the cable", subtitle="USB debugging on, a data cable, and the prompt accepted on the phone")
+            row.add_prefix(icon("phone-symbolic"))
+            self._phone_usb_group.add(row)
+            self._usb_rows.append(row)
+
+    def _open_camera(self, target):
+        if self._cam.running and self._cam.serial != target["serial"]:
+            self._toast(f"The camera is already streaming from {self._cam.label}: stop it first")
+            return
+        CameraDialog(self, target).present(self)
+
+    def _stop_camera(self):
+        self._cam.restarting = False
+        self._cam.stop()
+        self._toast("Camera stopped")
+        self._phone_refresh_soon()
+
+    def _on_camera_exit(self, proc, result, proc_ref):
+        try:
+            proc.wait_finish(result)
+        except GLib.Error:
+            pass
+        if self._cam.proc is proc_ref:
+            self._cam.proc = None
+            ok = proc.get_if_exited() and proc.get_exit_status() == 0
+            if not ok:
+                self._toast("The phone's camera stream ended on its own")
+        if not self._cam.restarting:
+            self._phone_refresh_soon()
+
+    def _on_phone_webcam(self, device):
+        """USB first; then a connection already there over the network; then
+        the wireless debugging service adb sees for this phone."""
+        usb = [d for d in self._usb_phones() if d["state"] == "device"]
+        if usb:
+            self._open_camera({"serial": usb[0]["serial"], "label": device["name"], "wireless": False})
+            return
+        already = self._wireless_device_for(device)
+        if already and already["state"] == "device":
+            self._open_camera({"serial": already["serial"], "label": device["name"], "wireless": True})
+            return
+        service = ls.connect_service_for(self._adb_services, device["addresses"])
+        if service is None:
+            self._phone_wireless_off(device)
+            return
+        serial = f"{service['host']}:{service['port']}"
+
+        def worker():
+            rc, out, err = run([ADB, "connect", serial], timeout=30)
+            verdict = ls.adb_result(out + err, rc)
+            on_main(self._after_connect, device, serial, verdict)
+
+        in_thread(worker)
+
+    def _after_connect(self, device, serial, verdict):
+        if verdict == "ok":
+            self._open_camera({"serial": serial, "label": device["name"], "wireless": True})
+        elif verdict == "not-paired":
+            self._on_phone_wireless_setup(device)
+        else:
+            self._toast("The phone did not answer over Wi-Fi: is wireless debugging on?")
+
+    def _phone_wireless_off(self, device):
+        if self._wireless_device_for(device) is None and not device["addresses"]:
+            self._toast("The phone is not on the network right now")
+            return
+
+        def remind():
+            def worker():
+                self._kdec_call(device["path"] + "/ping", "org.kde.kdeconnect.device.ping", "sendPing",
+                                GLib.Variant("(s)", ("Lucciola: turn on Wireless debugging (Developer options) to use the camera",)))
+                on_main(self._toast, "Reminder sent to the phone")
+
+            in_thread(worker)
+
+        self._confirm(
+            "Wireless Debugging Is Off on the Phone",
+            "The camera over Wi-Fi needs Wireless debugging on (Settings, System, Developer options; the quick settings tile does it in one tap). "
+            "A reminder can be sent to the phone now. Over USB, plug the cable and press Use as a Webcam again.",
+            "Send a Reminder", remind,
+        )
+
+    def _on_phone_wireless_setup(self, device):
+        """Pairing with the code the phone shows, once per phone."""
+        host = Adw.EntryRow(title="Phone address")
+        host.set_text(device["addresses"][0] if device["addresses"] else "")
+        port = Adw.EntryRow(title="Pairing port (shown with the code)")
+        port.set_input_purpose(Gtk.InputPurpose.DIGITS)
+        code = Adw.EntryRow(title="Pairing code (six digits)")
+        code.set_input_purpose(Gtk.InputPurpose.DIGITS)
+        group = Adw.PreferencesGroup()
+        for row in (host, port, code):
+            group.add(row)
+
+        def go():
+            h, p, c = host.get_text().strip(), port.get_text().strip(), code.get_text().strip()
+
+            def worker():
+                rc, out, err = run([ADB, "pair", f"{h}:{p}", c], timeout=60)
+                verdict = ls.adb_result(out + err, rc)
+                on_main(self._after_pair, device, verdict, ls.last_line(out + err))
+
+            in_thread(worker)
+
+        dialog = self._confirm(
+            "Set Up the Camera Over Wi-Fi",
+            "On the phone: Settings, System, Developer options, Wireless debugging, then Pair device with pairing code. "
+            "Copy the port and the six digits it shows. This permission is separate from KDE Connect's: it lets this PC drive the phone, "
+            "for the camera and the microphone. You can revoke it any time in the same screen.",
+            "Pair", go, extra=group,
+        )
+        dialog.set_response_enabled("go", False)
+        for row in (host, port, code):
+            row.connect("changed", lambda *_: dialog.set_response_enabled("go", ls.pair_input_ok(host.get_text().strip(), port.get_text().strip(), code.get_text().strip())))
+
+    def _after_pair(self, device, verdict, detail):
+        if verdict == "ok":
+            self._toast("Paired: the phone connects over Wi-Fi from now on")
+            self._refresh_phone()
+            GLib.timeout_add(1500, lambda: (self._on_phone_webcam(device), False)[1])
+        else:
+            self._toast(f"Pairing did not work: {detail or 'check the port and the code'}")
 
     # ══════════════════════ help, report, about ═════════════════════
 

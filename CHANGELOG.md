@@ -7,6 +7,24 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (2026-10-21, Phone Camera in the Phone page)
+- **Phone Camera is a section of the Phone page**, not a window of its own
+  any more: in the phone's card, Use as a Webcam opens the camera dialog
+  (lens, resolution, Start, preview, the two remedies), with the stream
+  going on when the dialog closes and a Stop in the card. The Phone Camera
+  launcher stays and opens the page. A Camera Over USB group covers a
+  phone on the cable with or without KDE Connect.
+- **Over Wi-Fi**: Set Up Wireless pairs the PC with the phone's wireless
+  debugging once (address from KDE Connect, port and six-digit code from
+  the phone); from then on the page finds the phone through adb's mDNS
+  discovery and connects by itself, or sends a reminder to the phone when
+  wireless debugging is off. 720p over the air, 1080p over the cable.
+- **The phone's microphone**: a switch in the camera dialog makes it
+  "Lucciola Phone Mic", a PipeWire source any call can pick (pw-loopback
+  plus scrcpy's microphone capture; Android 11 or later).
+- The guide's phone chapter says it, with the native USB webcam of recent
+  Pixels first for who has the cable.
+
 ### Added (2026-10-21, Phone page)
 - **A Phone page in Lucciola System**, over KDE Connect's daemon on the
   session bus: the name this PC shows to the phone (editable), the devices

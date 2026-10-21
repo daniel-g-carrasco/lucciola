@@ -12,8 +12,9 @@
 #     matching scrcpy-server, which MUST match the client version.
 #   - adb from Fedora android-tools; gstreamer1-plugin-gtk4 for the
 #     GUI's embedded preview (Gtk4PaintableSink).
-#   - The GUI itself ships in system_files (usr/libexec/margine/
-#     phone-cam-gui + dev.margine.PhoneCam.desktop).
+#   - The window is the Phone page of Lucciola System (usr/libexec/margine/
+#     system-gui, Camera section of the phone's card; until 2026-10-21 a
+#     separate phone-cam-gui); dev.margine.PhoneCam.desktop opens that page.
 set ${SET_X:+-x} -eou pipefail
 source /ctx/00-common.sh
 

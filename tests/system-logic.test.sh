@@ -152,6 +152,14 @@ check "Help, shortcuts and Report a Problem are in the menu" bash -c "grep -q '\
 check "the pages exist" bash -c "grep -q '\"startup\"' '$GUI' && grep -q '\"login\"' '$GUI' && grep -q '\"hardware\"' '$GUI' && grep -q '\"features\"' '$GUI' && grep -q '\"apps\"' '$GUI' && grep -q '\"phone\"' '$GUI'"
 check "the Phone page talks to the daemon by its bus name and never runs kdeconnect-cli" bash -c "grep -q 'KDEC_BUS = \"org.kde.kdeconnect\"' '$GUI' && ! grep -q 'kdeconnect-cli' '$GUI'"
 check "the Phone page writes Lucciola's default (notifications to the phone off) through the daemon" grep -q 'PHONE_DEFAULT_OFF' "$GUI"
+# The phone as a webcam lives in the Phone page now: the old window is gone,
+# its launcher opens the page, the camera runs scrcpy and adb by path as the
+# user, and the microphone goes through pw-loopback (pactl is not in the image).
+check "the separate Phone Camera window is gone" [ ! -e "$SF/usr/libexec/margine/phone-cam-gui" ]
+check "the Phone Camera launcher opens the Phone page" bash -c "grep -qx 'Exec=/usr/libexec/margine/system-gui --page phone' '$SF/usr/share/applications/dev.margine.PhoneCam.desktop' && grep -qx 'StartupWMClass=dev.margine.System' '$SF/usr/share/applications/dev.margine.PhoneCam.desktop'"
+check "the camera uses scrcpy, adb and pw-loopback by path" bash -c "grep -q 'SCRCPY = \"/usr/bin/scrcpy\"' '$GUI' && grep -q 'ADB = \"/usr/bin/adb\"' '$GUI' && grep -q 'PW_LOOPBACK = \"/usr/bin/pw-loopback\"' '$GUI' && ! grep -q 'pactl' '$GUI'"
+check "the camera always constrains the size and never shows a window" bash -c "grep -q -- '--camera-size=' '$GUI' && grep -q -- '--no-window' '$GUI'"
+check "wireless pairing takes the code as an argument, never typed into adb" bash -c "grep -q 'ADB, \"pair\", f\"{h}:{p}\", c' '$GUI'"
 for k in $(grep -oE '"key": "[a-z-]+"' "$GUI" | cut -d'"' -f4); do
   check "the window's feature '$k' has its verbs in the helper" bash -c "echo \"$verbs\" | grep -qx '$k-on' && echo \"$verbs\" | grep -qx '$k-off'"
 done

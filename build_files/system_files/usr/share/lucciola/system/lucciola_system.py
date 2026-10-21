@@ -593,3 +593,110 @@ def device_sort_key(device):
     """Connected first, then wanting to pair, then paired, then the rest; by name inside."""
     order = {"wants-to-pair": 0, "connected": 1, "paired-away": 2, "requested": 3, "available": 4}
     return (order.get(device.get("state"), 9), (device.get("name") or "").lower())
+
+
+# ── the phone as a webcam (adb, scrcpy, the loopback device) ─────────────
+
+CAM_LABELS = ("Lucciola Phone Cam", "Margine Phone Cam", "Phone Cam")
+CAM_DEFAULT_SIZES = ("1920x1080", "1280x720", "640x480")
+ADB_CONNECT_SERVICE = "_adb-tls-connect._tcp"
+ADB_PAIR_SERVICE = "_adb-tls-pairing._tcp"
+
+
+def adb_devices(text):
+    """`adb devices -l`: the devices after the header line, each with its
+    serial, state (device, unauthorized, offline, ...), model when printed,
+    and whether it came over the network (a host:port serial or an mDNS
+    name) rather than USB."""
+    out = []
+    for line in text.splitlines()[1:]:
+        parts = line.split()
+        if len(parts) < 2 or parts[0].startswith("*"):
+            continue
+        serial, state = parts[0], parts[1]
+        model = ""
+        for p in parts[2:]:
+            if p.startswith("model:"):
+                model = p[len("model:"):].replace("_", " ")
+        wireless = ":" in serial or "_adb-tls-connect" in serial
+        out.append({"serial": serial, "state": state, "model": model, "wireless": wireless})
+    return out
+
+
+def mdns_services(text):
+    """`adb mdns services`: name, type, host:port per line after the header."""
+    out = []
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) != 3 or not parts[1].startswith("_adb"):
+            continue
+        host, _, port = parts[2].rpartition(":")
+        if not host or not port.isdigit():
+            continue
+        out.append({"name": parts[0], "type": parts[1], "host": host, "port": int(port)})
+    return out
+
+
+def connect_service_for(services, addresses):
+    """The adb connect service of the phone KDE Connect sees at one of these
+    addresses; the only one when there is one and no address matches."""
+    connects = [s for s in services if s["type"] == ADB_CONNECT_SERVICE]
+    for s in connects:
+        if s["host"] in addresses:
+            return s
+    if len(connects) == 1 and not addresses:
+        return connects[0]
+    return None
+
+
+def camera_sizes(text):
+    """`scrcpy --list-camera-sizes`: the WxH sizes, largest first."""
+    sizes = {m.group(0) for m in re.finditer(r"\b(\d{3,5}x\d{3,5})\b", text)}
+    return sorted(sizes, key=lambda s: int(s.split("x")[0]) * int(s.split("x")[1]), reverse=True)
+
+
+def default_size(sizes, wireless):
+    """1080p over the cable, 720p over the air (lesson of the first run: an
+    unconstrained phone pushes its whole sensor and the apps give up); the
+    largest size that fits when the exact one is missing."""
+    want = "1280x720" if wireless else "1920x1080"
+    if want in sizes:
+        return want
+    limit = 1280 if wireless else 1920
+    for s in sizes:
+        if int(s.split("x")[0]) <= limit:
+            return s
+    return sizes[-1] if sizes else want
+
+
+def pair_input_ok(host, port, code):
+    """What `adb pair` takes: a host, a port, the six digits the phone shows."""
+    host_ok = bool(re.match(r"^[A-Za-z0-9.:-]{1,253}$", host or ""))
+    port_ok = (port or "").isdigit() and 0 < int(port) < 65536
+    code_ok = bool(re.match(r"^[0-9]{6}$", (code or "").strip()))
+    return host_ok and port_ok and code_ok
+
+
+def adb_result(text, rc):
+    """One word for adb's answer to pair or connect."""
+    low = (text or "").lower()
+    if "successfully paired" in low or "connected to" in low or "already connected" in low:
+        return "ok"
+    if "failed to authenticate" in low or "pairing" in low and "fail" in low or "wrong" in low:
+        return "not-paired"
+    if "connection refused" in low or "no route" in low or "timed out" in low or "unable to connect" in low:
+        return "unreachable"
+    return "ok" if rc == 0 else "error"
+
+
+def webcam_status(device, stream, adb_ready, wireless_ready):
+    """The sentence under the Camera row."""
+    if device is None:
+        return "Virtual camera missing: Lucciola's key must be registered for its module to load"
+    if stream:
+        return f"Streaming {stream['size']} from the {stream['facing']} camera to Lucciola Phone Cam" + (" over Wi-Fi" if stream["wireless"] else " over USB")
+    if wireless_ready:
+        return "Ready over Wi-Fi"
+    if adb_ready:
+        return "Ready over USB"
+    return "Not connected for the camera: a USB cable with USB debugging, or the wireless setup"

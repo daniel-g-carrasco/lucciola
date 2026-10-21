@@ -1,10 +1,12 @@
 [Desktop Entry]
 Type=Application
 Name=Phone Camera
-Comment=Use your Android phone as a webcam
-Exec=/usr/libexec/margine/phone-cam-gui
+Comment=Use your Android phone as a webcam, over USB or Wi-Fi. Opens the Phone page of Lucciola System.
+Exec=/usr/libexec/margine/system-gui --page phone
 Icon=dev.margine.PhoneCam
 Terminal=false
 Categories=AudioVideo;Video;GTK;
 Keywords=webcam;camera;phone;android;scrcpy;
 StartupNotify=true
+# The page lives in Lucciola System, whose window carries that app id.
+StartupWMClass=dev.margine.System

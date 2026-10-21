@@ -235,5 +235,28 @@ check("commands_config survives a broken file", ls.commands_config("commands=not
 check("device_sort_key: connected before available", ls.device_sort_key({"state": "connected", "name": "b"}) < ls.device_sort_key({"state": "available", "name": "a"}))
 check("the ready-made commands use Lucciola's own lock", any(c == "/usr/libexec/lucciola/lock" for _, c in ls.PHONE_COMMANDS))
 
+
+# the phone as a webcam: adb, mDNS, sizes, pairing input
+devs = ls.adb_devices("List of devices attached\n3A061F        device usb:1-2 product:shiba model:Pixel_8 transport_id:1\n192.168.2.254:40255   unauthorized transport_id:2\n* daemon started\n")
+check("adb_devices: serial, state, model, link", devs == [{"serial": "3A061F", "state": "device", "model": "Pixel 8", "wireless": False}, {"serial": "192.168.2.254:40255", "state": "unauthorized", "model": "", "wireless": True}])
+check("adb_devices: empty list", ls.adb_devices("List of devices attached\n\n") == [])
+svc = ls.mdns_services("List of discovered mdns services\nadb-1-x\t_adb-tls-connect._tcp\t192.168.2.254:40255\nadb-1-x\t_adb-tls-pairing._tcp\t192.168.2.254:41111\nadb-2-y\t_adb-tls-connect._tcp\t192.168.2.9:4000\n")
+check("mdns_services parses host and port", svc[0] == {"name": "adb-1-x", "type": "_adb-tls-connect._tcp", "host": "192.168.2.254", "port": 40255})
+check("connect_service_for picks the phone KDE Connect sees", ls.connect_service_for(svc, ["192.168.2.9"])["port"] == 4000)
+check("connect_service_for: no match, two phones: none", ls.connect_service_for(svc, ["10.0.0.1"]) is None)
+check("connect_service_for: one phone, no address: that one", ls.connect_service_for(svc[:1], [])["host"] == "192.168.2.254")
+check("camera_sizes largest first", ls.camera_sizes("- 1280x720\n- 1920x1080\n- 640x480\n") == ["1920x1080", "1280x720", "640x480"])
+check("default_size: 720p over the air", ls.default_size(["4080x3072", "1920x1080", "1280x720"], True) == "1280x720")
+check("default_size: 1080p over the cable", ls.default_size(["4080x3072", "1920x1080", "1280x720"], False) == "1920x1080")
+check("default_size: the largest that fits", ls.default_size(["4080x3072", "1600x1200", "800x600"], False) == "1600x1200")
+check("pair_input_ok accepts host, port and six digits", ls.pair_input_ok("192.168.2.254", "41111", "123456") is True)
+check("pair_input_ok refuses a short code", ls.pair_input_ok("192.168.2.254", "41111", "12345") is False)
+check("pair_input_ok refuses a bad port", ls.pair_input_ok("192.168.2.254", "70000", "123456") is False)
+check("adb_result: paired", ls.adb_result("Successfully paired to 192.168.2.254:41111 [guid=adb-x]", 0) == "ok")
+check("adb_result: not paired", ls.adb_result("failed to authenticate to 192.168.2.254:40255", 1) == "not-paired")
+check("adb_result: unreachable", ls.adb_result("failed to connect to 192.168.2.254:5555: Connection refused", 1) == "unreachable")
+check("webcam_status: streaming sentence", "720" in ls.webcam_status("/dev/video21", {"size": "1280x720", "facing": "back", "wireless": True}, True, True))
+check("webcam_status: module missing", "key" in ls.webcam_status(None, None, False, False))
+
 print("system-logic: all checks passed" if fails == 0 else f"system-logic: {fails} failed")
 sys.exit(1 if fails else 0)
