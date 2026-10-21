@@ -402,6 +402,26 @@ systemctl --global enable gcr-ssh-agent.socket
   || { echo "ERROR: gcr-ssh-agent.socket is not enabled for users" >&2; exit 1; }
 log "ssh agent: gcr-ssh-agent.socket enabled for every user ($(rpm -q --qf '%{NAME}-%{VERSION}' gcr))"
 
+# Apps in the Noctalia palette: 28-app-colors.toml turns on Noctalia's gtk3,
+# gtk4 and kcolorscheme templates. Every Flatpak app may read those colours,
+# read-only, and Qt apps use the KDE platform theme that reads kdeglobals
+# (lucciola-flatpak-theme-access.service, at boot). The colours of the Zen
+# and Vesktop community templates are carried into those Flatpaks
+# (lucciola-app-colors-flatpak, a user path unit and the same service at
+# login). Before 2026-10-22 only Spola, whose manifest asks for gtk-4.0,
+# followed the palette among the Flatpak apps.
+systemctl enable lucciola-flatpak-theme-access.service
+systemctl --global enable lucciola-app-colors-flatpak.path lucciola-app-colors-flatpak.service
+[[ -L /etc/systemd/system/multi-user.target.wants/lucciola-flatpak-theme-access.service ]] \
+  || { echo "ERROR: lucciola-flatpak-theme-access.service is not enabled" >&2; exit 1; }
+[[ -L /etc/systemd/user/default.target.wants/lucciola-app-colors-flatpak.path \
+   && -L /etc/systemd/user/default.target.wants/lucciola-app-colors-flatpak.service ]] \
+  || { echo "ERROR: lucciola-app-colors-flatpak is not enabled for users" >&2; exit 1; }
+[[ -x /usr/libexec/lucciola/flatpak-theme-access && -x /usr/libexec/lucciola/app-colors-flatpak \
+   && -s /usr/share/lucciola/noctalia/28-app-colors.toml ]] \
+  || { echo "ERROR: the app colour helpers or 28-app-colors.toml are missing" >&2; exit 1; }
+log "app colours: Flatpak apps read the Noctalia palette (GTK, Qt), Zen and Vesktop carried for every user"
+
 # 5f. /var/lib/greetd and /var/lib/noctalia-greeter come from tmpfiles.d at
 #     boot, on fresh installs and updated systems alike (lucciola-greeter.conf
 #     says why), so the image carries no copy of them.

@@ -7,6 +7,30 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Added (2026-10-22, app colours)
+- **Apps follow the Noctalia palette, Flatpak ones included.** Noctalia's
+  gtk3, gtk4 and kcolorscheme templates are on by default
+  (`28-app-colors.toml`; choosing templates in Noctalia's settings replaces
+  the list). Until now only apps outside Flatpak followed: checked app by
+  app on 2026-10-22, Bazaar, Loupe, Snapshot, Calculator, Text Editor and
+  the rest saw no stylesheet, even with access to the whole home; only
+  Spola, whose manifest asks for `gtk-4.0`, did.
+  `lucciola-flatpak-theme-access.service` gives every Flatpak app read-only
+  access to `~/.config/gtk-3.0`, `gtk-4.0` and `kdeglobals` at boot, and
+  sets `QT_QPA_PLATFORMTHEME=kde`, so the KDE runtime's platform theme
+  reads the palette (ZapZap: Fusion with a blue selection before, Breeze in
+  the palette after; Warehouse: the accent buttons in the palette). The
+  GTK folders also hold GTK's bookmarks, the list of favourite folders,
+  which apps can now read, never write.
+- **Zen and Vesktop in their Flatpak versions.** Noctalia's community
+  templates for them, once turned on in its settings, write where the
+  Flatpaks cannot read; `lucciola-app-colors-flatpak`, a user path unit
+  and the same service at login, copies their output into the Zen profiles
+  and the Vesktop theme folder, with the one preference `userChrome.css`
+  needs (not `devtools.chrome.enabled`, which the template also sets). The
+  community repository carries no licence, so Lucciola ships no copy of the
+  templates. `tests/app-colors.test.sh`, two mutants, the validator's 6d.
+
 ### Changed (2026-10-21, Phone Camera in the Phone page, rebuilt)
 - **Phone Camera is a section of the Phone page**, not a window of its own
   any more, and it is rebuilt: Lucciola drives scrcpy's own server on the

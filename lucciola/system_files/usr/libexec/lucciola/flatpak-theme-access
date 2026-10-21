@@ -1,0 +1,31 @@
+#!/usr/bin/bash
+# lucciola flatpak-theme-access: let every Flatpak app read, and only read,
+# the colours Noctalia writes for apps. Run at boot by
+# lucciola-flatpak-theme-access.service; idempotent.
+#
+#   ~/.config/gtk-3.0, ~/.config/gtk-4.0   gtk.css and noctalia.css (the gtk3
+#       and gtk4 templates). Flatpak brings xdg-config/gtk-4.0 into the app's
+#       own config folder, where GTK looks for gtk.css; access to the home, or
+#       to the two files alone, does not (2026-10-22: Warehouse, Loupe and
+#       Calculator saw no stylesheet; with the folder, Warehouse's accent
+#       buttons took the palette). The folders also hold GTK's bookmarks, the
+#       list of favourite folders: apps can read it from now on, never write.
+#   ~/.config/kdeglobals   the KDE colour scheme (the kcolorscheme template).
+#       Qt reads it through the KDE platform theme the KDE runtime carries;
+#       QT_QPA_PLATFORMTHEME=kde selects it, and an app without that plugin
+#       (one that bundles its own Qt) falls back to its usual theme.
+#       2026-10-22, ZapZap: Fusion and a blue selection before, Breeze in the
+#       palette after; the theme without kdeglobals is light Breeze, so the
+#       two always go together.
+#
+# One user who wants none of it:
+#   flatpak override --user --nofilesystem=xdg-config/gtk-3.0 \
+#     --nofilesystem=xdg-config/gtk-4.0 --nofilesystem=xdg-config/kdeglobals \
+#     --unset-env=QT_QPA_PLATFORMTHEME
+set -euo pipefail
+command -v flatpak >/dev/null || exit 0
+exec flatpak override --system \
+  --filesystem=xdg-config/gtk-3.0:ro \
+  --filesystem=xdg-config/gtk-4.0:ro \
+  --filesystem=xdg-config/kdeglobals:ro \
+  --env=QT_QPA_PLATFORMTHEME=kde

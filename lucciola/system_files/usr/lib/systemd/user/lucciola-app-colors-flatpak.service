@@ -1,0 +1,10 @@
+[Unit]
+Description=Carry Noctalia's app colours into the Zen and Vesktop Flatpaks
+Documentation=file:///usr/libexec/lucciola/app-colors-flatpak
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/lucciola/app-colors-flatpak
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,76 @@
+#!/usr/bin/bash
+# lucciola app-colors-flatpak: carry the colours two of Noctalia's community
+# templates write into the Flatpak versions of their apps, which cannot read
+# the files where the templates leave them. Run by
+# lucciola-app-colors-flatpak.path when those files change, and at login.
+#
+#   Zen      the zen-browser template writes two stylesheets to
+#            ~/.cache/noctalia/zen-browser and imports them into the
+#            profiles under ~/.zen; the Flatpak keeps its profiles under
+#            ~/.var/app/app.zen_browser.zen/.zen and sees no ~/.cache. The
+#            stylesheets are copied into each profile's chrome folder and
+#            imported from there, and user.js gets the one preference
+#            userChrome.css needs. Not devtools.chrome.enabled, which the
+#            template also sets: a theme does not need the browser console
+#            to run privileged code. Zen picks it up when it starts again.
+#   Vesktop  the discord template writes its themes to
+#            ~/.config/vesktop/themes; the Flatpak reads
+#            ~/.var/app/dev.vencord.Vesktop/config/vesktop/themes. Copied
+#            there; choosing the theme in Vesktop is a one-time step.
+#
+# The templates stay Noctalia's (enabled in its settings, Templates; the
+# community repository carries no licence, so Lucciola ships no copy of
+# them). Nothing happens for an app that is not installed as a Flatpak, or
+# whose template is not enabled.
+set -euo pipefail
+
+copy_if_changed() {  # copy_if_changed SRC DEST
+  cmp -s "$1" "$2" 2>/dev/null && return 0
+  install -m 0644 "$1" "$2.tmp.$$" && mv -f "$2.tmp.$$" "$2"
+}
+
+ensure_import() {  # ensure_import CSS-FILE IMPORTED-NAME: the import first, once
+  local css=$1 name=$2 line tmp
+  line="@import url(\"$name\");"
+  touch "$css"
+  [[ "$(head -n 1 "$css")" == "$line" ]] && ! tail -n +2 "$css" | grep -qF "$name" && return 0
+  tmp="$css.tmp.$$"
+  { printf '%s\n' "$line"; grep -vF "$name" "$css" || true; } > "$tmp"
+  mv -f "$tmp" "$css"
+}
+
+ensure_pref() {  # ensure_pref USER-JS: user stylesheets on, once
+  local js=$1 pref='user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);'
+  touch "$js"
+  grep -qxF "$pref" "$js" && return 0
+  { grep -vF 'toolkit.legacyUserProfileCustomizations.stylesheets' "$js" || true; printf '%s\n' "$pref"; } > "$js.tmp.$$"
+  mv -f "$js.tmp.$$" "$js"
+}
+
+zen_src="${XDG_CACHE_HOME:-$HOME/.cache}/noctalia/zen-browser"
+zen_root="$HOME/.var/app/app.zen_browser.zen/.zen"
+if [[ -s "$zen_src/zen-userChrome.css" && -d "$zen_root" ]]; then
+  while IFS= read -r -d '' prefs; do
+    profile=$(dirname "$prefs")
+    mkdir -p "$profile/chrome"
+    for part in userChrome userContent; do
+      [[ -s "$zen_src/zen-$part.css" ]] || continue
+      copy_if_changed "$zen_src/zen-$part.css" "$profile/chrome/noctalia-$part.css"
+      ensure_import "$profile/chrome/$part.css" "noctalia-$part.css"
+    done
+    ensure_pref "$profile/user.js"
+    echo "zen: $(basename "$profile")"
+  done < <(find "$zen_root" -mindepth 2 -maxdepth 2 -type f -name prefs.js -print0)
+fi
+
+ves_src="${XDG_CONFIG_HOME:-$HOME/.config}/vesktop/themes"
+ves_dst="$HOME/.var/app/dev.vencord.Vesktop/config/vesktop/themes"
+if [[ -d "$HOME/.var/app/dev.vencord.Vesktop" ]]; then
+  for theme in "$ves_src"/noctalia*.theme.css; do
+    [[ -s "$theme" ]] || continue
+    mkdir -p "$ves_dst"
+    copy_if_changed "$theme" "$ves_dst/$(basename "$theme")"
+    echo "vesktop: $(basename "$theme")"
+  done
+fi
+exit 0

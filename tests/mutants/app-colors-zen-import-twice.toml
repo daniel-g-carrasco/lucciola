@@ -1,0 +1,8 @@
+# The Zen bridge runs at every login and every palette change: without
+# removing its old import line first, userChrome.css would grow one import
+# per run.
+name = "app-colors-zen-import-twice"
+file = "lucciola/system_files/usr/libexec/lucciola/app-colors-flatpak"
+old = '''  { printf '%s\n' "$line"; grep -vF "$name" "$css" || true; } > "$tmp"'''
+new = '''  { printf '%s\n' "$line"; cat "$css"; } > "$tmp"'''
+must_fail = "bash tests/app-colors.test.sh"

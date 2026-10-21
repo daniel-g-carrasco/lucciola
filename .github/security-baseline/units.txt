@@ -25,6 +25,7 @@ etc/systemd/system/multi-user.target.wants/firewalld.service
 etc/systemd/system/multi-user.target.wants/flatpak-preinstall.service
 etc/systemd/system/multi-user.target.wants/intel_lpmd.service
 etc/systemd/system/multi-user.target.wants/lm_sensors.service
+etc/systemd/system/multi-user.target.wants/lucciola-flatpak-theme-access.service
 etc/systemd/system/multi-user.target.wants/lvm-devices-import.path
 etc/systemd/system/multi-user.target.wants/lvm-devices-import.service
 etc/systemd/system/multi-user.target.wants/machines.target
@@ -94,6 +95,8 @@ etc/systemd/system/timers.target.wants/uupd.timer
 etc/systemd/system/user@.service.wants/uresourced.service
 etc/systemd/system/vmtoolsd.service.requires/vgauthd.service
 etc/systemd/user/basic.target.wants/systemd-tmpfiles-setup.service
+etc/systemd/user/default.target.wants/lucciola-app-colors-flatpak.path
+etc/systemd/user/default.target.wants/lucciola-app-colors-flatpak.service
 etc/systemd/user/default.target.wants/mpris-proxy.service
 etc/systemd/user/graphical-session-pre.target.wants/xdg-user-dirs.service
 etc/systemd/user/pipewire.service.wants/wireplumber.service
