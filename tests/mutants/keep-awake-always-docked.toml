@@ -1,0 +1,7 @@
+# The desk exception (another monitor on, the closed lid means nothing) must
+# not swallow the bag: a watcher that always sees a desk never locks.
+name = "keep-awake-always-docked"
+file = "lucciola/system_files/usr/libexec/lucciola/keep-awake"
+old = "sys.exit(0 if on else 1)"
+new = "sys.exit(0)"
+must_fail = "bash tests/keep-awake.test.sh"

@@ -6,7 +6,7 @@ local common = require("./lib/common.luau")
 
 local function render()
   local s = common.snapshot()
-  shortcut.setIcon(common.GLYPH_ON, common.GLYPH_IDLE)
+  shortcut.setIcon(common.glyph(s.mode), common.GLYPH_IDLE)
   shortcut.setActive(s.active)
   shortcut.setEnabled(s.ready)
   if s.active then

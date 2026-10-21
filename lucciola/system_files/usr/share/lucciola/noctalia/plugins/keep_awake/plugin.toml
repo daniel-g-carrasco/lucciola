@@ -1,7 +1,9 @@
-# Keep Awake for Lucciola: no suspend, no idle lock, and the lid does nothing,
-# now, until a chosen time, or from a scheduled time. The work is done by
-# /usr/libexec/lucciola/keep-awake (a logind inhibitor in a transient user
-# unit, scheduled starts as transient timers); this plugin is its face:
+# Keep Awake for Lucciola: no suspend, and the lid locks the session instead
+# of suspending it (with --screen the screen stays on and the idle lock away
+# too), now, until a chosen time, or from a scheduled time. The work is done
+# by /usr/libexec/lucciola/keep-awake (a logind inhibitor in a transient user
+# unit that watches the lid, scheduled starts as transient timers); this
+# plugin is its face:
 #
 #   service   -> polls `keep-awake status --json`, runs the commands the UI
 #                entries send through noctalia.state
@@ -17,8 +19,8 @@ plugin_api = 24
 author = "lucciola"
 license = "MIT"
 icon = "zzz-off"
-description = "Keep the laptop awake now, until a time, or from a scheduled time; the lid does nothing."
-tags = ["power", "suspend", "lid"]
+description = "Keep the laptop awake now, until a time, or from a scheduled time; the lid locks the session instead of suspending it."
+tags = ["power", "suspend", "lid", "lock"]
 dependencies = ["systemd"]
 
 [[setting]]
