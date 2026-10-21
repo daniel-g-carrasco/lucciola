@@ -7,6 +7,20 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (2026-10-20, Keep Awake)
+- **Keep Awake no longer leaves the laptop unlocked.** Its one mode kept
+  sleep, the idle lock and the lid switch away together, so a laptop closed
+  in a bag ran unlocked, with its session, keyring and keys open to whoever
+  opened it. The default now keeps sleep away and nothing else: the screen
+  locks on idle as usual, and closing the lid locks the session at once
+  (unless another monitor is on: at a desk a closed lid means nothing) and
+  holds the power profile on power-saver until the lid opens, so the bag is
+  locked and cooler. `--screen` (the panel's "Screen on", the launcher's
+  "screen") keeps the screen on and the idle lock away too, for a talk or a
+  film, two hours unless told otherwise; the lid locks the session all the
+  same. The unit watches the lid through UPower and locks with
+  `/usr/libexec/lucciola/lock`. `tests/keep-awake.test.sh`; two mutants in
+  `tests/mutants/`.
 ### Fixed (2026-10-21, build)
 - **The gaming-native alignment uses one snapshot of the repositories.**
   The plan, the alignment and the check refreshed the metadata each, so

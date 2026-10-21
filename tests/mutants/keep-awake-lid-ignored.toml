@@ -1,0 +1,8 @@
+# Closing the lid must lock the session while Keep Awake holds: a watcher that
+# lets the lid pass is the Keep Awake of 2026-10-20, a laptop carried unlocked
+# in a bag for an hour.
+name = "keep-awake-lid-ignored"
+file = "lucciola/system_files/usr/libexec/lucciola/keep-awake"
+old = '''*"'LidIsClosed': <true>"*)  lid_closed ;;'''
+new = '''*"'LidIsClosed': <true>"*)  : ;;'''
+must_fail = "bash tests/keep-awake.test.sh"
