@@ -138,6 +138,11 @@ jobs:
         # library is gone (Margine's Wayland Scroll Factor line after a move).
         run: bash tests/drop-missing-preload.test.sh
 
+      - name: Stock-Fedora Flatpak remotes tidy
+        # The fedora remotes a Silverblue/Kinoite start leaves behind go,
+        # unless apps came from them. See tests/flatpak-remote-tidy.test.sh.
+        run: bash tests/flatpak-remote-tidy.test.sh
+
       - name: Developer layer helper (ujust lucciola-devmode)
         # Reads the package list, picks what remove may drop, installs and
         # deletes Homebrew: tested on temp files with a fake installer.
@@ -198,6 +203,14 @@ jobs:
         # refuses (no x86-64-v3, Secure Boot without the key, other images,
         # pins) and that it warns about TPM unlock first, is tested.
         run: bash tests/kernel-switch.test.sh
+
+      - name: Pinned Fedora build (the repositories, then Koji)
+        # Noctalia and the kernel reserve's kernel-devel are pinned to a
+        # build the repositories drop. From where each is installed, that
+        # Koji's copy is checked against the release key before dnf sees
+        # it, and what refuses (bad signature, another key, a 404) is
+        # tested with fake dnf5, curl and rpmkeys.
+        run: bash tests/pinned-fedora-build.test.sh
 
       - name: MOK key only in the signing stage
         # The private key is mounted in one RUN, the mok-sign stage's: FROM
@@ -289,5 +302,11 @@ jobs:
           FLATPAK_TEST_REQUIRED: "1"
         run: |
           set -euo pipefail
-          dnf -y -q install flatpak ostree python3
+          # Fedora's mirrors answer 503 now and then (updates-testing on
+          # 2026-10-20): three attempts, then the packages must be there.
+          for i in 1 2 3; do
+            dnf -y -q install flatpak ostree python3 && break
+            echo "dnf attempt $i failed, retrying in 30 s"; sleep 30
+          done
+          rpm -q flatpak ostree python3
           bash tests/flatpak-preinstall-keep.test.sh
