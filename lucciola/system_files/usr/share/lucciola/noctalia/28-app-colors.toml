@@ -1,0 +1,14 @@
+# Apps in the Noctalia palette, through Noctalia's own built-in templates:
+#   gtk3, gtk4     ~/.config/gtk-3.0 and gtk-4.0/noctalia.css, imported by
+#                  gtk.css: GTK 3, GTK 4 and libadwaita apps
+#   kcolorscheme   ~/.config/kdeglobals: Qt apps, through the KDE platform
+#                  theme (Flatpak's KDE runtime carries it)
+# Flatpak apps read them because the image lets them, read-only
+# (lucciola-flatpak-theme-access.service). The templates for single apps,
+# Zen and Vesktop among them, are Noctalia's community ones: enabled in
+# Noctalia's settings, Templates; lucciola-app-colors-flatpak carries their
+# output into the Flatpak versions.
+# Choosing templates in Noctalia's settings replaces this list.
+[theme.templates]
+enable_builtin_templates = true
+builtin_ids = ["gtk3", "gtk4", "kcolorscheme"]

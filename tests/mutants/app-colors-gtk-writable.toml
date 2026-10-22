@@ -1,0 +1,7 @@
+# Every Flatpak app gets the GTK colours read-only: a writable gtk-4.0 would
+# let any app rewrite the stylesheet every other app loads.
+name = "app-colors-gtk-writable"
+file = "lucciola/system_files/usr/libexec/lucciola/flatpak-theme-access"
+old = '''  --filesystem=xdg-config/gtk-4.0:ro \'''
+new = '''  --filesystem=xdg-config/gtk-4.0 \'''
+must_fail = "bash tests/app-colors.test.sh"

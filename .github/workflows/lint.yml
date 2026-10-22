@@ -156,6 +156,13 @@ jobs:
         # opened lid gives the profile back; on fake systemd-run, gdbus and
         # niri. See tests/keep-awake.test.sh.
         run: bash tests/keep-awake.test.sh
+      - name: Apps take the Noctalia palette, Flatpak ones included
+        # lucciola-flatpak-theme-access asks Flatpak for read-only access to
+        # the GTK folders and kdeglobals and for Qt's KDE theme, nothing more;
+        # lucciola-app-colors-flatpak carries the Zen and Vesktop community
+        # templates into those Flatpaks, idempotent, never with
+        # devtools.chrome.enabled. See tests/app-colors.test.sh.
+        run: bash tests/app-colors.test.sh
       - name: Gaming alignment takes a new view of the repositories
         # build_files/custom-kernel/gaming-align.sh on a fake dnf: a view that
         # names a build no mirror holds is thrown away and planned again on

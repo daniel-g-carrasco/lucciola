@@ -603,6 +603,29 @@ fi
 [[ -x /usr/libexec/gcr-ssh-agent ]] && ok "gcr-ssh-agent present" || bad "/usr/libexec/gcr-ssh-agent missing (gcr)"
 
 # ---------------------------------------------------------------------------
+hdr "6d. App colours in the Noctalia palette (Lucciola)"
+# ---------------------------------------------------------------------------
+# 28-app-colors.toml turns on Noctalia's gtk3, gtk4 and kcolorscheme
+# templates; lucciola-flatpak-theme-access.service lets every Flatpak read
+# them, read-only, and points Qt at the KDE platform theme; the user path
+# unit carries the Zen and Vesktop community templates into their Flatpaks.
+if [[ -L /etc/systemd/system/multi-user.target.wants/lucciola-flatpak-theme-access.service ]]; then
+  ok "Flatpak theme access enabled at boot"
+else
+  bad "lucciola-flatpak-theme-access.service is not enabled"
+fi
+if flatpak override --show 2>/dev/null | grep -q 'xdg-config/gtk-4.0:ro'; then
+  ok "Flatpak apps may read the GTK and Qt colours"
+else
+  warn "the global Flatpak override has no xdg-config/gtk-4.0:ro yet (the service sets it at boot)"
+fi
+if [[ -L /etc/systemd/user/default.target.wants/lucciola-app-colors-flatpak.path ]]; then
+  ok "Zen and Vesktop colours carried for every user"
+else
+  bad "lucciola-app-colors-flatpak.path is not enabled for users"
+fi
+
+# ---------------------------------------------------------------------------
 hdr "7. Launchers"
 # ---------------------------------------------------------------------------
 # Margine-branded replacements for the Bluefin app-menu entries we

@@ -1,0 +1,12 @@
+[Unit]
+Description=Let Flatpak apps read the app colours Noctalia writes
+Documentation=file:///usr/libexec/lucciola/flatpak-theme-access
+ConditionPathExists=/usr/bin/flatpak
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/lucciola/flatpak-theme-access
+
+[Install]
+WantedBy=multi-user.target

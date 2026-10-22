@@ -1,0 +1,13 @@
+[Unit]
+Description=Watch the app colours Noctalia writes for Zen and Vesktop
+Documentation=file:///usr/libexec/lucciola/app-colors-flatpak
+
+[Path]
+PathChanged=%C/noctalia/zen-browser/zen-userChrome.css
+PathChanged=%C/noctalia/zen-browser/zen-userContent.css
+PathChanged=%E/vesktop/themes/noctalia.theme.css
+PathChanged=%E/vesktop/themes/noctalia-material.theme.css
+Unit=lucciola-app-colors-flatpak.service
+
+[Install]
+WantedBy=default.target
