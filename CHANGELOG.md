@@ -7,6 +7,33 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-23, the first day with the phone)
+- **No red line at login.** niri-session handed the session's environment
+  to the user manager with a blanket `systemctl --user import-environment`,
+  and systemd 258+ prints "Calling import-environment without a list of
+  variable names is deprecated" on the login screen's terminal, for a
+  moment, at every login. The script now does what upstream niri does:
+  `dbus-update-activation-environment --systemd --all`, one call for D-Bus
+  activation and the user manager, no warning; `dbus-tools` joins the image
+  for it. Patched by content in `lucciola/build.sh`, checked by the build
+  and by the validator.
+- **A folder opens in Files under niri, not in Disk Usage Analyzer.** GNOME
+  names its default applications in `gnome-mimeapps.list`, which counts
+  only when the desktop calls itself GNOME; under niri nothing named a
+  handler for folders, and the first registered one won: Disk Usage
+  Analyzer, which is what Browse the Phone in Files opened.
+  `niri-mimeapps.list` is a link to GNOME's list, so niri takes the same
+  defaults for folders, images, mail and the rest; a choice made in
+  Settings still wins.
+- **The phone's card stays open.** Ring, Send a File, every switch ended
+  in a refresh that rebuilt the card closed. The card remembers that it was
+  open.
+- **Use as a Webcam sits with the phone's other actions**, right after
+  Browse the Phone in Files, instead of at the bottom under the switches.
+- **A page shown again within half a minute keeps what it has.** Every
+  click in the sidebar reread the page from the system and rebuilt it; the
+  periodic and the focus refresh keep it fresh anyway.
+
 ### Fixed (2026-10-23, build)
 - **Every build of main failed from 2026-10-22: Noctalia's fallback to
   Koji looked for rpm-trust where the Lucciola stage mounts nothing.**
