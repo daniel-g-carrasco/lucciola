@@ -73,6 +73,17 @@ check "...and are listed"                                                     ba
 lists "a a b" "a b b"; expect "# nothing"
 guard --enforce
 check "duplicate names (multilib) are one package (rc $RC)"                  [ "$RC" = 0 ]
+lists "a kmod-v4l2loopback-7.3.0-4.cachyos1.fc45.x86_64" "a kmod-v4l2loopback-7.3.0-cachyos1.fc45.x86_64"; expect "# nothing"
+guard --enforce
+check "a kernel module rebuilt for a new kernel is the same package (rc $RC)" [ "$RC" = 0 ]
+check "...nothing added, nothing removed"                                     says "0 added, 0 removed"
+lists "a" "a kmod-v4l2loopback-7.3.0-cachyos1.fc45.x86_64"; expect "# nothing"
+guard --enforce
+check "a kernel module gone for good still fails (rc $RC)"                   [ "$RC" = 1 ]
+check "...by its module name"                                                 says "kmod-v4l2loopback 2026-10-20 <why>"
+lists "a" "a kmod-v4l2loopback-7.3.0-cachyos1.fc45.x86_64"; expect "kmod-v4l2loopback 2026-10-18 the loopback camera left"
+guard --enforce
+check "...and is expected by its module name (rc $RC)"                       [ "$RC" = 0 ]
 
 lists "a" "a"; expect "nautilus"
 guard
