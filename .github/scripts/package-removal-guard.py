@@ -12,7 +12,9 @@ made the base-trim step remove more than it was written for, and images
 without Nautilus and Ptyxis were published with every check green: nothing
 compared what shipped yesterday with what ships today. This does.
 
-Every package added or removed goes to the summary. A removed package must
+Every package added or removed goes to the summary. A kernel module package akmods built
+(kmod-<module>-<kernel version>-<module version>) counts by its module:
+kmod-<module>, whatever kernel it was built for. A removed package must
 be listed in --expected (build_files/expected-removals.txt):
 
     <package name>  <YYYY-MM-DD, the day the removal was decided>  [why]
@@ -38,9 +40,22 @@ import sys
 NAME_RE = re.compile(r"^[A-Za-z0-9._+-]+$")
 
 
+KMOD_RE = re.compile(r"^kmod-(.+?)-\d+\.\d+[^-]*-")
+
+
+def family(name):
+    """The name a package keeps across kernels. akmods names the module
+    package after the kernel it was built for (kmod-v4l2loopback-7.3.0-
+    4.cachyos1.fc45.x86_64), so every kernel bump read as a removal and an
+    addition (main stopped on 2026-10-23, 7.3.0-cachyos1 to 7.3.0-4):
+    kmod-<module> is what must not leave the image."""
+    m = KMOD_RE.match(name)
+    return f"kmod-{m.group(1)}" if m else name
+
+
 def read_names(path):
     with open(path, encoding="utf-8") as f:
-        return {ln.strip() for ln in f if ln.strip() and not ln.startswith("#")}
+        return {family(ln.strip()) for ln in f if ln.strip() and not ln.startswith("#")}
 
 
 def read_expected(path):

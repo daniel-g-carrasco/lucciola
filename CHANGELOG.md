@@ -7,6 +7,17 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-23, build)
+- **A kernel bump no longer stops the main build at the package-removal
+  guard.** akmods names the module package after the kernel it was built
+  for (`kmod-v4l2loopback-7.3.0-4.cachyos1...`), so the guard that compares
+  the new image's packages with the published image's read every kernel
+  bump as one package removed and one added, and stopped main (7.3.0
+  cachyos1 to 7.3.0-4, 2026-10-23). A module package now counts by its
+  module, `kmod-<module>`, whatever kernel it was built for; a module gone
+  for good still fails, by that name. Three cases in
+  `tests/package-removal-guard.test.sh`, a mutant.
+
 ### Fixed (2026-10-23, the first day with the phone)
 - **No red line at login.** niri-session handed the session's environment
   to the user manager with a blanket `systemctl --user import-environment`,
