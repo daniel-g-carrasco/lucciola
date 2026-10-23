@@ -1,7 +1,7 @@
 {
-  "about": "Texts of the Welcome to Lucciola window (/usr/libexec/margine/welcome), drawn in this order. Edit them with `just edit` (tools/content-editor). Commands go between ` marks.",
+  "about": "Texts of the Welcome to Lucciola window (/usr/libexec/margine/welcome), drawn in this order. Edit them with `just edit` (tools/content-editor). Commands go between ` marks, bold words between ** marks, and a link looks like [the guide](guide). A new line breaks the line, an empty line starts a paragraph.",
   "window_title": "Welcome to Lucciola",
-  "intro": "Welcome. Here is what is worth knowing on the first day; the guide has the rest.",
+  "intro": "Welcome to Lucciola, a distro born out of a love for simplicity and calm.\n\nIf you're here, you may already know the benefits of an atomic distribution, a performance-tuned CachyOS kernel, and the beautiful, production-ready combination of niri and Noctalia. If not, [read more here](guide#h-what).\n\nLet's start by learning the keyboard shortcuts that make managing your windows easier. If any of them don't suit you, you can always change them later.",
   "sections": [
     {
       "id": "keys",
@@ -9,9 +9,10 @@
       "blocks": [
         {
           "type": "text",
-          "text": "Super is the key with the Windows logo. Windows open side by side in columns, on a strip that runs past the edge of the screen: the keys move you along it.",
-          "dim": true
+          "text": "In Lucciola, the niri window manager arranges windows side by side in columns, along a horizontal strip that extends beyond the edges of the screen."
         },
+        {"type": "text", "text": "Use the keyboard shortcuts below to navigate and manage your windows."},
+        {"type": "text", "text": "On most keyboards, “Super” is the key with the Windows logo.", "dim": true},
         {
           "type": "keys",
           "rows": [
@@ -36,23 +37,21 @@
       "id": "updates",
       "title": "updates",
       "blocks": [
-        {"type": "text", "text": "Lucciola updates itself in the background. You only restart."},
+        {
+          "type": "text",
+          "text": "Lucciola updates itself in the background, without you even noticing. All you have to do is restart once the update is ready."
+        },
         {
           "type": "items",
           "items": [
-            "The system: every day the new version downloads and waits next to the one you run. A notification tells you when it is ready, and it starts at your next restart.",
-            "Apps: twice a day, except when the battery is low or the connection is metered.",
-            "A way back: every update keeps the previous version. If one goes wrong, restart and choose the second entry in the boot menu."
+            "A notification lets you know when the updated system image is ready. The update takes effect the next time you restart.",
+            "Apps are updated twice a day, unless the battery is low or you're using a metered connection.",
+            "Lucciola always gives you a way back: every system update keeps the previous version available. If an update goes wrong, restart and select the second entry in the boot menu."
           ]
         },
         {
           "type": "text",
-          "text": "Lucciola System, in the dock, shows your version and whether a newer one is waiting. From there you can update now, check the system or go back a version. It never restarts the computer by itself."
-        },
-        {
-          "type": "text",
-          "text": "Homebrew does not come with Lucciola. It comes with the developer tools, VS Code included: `ujust lucciola-devmode`, then a restart. Apps come from Bazaar, and command-line tools can also go in a Toolbox (`toolbox create`, then `toolbox enter`). Once Homebrew is in, Lucciola upgrades its packages once a week and Lucciola System lists the ones waiting.",
-          "dim": true
+          "text": "In the dock (the bar at the bottom of the screen), you'll find Lucciola System, marked with a firefly icon. It shows your current system version and whether an update is available.\n\nFrom there, you can update whenever you like, without waiting for the next scheduled update. You can also run system checks or roll back to the previous version.\n\nLucciola System will never restart your computer automatically."
         },
         {"type": "button", "action": "open-system", "label": "Open Lucciola System", "style": "plain"}
       ]
@@ -61,10 +60,49 @@
       "id": "apps",
       "title": "apps",
       "blocks": [
-        {"type": "text", "text": "Bazaar, the app store in the dock, installs apps from Flathub."},
         {
           "type": "text",
-          "text": "On the first start the apps that come with Lucciola download in the background, so some may be missing for a few minutes. GIMP, Inkscape, darktable and OBS Studio are the largest and arrive last.",
+          "text": "To install apps or discover new ones you might find useful, open Bazaar, the app store in the dock."
+        },
+        {
+          "type": "text",
+          "text": "On first boot, Lucciola downloads its default apps in the background, so some may take a few minutes to appear. GIMP, Inkscape, darktable, and OBS Studio are the largest downloads and take the longest to become available.",
+          "dim": true
+        },
+        {
+          "type": "button",
+          "action": "open-app",
+          "app": "io.github.kolunmi.Bazaar.desktop",
+          "label": "Open Bazaar",
+          "style": "plain"
+        }
+      ]
+    },
+    {
+      "id": "extras",
+      "title": "extras",
+      "blocks": [
+        {
+          "type": "text",
+          "text": "Lucciola keeps the system lean, but you can add more whenever you need it. Each of these extras is a single command in the terminal."
+        },
+        {
+          "type": "items",
+          "items": [
+            "**Gaming**: `ujust lucciola-gaming` installs Steam, Lutris, Heroic, Bottles and RetroArch as Flatpaks, plus helpers such as MangoHud and gamescope. If you play every day, or your games need anti-cheat or VR, run `ujust lucciola-gaming-native` instead: it installs Steam, Lutris and RetroArch directly into the system. To remove either one, run the same command with `-remove` at the end.",
+            "**Development**: you can install the development layer by running `ujust lucciola-devmode`. It includes tools such as VS Code (installed natively), a C and C++ compiler, and Homebrew.\n\nOnce Homebrew is installed, Lucciola updates its packages once a week, and Lucciola System shows any pending updates.",
+            "**Virtual machines**: `ujust lucciola-vm` installs virt-manager with QEMU/KVM, UEFI firmware and a software TPM, everything you need to run Windows or another Linux in a window.",
+            "**Docker**: Podman already answers to the `docker` command. If a tool needs Docker's own engine, `ujust lucciola-docker` installs Docker CE in its place.",
+            "**Fedora's kernel**: Lucciola runs the CachyOS kernel. If a kernel update misbehaves on your PC, `ujust lucciola-kernel fedora` switches to the same Lucciola with Fedora's own kernel, from the next restart. `ujust lucciola-kernel cachyos` brings the CachyOS kernel back."
+          ]
+        },
+        {
+          "type": "text",
+          "text": "For development, virtual machines and Docker, add `status` to the command to see what is in place, or `remove` to take it away."
+        },
+        {
+          "type": "text",
+          "text": "These extras install packages into the system itself, so restart once the command is done. After that, system updates take a little longer, because Lucciola adds your extras to every new version.",
           "dim": true
         }
       ]
@@ -76,7 +114,24 @@
       "blocks": [
         {
           "type": "text",
-          "text": "At the next restart a blue screen appears before Lucciola starts. Press a key within 10 seconds, choose Enroll MOK, Continue and Yes, type the password `margine` and choose Reboot. That screen uses a US keyboard layout. This registers Lucciola's key, so the system can start with Secure Boot on."
+          "text": "To start Lucciola with Secure Boot enabled, your computer first needs to trust its signing key. Lucciola has already prepared the request; you just need to confirm it once."
+        },
+        {
+          "type": "items",
+          "items": [
+            "1. Restart your computer. A blue screen called **MOK Manager** will appear before Lucciola starts.",
+            "2. If a countdown appears, press any key within **10 seconds** to open the menu.",
+            "3. Select **Enroll MOK → Continue → Yes**.",
+            "4. Enter the password `margine`, then select **Reboot**."
+          ]
+        },
+        {
+          "type": "text",
+          "text": "This screen uses a US keyboard layout. Nothing appears while you type the password: this is normal."
+        },
+        {
+          "type": "text",
+          "text": "Once the key is registered, Lucciola can start with Secure Boot enabled. If Secure Boot is currently disabled, leave it disabled until you have completed these steps. Afterwards, run `ujust lucciola-secureboot` to check the result and get instructions for enabling it in your computer’s UEFI settings."
         }
       ]
     },
@@ -86,19 +141,14 @@
       "blocks": [
         {
           "type": "text",
-          "text": "The Lucciola Guide, in the dock, covers the rest: updates, going back to a previous version, disk unlock and where to ask for help. A copy ships with the system, so it opens without a network."
+          "text": "You'll find the Lucciola Guide (look for the book icon) in the dock. It covers updates, rolling back to a previous version, unlocking your disk, and where to get help. A local copy is included with the system, so you can read it even when you're offline."
         },
-        {"type": "button", "action": "open-guide", "label": "Open the guide", "style": "cta"},
-        {
-          "type": "text",
-          "text": "Lucciola is experimental and made by one person. If something does not work, write to me: the guide's help section says how.",
-          "dim": true
-        }
+        {"type": "button", "action": "open-guide", "label": "Open the guide", "style": "cta"}
       ]
     }
   ],
   "footer": {
-    "text": "Once closed, this window does not come back by itself. To see it again, press Super Space and look for Lucciola Welcome.",
+    "text": "Once you close this window, it won't appear automatically again. To reopen it, press Super + Space and search for Lucciola Welcome.",
     "close_label": "Close"
   }
 }
