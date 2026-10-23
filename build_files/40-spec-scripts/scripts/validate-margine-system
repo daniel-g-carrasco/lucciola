@@ -603,6 +603,10 @@ else
   if (( IS_LIVE )) && [[ "${XDG_CURRENT_DESKTOP:-}" == niri ]] && command -v busctl >/dev/null; then
     dev="$(busctl --user get-property org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop org.freedesktop.portal.RemoteDesktop AvailableDeviceTypes 2>/dev/null | awk '{print $2}')"
     [[ "$dev" == 7 ]] && ok "the RemoteDesktop portal offers keyboard, pointer and touch" || warn "the RemoteDesktop portal offers device types '${dev:-none}' (7 expected; a user portals.conf in ~/.config may differ)"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 hdr "6b2. The session's first seconds (Lucciola)"
 # ---------------------------------------------------------------------------
 # niri-session hands the environment over through dbus-update-activation-
