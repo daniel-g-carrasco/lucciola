@@ -1,0 +1,8 @@
+# The pinned-build helpers read rpm-trust from /ctx, and the Lucciola stage
+# mounts no system_files there: without the fallback to the image's copy,
+# every main build of 2026-10-22 failed on Noctalia's Koji fallback.
+name = "rpm-trust-ctx-only"
+file = "build_files/00-common.sh"
+old = '''[[ -r "$RPM_TRUST" ]] || RPM_TRUST=/usr/libexec/margine/rpm-trust'''
+new = ''': # the copy under /ctx or nothing'''
+must_fail = "bash tests/pinned-fedora-build.test.sh"

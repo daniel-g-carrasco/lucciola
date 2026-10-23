@@ -7,6 +7,21 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-23, build)
+- **Every build of main failed from 2026-10-22: Noctalia's fallback to
+  Koji looked for rpm-trust where the Lucciola stage mounts nothing.**
+  Fedora 45's release repositories (fedora-repos 45-1) switched
+  updates-testing off, and noctalia-5.3.0-1 is only there until its update
+  goes stable; the pinned-build helper then fetches Fedora's signed copy
+  from Koji, as designed (#39), and verifies it with rpm-trust, which it
+  read from `/ctx/system_files`. The Lucciola stage mounts only
+  `00-common.sh` and its own script from the context, so the helper found
+  no rpm-trust, could not read the release key, and gave up ("is in neither
+  the repositories nor Koji's signed copies"). With no copy beside
+  `00-common.sh` it now reads the one the image already carries,
+  `/usr/libexec/margine/rpm-trust`. Two cases in
+  `tests/pinned-fedora-build.test.sh`, a mutant without the fallback.
+
 ### Added (2026-10-22, app colours)
 - **Apps follow the Noctalia palette, Flatpak ones included.** Noctalia's
   gtk3, gtk4 and kcolorscheme templates are on by default
