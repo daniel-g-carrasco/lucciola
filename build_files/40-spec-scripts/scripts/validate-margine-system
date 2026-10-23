@@ -589,6 +589,32 @@ PY
 fi
 
 # ---------------------------------------------------------------------------
+hdr "6b2. The session's first seconds (Lucciola)"
+# ---------------------------------------------------------------------------
+# niri-session hands the environment over through dbus-update-activation-
+# environment (lucciola/build.sh 2a): no deprecation warning on the login
+# screen. Under niri the default app for a folder comes from
+# niri-mimeapps.list, a link to GNOME's: without it, the first registered
+# handler won (Disk Usage Analyzer opened the phone's folder, 2026-10-23).
+if [[ "$EXPECTED_OS_NAME" != "Lucciola" ]]; then
+  info "skipped: Margine runs GNOME"
+else
+  grep -q 'dbus-update-activation-environment --systemd --all' /usr/bin/niri-session 2>/dev/null \
+    && ok "niri-session hands the environment over without import-environment" \
+    || bad "niri-session still calls import-environment without variables (red warning at login)"
+  [[ -x /usr/bin/dbus-update-activation-environment ]] && ok "dbus-update-activation-environment present (dbus-tools)" || bad "dbus-update-activation-environment missing"
+  if [[ "$(readlink /usr/share/applications/niri-mimeapps.list 2>/dev/null)" == gnome-mimeapps.list ]]; then
+    ok "niri takes GNOME's default applications (niri-mimeapps.list)"
+  else
+    bad "/usr/share/applications/niri-mimeapps.list is not a link to gnome-mimeapps.list: folders open in the first registered app"
+  fi
+  if (( IS_LIVE )) && [[ "${XDG_CURRENT_DESKTOP:-}" == niri ]]; then
+    h="$(XDG_CURRENT_DESKTOP=niri gio mime inode/directory 2>/dev/null | sed -n 's/.*: //p' | head -1)"
+    [[ "$h" == org.gnome.Nautilus.desktop ]] && ok "a folder opens in Files under niri" || warn "a folder opens in '${h:-nothing}' under niri (a user override in ~/.config/mimeapps.list?)"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 hdr "6c. SSH agent for every session (Lucciola)"
 # ---------------------------------------------------------------------------
 # gcr-ssh-agent.socket is enabled for all users by lucciola/build.sh: it

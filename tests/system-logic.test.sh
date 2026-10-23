@@ -150,6 +150,11 @@ check "no terminal command in the window's strings" bash -c "! grep -E '\"[^\"]*
 check "no deprecated dim-label style" bash -c "! grep -q 'dim-label' '$GUI'"
 check "Help, shortcuts and Report a Problem are in the menu" bash -c "grep -q '\"win.help\"' '$GUI' && grep -q '\"win.shortcuts\"' '$GUI' && grep -q '\"win.report\"' '$GUI'"
 check "the pages exist" bash -c "grep -q '\"startup\"' '$GUI' && grep -q '\"login\"' '$GUI' && grep -q '\"hardware\"' '$GUI' && grep -q '\"features\"' '$GUI' && grep -q '\"apps\"' '$GUI' && grep -q '\"phone\"' '$GUI'"
+check "a page shown again within half a minute keeps what it has" bash -c "grep -q '^PAGE_KEEPS_FOR = 30' '$GUI' && grep -q 'self._page_refreshed.get(page_id, 0.0) > PAGE_KEEPS_FOR' '$GUI'"
+check "a phone's card stays open across the refresh every action ends in" bash -c "grep -q 'row.set_expanded(device\\[\"id\"\\] in self._phone_expanded)' '$GUI' && grep -q 'def _on_phone_card_expanded' '$GUI'"
+check "the camera rows sit with the phone's actions, above the switches" bash -c "awk '/Browse the Phone in Files/{b=NR} /self._add_camera_rows\\(row, device\\)/{c=NR} /for plugin, title, blurb, enabled in device/{f=NR} END{exit !(b && c && f && b < c && c < f)}' '$GUI'"
+check "under niri a folder opens in Files: niri takes GNOME's default applications" bash -c "[ \"\$(readlink '$ROOT/lucciola/system_files/usr/share/applications/niri-mimeapps.list')\" = gnome-mimeapps.list ]"
+check "niri-session hands the environment over without the import-environment warning (build 2a)" bash -c "grep -q 'dbus-update-activation-environment --systemd --all' '$ROOT/lucciola/build.sh' && grep -q 'ddcutil dbus-tools' '$ROOT/lucciola/build.sh'"
 check "the Phone page talks to the daemon by its bus name and never runs kdeconnect-cli" bash -c "grep -q 'KDEC_BUS = \"org.kde.kdeconnect\"' '$GUI' && ! grep -q 'kdeconnect-cli' '$GUI'"
 check "the Phone page writes Lucciola's default (notifications to the phone off) through the daemon" grep -q 'PHONE_DEFAULT_OFF' "$GUI"
 # The phone as a webcam lives in the Phone page now: the old window is gone,
