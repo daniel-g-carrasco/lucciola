@@ -59,6 +59,10 @@ matches the base; go through this list first, then bump the number.
   comment says; and a pin whose build never went through Bodhi has no
   signed copy, so the build fails at once, naming the Koji URL it asked
   for.
+- RemoteDesktop portal (lucciola/build.sh step 5g): xdg-desktop-portal-luminous
+  is built from `LUMINOUS_VERSION` against the new release's libraries and
+  Rust; check the spec's BuildRequires against the tag's Cargo.toml and try
+  Remote Input from the phone (KDE Connect) on the new release.
 - Login screen (greetd + Noctalia Greeter, lucciola/build.sh step 5): the
   greeter RPM is built from `NOCTALIA_GREETER_VERSION` against the new
   release's libraries; it needs `wlroots-0.20` (a release that moves to

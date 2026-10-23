@@ -89,6 +89,11 @@ This layer adds:
   closed once (`~/.local/state/lucciola/welcome-due`, `welcome-seen`);
   accounts with Lucciola sessions from before it never see it unasked, and
   "Lucciola Welcome" in the launcher opens it any time;
+- mouse and keyboard from the phone: xdg-desktop-portal-luminous serves the
+  RemoteDesktop portal under niri (the GNOME backend has nothing to offer
+  there), built from its pinned tag (`LUMINOUS_VERSION` and its sha256 in
+  the Containerfile, spec in `luminous/`) and chosen for that portal alone
+  in `etc/xdg-desktop-portal/niri-portals.conf`;
 - the login screen: Noctalia Greeter on greetd, in place of GDM. Noctalia
   Greeter is built from its pinned tag (`NOCTALIA_GREETER_VERSION` and its
   sha256 in the Containerfile, spec in `greeter/`) with Lucciola's

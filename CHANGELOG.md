@@ -7,6 +7,20 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Added (2026-10-24, mouse and keyboard from the phone)
+- **Remote Input works under niri.** KDE Connect's remote input, and
+  anything that moves the pointer or types through the portal, asks the
+  RemoteDesktop portal; the GNOME backend serves it only on Mutter's D-Bus,
+  which niri does not implement, so under niri it offered no device at all.
+  xdg-desktop-portal-luminous (waycrate's backend for wlroots-style
+  compositors, not in Fedora) now ships in the image, built from its pinned
+  tag like the greeter, from the tag's archive checked against its sha256
+  and the crates at the versions Cargo.lock pins. `niri-portals.conf` sends
+  RemoteDesktop, and only that, to it: the GNOME backend keeps screencast,
+  screenshots and the rest. Tried on a laptop on 2026-10-23: the portal
+  offered keyboard, pointer and touch where it had offered nothing, and the
+  phone's keyboard typed on the laptop. The guide's phone chapter says it.
+
 ### Fixed (2026-10-23, build)
 - **A kernel bump no longer stops the main build at the package-removal
   guard.** akmods names the module package after the kernel it was built
