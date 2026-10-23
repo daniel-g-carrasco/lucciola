@@ -150,6 +150,7 @@ check "no terminal command in the window's strings" bash -c "! grep -E '\"[^\"]*
 check "no deprecated dim-label style" bash -c "! grep -q 'dim-label' '$GUI'"
 check "Help, shortcuts and Report a Problem are in the menu" bash -c "grep -q '\"win.help\"' '$GUI' && grep -q '\"win.shortcuts\"' '$GUI' && grep -q '\"win.report\"' '$GUI'"
 check "the pages exist" bash -c "grep -q '\"startup\"' '$GUI' && grep -q '\"login\"' '$GUI' && grep -q '\"hardware\"' '$GUI' && grep -q '\"features\"' '$GUI' && grep -q '\"apps\"' '$GUI' && grep -q '\"phone\"' '$GUI'"
+check "RemoteDesktop under niri: luminous built from its pinned tag, installed by the build, chosen in niri-portals.conf" bash -c "grep -q '^FROM .* AS luminous-rpm' '$ROOT/Containerfile' && grep -qE '^ARG LUMINOUS_SHA256=[0-9a-f]{64}$' '$ROOT/Containerfile' && grep -q 'from=luminous-rpm' '$ROOT/Containerfile' && grep -q 'luminous_rpms=' '$ROOT/lucciola/build.sh' && grep -qx 'org.freedesktop.impl.portal.RemoteDesktop=luminous;' '$ROOT/lucciola/system_files/etc/xdg-desktop-portal/niri-portals.conf' && grep -q 'cargo build --release --locked' '$ROOT/lucciola/luminous/xdg-desktop-portal-luminous.spec'"
 check "the Phone page talks to the daemon by its bus name and never runs kdeconnect-cli" bash -c "grep -q 'KDEC_BUS = \"org.kde.kdeconnect\"' '$GUI' && ! grep -q 'kdeconnect-cli' '$GUI'"
 check "the Phone page writes Lucciola's default (notifications to the phone off) through the daemon" grep -q 'PHONE_DEFAULT_OFF' "$GUI"
 # The phone as a webcam lives in the Phone page now: the old window is gone,

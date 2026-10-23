@@ -27,6 +27,7 @@ err() { echo "[lucciola-build] ERROR: $*" >&2; }
 
 : "${NOCTALIA_VR:?NOCTALIA_VR must be set (the pinned noctalia version-release)}"
 : "${NOCTALIA_GREETER_VERSION:?NOCTALIA_GREETER_VERSION must be set (the Noctalia Greeter tag the greeter-rpm stage built)}"
+: "${LUMINOUS_VERSION:?LUMINOUS_VERSION must be set (the xdg-desktop-portal-luminous tag the luminous-rpm stage built)}"
 # The Fedora tag comes from the base, so the pin holds across a Fedora
 # release: the same version-release, built for the release underneath.
 noctalia_vr="${NOCTALIA_VR}.fc${FEDORA_VER}"
@@ -389,6 +390,34 @@ grep -qx 'OnFailure=gdm.service' /usr/lib/systemd/system/greetd.service.d/50-luc
 # the same). Checked so a change there is noticed.
 grep -q '^After=.*plymouth-quit-wait\.service' /usr/lib/systemd/system/greetd.service \
   || { echo "ERROR: greetd.service no longer waits for Plymouth to quit" >&2; exit 1; }
+
+# 5g. Mouse and keyboard from the phone: the RemoteDesktop portal under niri.
+#     KDE Connect's remote input, and anything else that moves the pointer
+#     or types through the portal, asks org.freedesktop.portal.RemoteDesktop;
+#     the GNOME backend serves it only on Mutter's D-Bus, which niri does not
+#     implement, so under niri it offered no device (AvailableDeviceTypes 0).
+#     xdg-desktop-portal-luminous, built from its pinned tag by the
+#     Containerfile's luminous-rpm stage, serves it through niri's virtual
+#     pointer and keyboard protocols; niri-portals.conf sends RemoteDesktop,
+#     and only that, to it (AvailableDeviceTypes 7, checked on a laptop on
+#     2026-10-23: the phone's keyboard typed on the laptop). D-Bus starts it
+#     on demand through its user unit.
+shopt -s nullglob
+luminous_rpms=(/ctx/luminous-rpm/xdg-desktop-portal-luminous-"${LUMINOUS_VERSION}"-*.rpm)
+shopt -u nullglob
+(( ${#luminous_rpms[@]} == 1 )) || { echo "ERROR: expected one xdg-desktop-portal-luminous-${LUMINOUS_VERSION} RPM in /ctx/luminous-rpm, found ${#luminous_rpms[@]}" >&2; exit 1; }
+log "installing ${luminous_rpms[0]##*/} (RemoteDesktop portal for niri)"
+dnf5 -y --setopt=install_weak_deps=False install "${luminous_rpms[0]}"
+for f in /usr/libexec/xdg-desktop-portal-luminous /usr/share/xdg-desktop-portal/portals/luminous.portal \
+         /usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.luminous.service \
+         /usr/lib/systemd/user/xdg-desktop-portal-luminous.service; do
+  [[ -e "$f" ]] || { echo "ERROR: $f missing after the luminous install" >&2; exit 1; }
+done
+grep -q 'RemoteDesktop' /usr/share/xdg-desktop-portal/portals/luminous.portal \
+  || { echo "ERROR: luminous.portal no longer lists RemoteDesktop" >&2; exit 1; }
+grep -qx 'org.freedesktop.impl.portal.RemoteDesktop=luminous;' /etc/xdg-desktop-portal/niri-portals.conf \
+  || { echo "ERROR: niri-portals.conf does not send RemoteDesktop to luminous" >&2; exit 1; }
+log "remote desktop under niri: $(rpm -q xdg-desktop-portal-luminous)"
 
 # An SSH agent in every session: GNOME's gcr-ssh-agent, socket-activated
 # for all users. It offers the keys in ~/.ssh, asks a passphrase in a dialog

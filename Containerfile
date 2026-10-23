@@ -44,6 +44,10 @@ ARG BASE_IMAGE=ghcr.io/ublue-os/silverblue-main:45
 # read the same value (see the greeter-rpm stage).
 ARG NOCTALIA_GREETER_VERSION=1.6.0
 ARG NOCTALIA_GREETER_SHA256=f23ebf07cbe4508971c08b0b81d2b5bfc4ec1ec45605d8f8fb01b799743a70b6
+# xdg-desktop-portal-luminous's pinned tag and archive sha256, the same way
+# (see the luminous-rpm stage).
+ARG LUMINOUS_VERSION=0.1.21
+ARG LUMINOUS_SHA256=d6df0ac024409de9e38f0890799b0ef3eaf71156692cc48fc0fe9059f79e8b58
 
 # ----- Build context: scripts that should NOT end up in the final image -----
 FROM scratch AS ctx
@@ -106,6 +110,27 @@ RUN --mount=type=cache,dst=/var/cache \
     --mount=type=tmpfs,dst=/tmp \
     env NOCTALIA_GREETER_VERSION="${NOCTALIA_GREETER_VERSION}" \
         NOCTALIA_GREETER_SHA256="${NOCTALIA_GREETER_SHA256}" \
+        bash /src/build-rpm.sh
+
+# ----- xdg-desktop-portal-luminous: an RPM built from its pinned tag -----
+# The RemoteDesktop portal backend for niri (lucciola/build.sh step 5g):
+# mouse and keyboard from the phone through KDE Connect, which needs the
+# RemoteDesktop portal, and niri's GNOME backend has no device to offer
+# there. Not in Fedora; built here like the greeter, from the tag's archive
+# checked against its sha256, the crates at the versions Cargo.lock pins.
+# v0.1.21 is commit 5674aa3b89cc3456085909ce0c9a4d701d8e5981. To move the
+# tag: set the version and the sha256 of
+# https://github.com/waycrate/xdg-desktop-portal-luminous/archive/refs/tags/v<version>.tar.gz
+# (the ARGs at the top), check the spec's BuildRequires against the tag's
+# Cargo.toml, test remote input from the phone.
+FROM ${BASE_IMAGE} AS luminous-rpm
+ARG LUMINOUS_VERSION
+ARG LUMINOUS_SHA256
+COPY lucciola/luminous/ /src/
+RUN --mount=type=cache,dst=/var/cache \
+    --mount=type=tmpfs,dst=/tmp \
+    env LUMINOUS_VERSION="${LUMINOUS_VERSION}" \
+        LUMINOUS_SHA256="${LUMINOUS_SHA256}" \
         bash /src/build-rpm.sh
 
 # ----- The build: Universal Blue silverblue-main:45 unless overridden -----
@@ -192,6 +217,7 @@ ARG NOCTALIA_VR=5.3.0-1
 # The greeter RPM comes from the greeter-rpm stage; build.sh installs exactly
 # the version that stage built (the ARG at the top).
 ARG NOCTALIA_GREETER_VERSION
+ARG LUMINOUS_VERSION
 COPY lucciola/system_files/ /
 # The website's single page carries the guide; a copy ships so the Lucciola
 # Guide launcher opens it without a network (/usr/libexec/margine/guide-open).
@@ -201,10 +227,12 @@ COPY site/index.html /usr/share/lucciola/guide/index.html
 RUN --mount=type=bind,from=lucciola-ctx,source=/build.sh,target=/ctx/lucciola/build.sh \
     --mount=type=bind,from=ctx,source=/00-common.sh,target=/ctx/00-common.sh \
     --mount=type=bind,from=greeter-rpm,source=/out,target=/ctx/greeter-rpm \
+    --mount=type=bind,from=luminous-rpm,source=/out,target=/ctx/luminous-rpm \
     --mount=type=cache,dst=/var/cache \
     --mount=type=cache,dst=/var/log \
     --mount=type=tmpfs,dst=/tmp \
     env NOCTALIA_VR="${NOCTALIA_VR}" NOCTALIA_GREETER_VERSION="${NOCTALIA_GREETER_VERSION}" \
+        LUMINOUS_VERSION="${LUMINOUS_VERSION}" \
         bash /ctx/lucciola/build.sh
 
 # ----- Signed kernel in place, initramfs, residue sweep, lint -----

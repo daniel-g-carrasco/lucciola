@@ -589,6 +589,24 @@ PY
 fi
 
 # ---------------------------------------------------------------------------
+hdr "6b3. Mouse and keyboard from the phone: RemoteDesktop under niri (Lucciola)"
+# ---------------------------------------------------------------------------
+# xdg-desktop-portal-luminous serves the RemoteDesktop portal under niri
+# (lucciola/build.sh 5g); niri-portals.conf sends that portal, and only
+# that, to it. Without it the GNOME backend offers no device under niri.
+if [[ "$EXPECTED_OS_NAME" != "Lucciola" ]]; then
+  info "skipped: Margine runs GNOME"
+else
+  rpm -q xdg-desktop-portal-luminous >/dev/null 2>&1 && ok "xdg-desktop-portal-luminous installed" || bad "xdg-desktop-portal-luminous missing"
+  grep -qx 'org.freedesktop.impl.portal.RemoteDesktop=luminous;' /etc/xdg-desktop-portal/niri-portals.conf 2>/dev/null \
+    && ok "niri-portals.conf sends RemoteDesktop to luminous" || bad "niri-portals.conf does not send RemoteDesktop to luminous"
+  if (( IS_LIVE )) && [[ "${XDG_CURRENT_DESKTOP:-}" == niri ]] && command -v busctl >/dev/null; then
+    dev="$(busctl --user get-property org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop org.freedesktop.portal.RemoteDesktop AvailableDeviceTypes 2>/dev/null | awk '{print $2}')"
+    [[ "$dev" == 7 ]] && ok "the RemoteDesktop portal offers keyboard, pointer and touch" || warn "the RemoteDesktop portal offers device types '${dev:-none}' (7 expected; a user portals.conf in ~/.config may differ)"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 hdr "6c. SSH agent for every session (Lucciola)"
 # ---------------------------------------------------------------------------
 # gcr-ssh-agent.socket is enabled for all users by lucciola/build.sh: it
