@@ -113,6 +113,10 @@ MIC_NODE = "lucciola_phone_mic"
 SIZE_HINT = "720p over Wi-Fi, 1080p over USB"
 REFRESH_EVERY = 10 * 60   # seconds between unasked refreshes
 REFRESH_ON_FOCUS = 5 * 60  # refresh when the window comes back after this long
+# A page shown again within this many seconds keeps what it has: the timer
+# and the focus refresh keep it fresh, and a reread at every click in the
+# sidebar made every page blink and rebuild (2026-10-23).
+PAGE_KEEPS_FOR = 30
 
 PAGES = (
     ("overview", "Overview", "computer-symbolic"),
@@ -1328,6 +1332,8 @@ class SystemWindow(Adw.ApplicationWindow):
         self._profile = "stock"
         self._phone_devices = []
         self._phone_rows = []
+        self._phone_expanded = set()   # device ids whose card is open: a refresh rebuilds the rows
+        self._page_refreshed = {}
         self._phone_signal_ids = []
         self._phone_refresh_pending = False
         self._phone_name_guard = False
@@ -1443,9 +1449,11 @@ class SystemWindow(Adw.ApplicationWindow):
         self._content_title.set_title(title)
         self._content_page.set_title(title)
         self._split.set_show_content(True)
-        self._refresh_page(page_id)
+        if time.monotonic() - self._page_refreshed.get(page_id, 0.0) > PAGE_KEEPS_FOR:
+            self._refresh_page(page_id)
 
     def _refresh_page(self, page_id):
+        self._page_refreshed[page_id] = time.monotonic()
         if page_id == "overview":
             self._refresh_overview()
         elif page_id == "features":
@@ -3159,12 +3167,18 @@ class SystemWindow(Adw.ApplicationWindow):
         if state in ("connected", "paired-away"):
             row = Adw.ExpanderRow(title=device["name"], subtitle=subtitle)
             row.add_prefix(icon(icon_name))
+            # Every action and switch ends in a refresh that rebuilds the
+            # rows: the card stays open when it was open.
+            row.set_expanded(device["id"] in self._phone_expanded)
+            row.connect("notify::expanded", self._on_phone_card_expanded, device["id"])
             if state == "connected":
-                button_row(row, "Ring the Phone", "audio-volume-high-symbolic", lambda *_: self._phone_simple(device, "findmyphone", "org.kde.kdeconnect.device.findmyphone", "ring", "Ringing the phone"))
+                button_row(row, "Ring the Phone", "audio-volume-high-symbolic", lambda *_: self._phone_simple(device, "findmyphone", "org.kde.kdeconnect.device.findmyphone", "ring", "Ringing the phone: it sounds until you touch it"))
                 button_row(row, "Send a File…", "document-send-symbolic", lambda *_: self._on_phone_send(device))
                 if any(p == "kdeconnect_sftp" and on for p, _t, _b, on in device["functions"]):
                     # The plugin mounts the phone (sshfs) and opens the mount point in Files.
                     button_row(row, "Browse the Phone in Files", "folder-remote-symbolic", lambda *_: self._phone_simple(device, "sftp", "org.kde.kdeconnect.device.sftp", "startBrowsing", "Opening the phone in Files"))
+                if "phone" in device["type"]:
+                    self._add_camera_rows(row, device)
             for plugin, title, blurb, enabled in device["functions"]:
                 switch = Adw.SwitchRow(title=title, subtitle=blurb)
                 switch.set_active(enabled)
@@ -3172,8 +3186,6 @@ class SystemWindow(Adw.ApplicationWindow):
                 row.add_row(switch)
             if any(p == "kdeconnect_runcommand" for p, *_ in device["functions"]):
                 button_row(row, "Add Ready-Made Commands", "utilities-terminal-symbolic", lambda *_: self._on_phone_commands(device))
-            if state == "connected" and "phone" in device["type"]:
-                self._add_camera_rows(row, device)
             button_row(row, "Forget This Phone…", "edit-delete-symbolic", lambda *_: self._on_phone_unpair(device), "destructive-action")
             return row
         row = Adw.ActionRow(title=device["name"], subtitle=subtitle)
@@ -3196,6 +3208,12 @@ class SystemWindow(Adw.ApplicationWindow):
             cancel.connect("clicked", lambda *_: self._phone_simple(device, None, KDEC_DEVICE, "cancelPairing", "Pairing request withdrawn"))
             row.add_suffix(cancel)
         return row
+
+    def _on_phone_card_expanded(self, row, _pspec, device_id):
+        if row.get_expanded():
+            self._phone_expanded.add(device_id)
+        else:
+            self._phone_expanded.discard(device_id)
 
     def _phone_simple(self, device, plugin, iface, method, done):
         """A method with no arguments on the device or one of its plugins."""

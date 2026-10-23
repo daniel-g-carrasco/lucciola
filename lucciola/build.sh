@@ -56,9 +56,9 @@ noctalia_vr="${NOCTALIA_VR}.fc${FEDORA_VER}"
 #    does not carry it). The Fedora package brings the udev rule that
 #    opens /dev/i2c-* to the logged-in user and the modules-load entry
 #    for i2c-dev.
-log "installing niri, xwayland-satellite, noctalia-${noctalia_vr}, ddcutil"
+log "installing niri, xwayland-satellite, noctalia-${noctalia_vr}, ddcutil, dbus-tools"
 dnf_install_pinned noctalia "$noctalia_vr" "$(rpm -E %_arch)" \
-  --setopt=install_weak_deps=False niri xwayland-satellite ddcutil
+  --setopt=install_weak_deps=False niri xwayland-satellite ddcutil dbus-tools
 installed_vr="$(rpm -q --qf '%{VERSION}-%{RELEASE}\n' noctalia)"
 [[ "$installed_vr" == "$noctalia_vr" ]] \
   || { echo "ERROR: noctalia is ${installed_vr}, not the pinned ${noctalia_vr}" >&2; exit 1; }
@@ -84,6 +84,36 @@ sed -e 's/^Name=.*/Name=Lucciola/' \
     "$src" > /usr/share/wayland-sessions/lucciola.desktop
 rm -f "$src"
 log "session entry: $(grep -E '^(Name|Exec|DesktopNames)=' /usr/share/wayland-sessions/lucciola.desktop | tr '\n' ' ')"
+
+# 2a. niri-session hands the session's environment to the user manager with
+#     a blanket `systemctl --user import-environment`, which systemd 258+
+#     answers with "Calling import-environment without a list of variable
+#     names is deprecated" on the login screen's terminal, in red, at every
+#     login. Upstream niri (resources/niri-session) now does it through
+#     dbus-update-activation-environment --systemd --all, which sets the
+#     variables for D-Bus activation and the user manager in one go, with
+#     no warning; Fedora's niri 26.04-2 still ships the old sequence. The
+#     tool comes with dbus-tools (installed above). Patched by content, so
+#     a niri package that already carries upstream's shape passes untouched.
+ns=/usr/bin/niri-session
+if ! grep -q 'dbus-update-activation-environment --systemd --all' "$ns"; then
+  python3 - "$ns" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p).read()
+blanket = "    systemctl --user import-environment\n"
+dbus = "        dbus-update-activation-environment --all\n"
+if s.count(blanket) != 1 or s.count(dbus) != 1:
+    sys.exit("niri-session: not the import-environment sequence this patch knows")
+s = s.replace(blanket, "    if ! hash dbus-update-activation-environment 2>/dev/null; then\n    " + blanket + "    fi\n")
+s = s.replace(dbus, "        dbus-update-activation-environment --systemd --all\n")
+open(p, "w").write(s)
+PY
+fi
+grep -q 'dbus-update-activation-environment --systemd --all' "$ns" \
+  || { echo "ERROR: niri-session does not hand the environment over through dbus-update-activation-environment" >&2; exit 1; }
+[[ -x /usr/bin/dbus-update-activation-environment ]] \
+  || { echo "ERROR: dbus-update-activation-environment missing (dbus-tools)" >&2; exit 1; }
+log "niri-session: environment handed over without the import-environment warning"
 
 # 2b. GNOME stays stock. Lucciola keeps GNOME as a fallback session only,
 #     and stock: no Shell extension besides the GNOME Classic set Fedora's
