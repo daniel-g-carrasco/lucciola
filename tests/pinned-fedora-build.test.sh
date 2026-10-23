@@ -202,5 +202,23 @@ run_case "verify_fedora_signature: the first bad file stops the lot" 1 \
   "printf x > \"\$TMPDIR/a.rpm\"; printf x > \"\$TMPDIR/b.rpm\"; verify_fedora_signature \"\$TMPDIR/a.rpm\" \"\$TMPDIR/b.rpm\"" \
   sig=bad expect="a.rpm does not carry a valid Fedora 45 signature" nolog="rpmkeys --checksig $T/tmp/b.rpm"
 
+# --- where rpm-trust is read from -------------------------------------------
+# The Lucciola stage mounts 00-common.sh alone, with no system_files beside
+# it: the helper must then read the copy the image carries. The builds of
+# main from 2026-10-22 died there, looking for /ctx/system_files/.../rpm-trust.
+mkdir -p "$T/ctx"; cp "$COMMON" "$T/ctx/00-common.sh"
+got="$(env -i PATH="$T/bin:/usr/bin:/bin" HOME="$T" bash -c ". '$T/ctx/00-common.sh'; printf %s \"\$RPM_TRUST\"" 2>/dev/null || true)"
+if [[ "$got" == /usr/libexec/margine/rpm-trust ]]; then
+  echo "ok   rpm-trust: with no copy beside 00-common.sh, the image's own (the Lucciola stage)"
+else
+  echo "FAIL rpm-trust: with no copy beside 00-common.sh, the image's own (the Lucciola stage): got '$got'"; fails=$((fails+1))
+fi
+got="$(env -i PATH="$T/bin:/usr/bin:/bin" HOME="$T" bash -c ". '$COMMON'; printf %s \"\$RPM_TRUST\"" 2>/dev/null || true)"
+if [[ "$got" == "$(dirname "$COMMON")/system_files/usr/libexec/margine/rpm-trust" ]]; then
+  echo "ok   rpm-trust: the copy beside 00-common.sh comes first when it is there"
+else
+  echo "FAIL rpm-trust: the copy beside 00-common.sh comes first when it is there: got '$got'"; fails=$((fails+1))
+fi
+
 if (( fails )); then echo "$fails pinned-fedora-build case(s) failed"; exit 1; fi
 echo "all pinned-fedora-build cases passed"

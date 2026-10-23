@@ -128,7 +128,14 @@ fi
 # this file compared only the FIRST fingerprint gpg printed and then let rpm
 # import the whole file, and rpm imports every key in it: a key file with
 # the pinned key first and another one after it passed (review R2).
+# A stage that mounts only this file from /ctx (lucciola/build.sh gets
+# /ctx/00-common.sh and its own script, nothing else) has no copy under
+# /ctx: it reads the one the image already carries. From 2026-10-22 every
+# build of main failed there: Fedora 45's release repositories switched
+# updates-testing off, noctalia-5.3.0-1 is only there, and the fallback to
+# Koji's signed copy died looking for rpm-trust in /ctx.
 RPM_TRUST="${RPM_TRUST:-$(dirname "${BASH_SOURCE[0]}")/system_files/usr/libexec/margine/rpm-trust}"
+[[ -r "$RPM_TRUST" ]] || RPM_TRUST=/usr/libexec/margine/rpm-trust
 
 # verify_key_fpr <file> <fingerprint> <label>
 # Refuses unless <file> holds exactly one primary key, <fingerprint>, and
