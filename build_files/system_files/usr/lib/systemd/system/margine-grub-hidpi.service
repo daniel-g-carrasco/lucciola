@@ -1,14 +1,24 @@
 [Unit]
 Description=Lucciola: apply the HiDPI GRUB font + re-render grub.cfg when the baked config changes
 Documentation=https://github.com/daniel-g-carrasco/margine-image
-# The bootloader lives on /boot (+ESP); bootc/bootupd only write it at install,
-# not on image upgrades. This oneshot closes that gap: it renders the image's
-# baked GRUB static config onto /boot whenever it differs (idempotent — a no-op
-# on every boot where nothing changed). Needs /boot mounted; skips itself if the
+# The bootloader lives on /boot (+ESP). This oneshot renders the image's baked
+# GRUB static config onto /boot whenever it differs (idempotent: a no-op on
+# every boot where nothing changed). Needs /boot mounted; skips itself if the
 # image ships no baked font.
+#
+# After bootloader-update.service, never beside it. From Fedora 45 bootupd
+# updates the bootloader at boot, and on a read-only /boot both write there:
+# grub-hidpi-apply remounts /boot read-write and puts it back read-only when
+# it is done, a remount of the filesystem that reaches bootupd's own mount
+# namespace too. Side by side, the first boot after the move from Bluefin
+# (Fedora 44) failed bootupd's grub2-install halfway ("cannot backup
+# .../i386-pc/legacy_password_test.mod: Read-only file system"), and the EFI
+# update after it never ran (upgrade smoke, 2026-10-25). Fedora alone, with
+# no grub-hidpi-apply, moved from 44 to 45 cleanly. bootupd may also rewrite
+# the GRUB config, so after it is the right order anyway.
 RequiresMountsFor=/boot
 ConditionPathExists=/usr/lib/bootupd/grub2-static/fonts/margine.pf2
-After=local-fs.target
+After=local-fs.target bootloader-update.service
 
 [Service]
 Type=oneshot
