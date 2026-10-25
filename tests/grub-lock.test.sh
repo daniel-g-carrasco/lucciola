@@ -83,5 +83,15 @@ check "rw /boot (older installs): no remount at all"                            
 BOOT_STATE=ro run status
 check "status never remounts"                                                                     untouched
 
+# The other writer at boot: margine-grub-hidpi.service remounts /boot the
+# same way (boot-writable.sh), and a remount reaches bootupd's namespace too.
+# Beside bootloader-update.service it made grub2-install fail halfway on a
+# read-only /boot (upgrade smoke from bluefin:stable, 2026-10-25): it must
+# run after it.
+UNIT="$(dirname "$LIBDIR")/../lib/systemd/system/margine-grub-hidpi.service"
+OUT="$(grep -E '^(After|Before)=' "$UNIT")"
+after_bootupd() { grep -qE '^After=.*\bbootloader-update\.service\b' "$UNIT" && ! grep -qE '^Before=.*bootloader-update' "$UNIT"; }
+check "margine-grub-hidpi.service runs after bootloader-update.service, never beside it"            after_bootupd
+
 if (( fails )); then echo "$fails grub-lock case(s) failed"; exit 1; fi
 echo "all grub-lock cases passed"

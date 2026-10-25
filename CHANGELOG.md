@@ -7,6 +7,21 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-25, bootloader update after the move from Fedora 44)
+- **The HiDPI GRUB step no longer breaks bootupd's bootloader update.**
+  From Fedora 45 bootupd updates the bootloader at boot. On the first boot
+  after the move from Bluefin (Fedora 44) to Lucciola it failed halfway:
+  `grub2-install` could not write `/boot/grub2/i386-pc` ("Read-only file
+  system"), and the EFI update after it never ran, leaving Fedora 44's shim
+  and GRUB. `margine-grub-hidpi.service` started beside it, remounted the
+  read-only `/boot` read-write for its own write and put it back read-only
+  when done, a remount of the whole filesystem that reaches bootupd's
+  mount namespace too. Fedora alone, Silverblue 44 to 45, moved cleanly.
+  The HiDPI step now runs after `bootloader-update.service`, which is also
+  the right order for the GRUB config bootupd may rewrite. Found by the
+  weekly upgrade smoke once it printed the failed unit's journal (#56, #57).
+  A check in `tests/grub-lock.test.sh`, a mutant.
+
 ### Changed (2026-10-25, upgrade smoke)
 - **The upgrade smoke can run a stock Fedora move.** The bootloader update
   failed after the move from Bluefin (Fedora 44) to Lucciola, on a

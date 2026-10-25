@@ -1,0 +1,7 @@
+# grub-hidpi-apply remounts /boot read-write and back to read-only: beside
+# bootupd's update at boot that remount fails grub2-install halfway.
+name = "grub-hidpi-beside-bootupd"
+file = "build_files/system_files/usr/lib/systemd/system/margine-grub-hidpi.service"
+old = '''After=local-fs.target bootloader-update.service'''
+new = '''After=local-fs.target'''
+must_fail = "bash tests/grub-lock.test.sh"
