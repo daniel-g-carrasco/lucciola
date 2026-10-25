@@ -446,6 +446,8 @@ jobs:
         # workflow's wiring: one VM at a time, logs per cell, ntfy with the
         # cell's name. See tests/upgrade-matrix.test.sh.
         run: bash tests/upgrade-matrix.test.sh
+      - name: The upgrade smoke names failed units safely and dumps their journal
+        run: bash tests/upgrade-smoke-units.test.sh
 
       - name: The secret-scope checker (fixtures)
         # A secret on the wrong stage or without --network=none, a job off
