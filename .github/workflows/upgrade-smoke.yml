@@ -215,12 +215,23 @@ jobs:
         # Kinoite) carries no MOK.der at all (2026-10-20).
         env:
           IMG: ${{ steps.ref.outputs.to }}
+        # A stock Fedora target (Silverblue 44 to 45, run by hand to tell
+        # Fedora's own upgrade problems from Lucciola's, 2026-10-25) boots a
+        # kernel Fedora signed: the Microsoft keys alone. Our own images must
+        # carry the certificate, so a missing one still fails for them.
         run: |
           set -euo pipefail
-          sudo podman run --rm --entrypoint /usr/bin/cat "$IMG" /usr/share/cert/MOK.der | cat > MOK.der
-          openssl x509 -inform DER -in MOK.der -out MOK.pem
-          virt-fw-vars --input /usr/share/OVMF/OVMF_VARS_4M.ms.fd --output sb-vars.fd \
-            --add-mok 605dab50-e046-4300-abb6-3dd810dd8b23 MOK.pem
+          if sudo podman run --rm --entrypoint /usr/bin/cat "$IMG" /usr/share/cert/MOK.der 2>/dev/null | cat > MOK.der && [ -s MOK.der ]; then
+            openssl x509 -inform DER -in MOK.der -out MOK.pem
+            virt-fw-vars --input /usr/share/OVMF/OVMF_VARS_4M.ms.fd --output sb-vars.fd \
+              --add-mok 605dab50-e046-4300-abb6-3dd810dd8b23 MOK.pem
+          elif [[ "$IMG" == ghcr.io/daniel-g-carrasco/* ]]; then
+            echo "::error::$IMG carries no /usr/share/cert/MOK.der: its kernel would not boot under Secure Boot"
+            exit 1
+          else
+            echo "$IMG carries no MOK certificate (a stock Fedora image): the Microsoft keys alone"
+            cp /usr/share/OVMF/OVMF_VARS_4M.ms.fd sb-vars.fd
+          fi
 
       - name: Boot, layer, rebase, reboot, check
         env:

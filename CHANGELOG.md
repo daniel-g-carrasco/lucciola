@@ -8,6 +8,15 @@ stable release is cut.
 ## [Unreleased]
 
 ### Changed (2026-10-25, upgrade smoke)
+- **The upgrade smoke can run a stock Fedora move.** The bootloader update
+  failed after the move from Bluefin (Fedora 44) to Lucciola, on a
+  read-only `/boot`; to tell Fedora's own upgrade problems from Lucciola's,
+  the same move has to run with Fedora alone, Silverblue 44 to 45. The
+  Secure Boot step needed the target's MOK certificate, which a stock
+  Fedora image does not carry: such a target now boots with the Microsoft
+  keys alone, while an image of ours without the certificate still fails.
+
+### Changed (2026-10-25, upgrade smoke)
 - **A failed unit after the upgrade now says why.** The weekly upgrade
   smoke's first run found `bootloader-update.service` failed after the move
   from `bluefin:stable` (Fedora 44) to Lucciola, and nothing more: the
