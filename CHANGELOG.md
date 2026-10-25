@@ -7,6 +7,16 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (2026-10-25, upgrade smoke)
+- **A failed unit after the upgrade now says why.** The weekly upgrade
+  smoke's first run found `bootloader-update.service` failed after the move
+  from `bluefin:stable` (Fedora 44) to Lucciola, and nothing more: the
+  journal dump keeps only errors, and bootupd's own messages are below
+  that. The smoke now prints each failed unit's last journal lines, and
+  `bootupctl status` when the bootloader update is the one that failed.
+  The unit names come from the captured console text, so only real unit
+  names reach journalctl (`tests/upgrade-smoke-units.test.sh`).
+
 ### Added (2026-10-24, mouse and keyboard from the phone)
 - **Remote Input works under niri.** KDE Connect's remote input, and
   anything that moves the pointer or types through the portal, asks the

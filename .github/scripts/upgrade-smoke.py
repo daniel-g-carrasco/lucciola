@@ -52,6 +52,18 @@ def keep_status(cmd, lines):
             f'printf "%s\\n" "$__o" | tail -n {lines}; (exit $__r)')
 
 
+def failed_unit_names(listing):
+    """Unit names from `systemctl --failed --no-legend --plain`: the first
+    field of each row, only names a unit can have (a stray prompt or echo
+    in the captured text must not end up in a journalctl command line)."""
+    names = []
+    for line in listing.splitlines():
+        field = line.strip().split(" ", 1)[0] if line.strip() else ""
+        if re.fullmatch(r"[A-Za-z0-9@:._\\-]+\.(service|socket|mount|timer|path|target|swap|scope)", field):
+            names.append(field)
+    return names
+
+
 def gaming_dry_run(sudo, lst=GAMING_LIST):
     """Guest shell for the gaming-native dry run on the new deployment: the
     list is required (the image ships it, and `ujust lucciola-gaming-native`
@@ -292,6 +304,16 @@ def main():
     rc, out = capture("systemctl --failed --no-legend --plain", 60)
     if out and out.strip():
         fail("failed units after the upgrade: " + out.strip().replace("\n", " | "))
+        # The journal keeps only err and above in the dump at the end, and a
+        # unit's own messages are often below that: bootloader-update.service
+        # failed after the move from bluefin:stable (2026-10-25) with nothing
+        # to say why. Each failed unit's last lines, whatever their priority.
+        for unit in failed_unit_names(out)[:4]:
+            rc, log = capture(sudo + f"journalctl -b -u {unit} -o cat --no-pager | tail -25", 60)
+            say(f"journal of {unit} (this boot, last 25 lines):\n" + (log or ""))
+            if unit == "bootloader-update.service":
+                rc, log = capture(sudo + "bootupctl status 2>&1 | head -20", 60)
+                say("bootupctl status:\n" + (log or ""))
     else:
         say("no failed units")
     # The login screen: margine:lucciola ran GDM; this image runs greetd with
