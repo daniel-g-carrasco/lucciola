@@ -1,0 +1,7 @@
+# Ollama for the local models service (ujust lucciola-models, Lucciola
+# System, Apps). The release and the sha256 of its Linux archive, as the
+# release's sha256sum.txt on github.com/ollama/ollama gives it. Bump the two
+# together, after trying the new release on an AMD integrated GPU (Vulkan):
+# local-models installs it for every user who has it at their next login.
+OLLAMA_VERSION=0.40.11
+OLLAMA_SHA256=7bedab90dd122661be78798e9f0edf37fccf0cccf2699d2c58ea1a3afdc04b6d

@@ -1,0 +1,128 @@
+#!/usr/bin/bash
+# lucciola local-models: language models on this PC, for every app that
+# speaks Ollama's API (Alpaca, Meridio, editors, agents), as a service of
+# the user who installs it. No root: Ollama's own Linux archive, the release
+# and sha256 pinned by the image (/usr/share/lucciola/models/ollama.release),
+# unpacked in ~/.local/share/lucciola/ollama, run by
+# lucciola-ollama.service on 127.0.0.1:11434 only, on the GPU through
+# Vulkan (integrated ones included, which Ollama skips unless told).
+#
+#   local-models status                 installed <version> running|stopped, or absent
+#   local-models install                download, verify, unpack, start
+#   local-models update [--if-installed] the pinned release when it differs
+#   local-models remove [--models]      stop and delete Ollama; --models also
+#                                        deletes the downloaded models (~/.ollama)
+#
+# Why the archive and not Fedora's package or Ollama's container (2026-10-26,
+# on a Radeon 760M): Fedora's ollama is 0.24, too old for this year's
+# models; the container is 5 GB and brings Ubuntu's Mesa. The archive, with
+# NVIDIA's CUDA libraries left out on PCs without an NVIDIA GPU, is about
+# 100 MB and uses Fedora's Vulkan driver. Same GGUF, same prompt: 293 tokens/s
+# reading and 11.8 writing on the GPU, against 80 and 7.2 on the processor;
+# llama.cpp's own server gave the same numbers (Ollama runs it inside).
+set -euo pipefail
+
+RELEASE="${LUCCIOLA_MODELS_RELEASE:-/usr/share/lucciola/models/ollama.release}"
+BASE="${LUCCIOLA_MODELS_URL_BASE:-https://github.com/ollama/ollama/releases/download}"
+DIR="$HOME/.local/share/lucciola/ollama"
+CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/lucciola"
+LINK="$HOME/.local/bin/ollama"
+UNIT=lucciola-ollama.service
+API=http://127.0.0.1:11434
+
+die() { echo "local-models: $*" >&2; exit 1; }
+[[ "$(id -u)" != 0 ]] || die "run it as the user who wants the models, not as root"
+[[ -r "$RELEASE" ]] || die "no release file at $RELEASE"
+# shellcheck source=/dev/null
+. "$RELEASE"
+[[ "${OLLAMA_VERSION:-}" =~ ^[0-9]+(\.[0-9]+)+$ && "${OLLAMA_SHA256:-}" =~ ^[0-9a-f]{64}$ ]] \
+  || die "$RELEASE does not name a version and a sha256"
+
+installed_version() {
+  local cur
+  cur="$(readlink "$DIR/current" 2>/dev/null || true)"
+  [[ -n "$cur" && -x "$DIR/$cur/bin/ollama" ]] && echo "$cur" || true
+}
+
+status() {
+  local v
+  v="$(installed_version)"
+  if [[ -z "$v" ]]; then echo "absent"; return 0; fi
+  if systemctl --user -q is-active "$UNIT" 2>/dev/null; then echo "installed $v running"; else echo "installed $v stopped"; fi
+}
+
+has_nvidia() { lspci 2>/dev/null | grep -iE 'vga|3d controller|display controller' | grep -qi nvidia; }
+
+install() {
+  local v="$OLLAMA_VERSION" archive tmp
+  archive="$CACHE/ollama-linux-amd64-$v.tar.zst"
+  mkdir -p "$CACHE" "$DIR" "$(dirname "$LINK")"
+  if ! echo "$OLLAMA_SHA256  $archive" | sha256sum -c --status - 2>/dev/null; then
+    echo "Downloading Ollama $v: about 1.5 GB, a few minutes, once…"
+    # A progress bar in a terminal; in Lucciola System's log only errors.
+    local progress=(--silent --show-error)
+    [[ -t 2 ]] && progress=(--progress-bar)
+    curl --fail --location "${progress[@]}" --retry 3 --retry-delay 5 -o "$archive.part" \
+      "$BASE/v$v/ollama-linux-amd64.tar.zst"
+    mv -f "$archive.part" "$archive"
+  fi
+  echo "$OLLAMA_SHA256  $archive" | sha256sum -c --status - \
+    || { rm -f "$archive"; die "the download does not match the sha256 Lucciola expects for Ollama $v: removed"; }
+  tmp="$DIR/.$v.new"
+  rm -rf "$tmp"; mkdir -p "$tmp"
+  tar --zstd -xf "$archive" -C "$tmp"
+  [[ -x "$tmp/bin/ollama" ]] || { rm -rf "$tmp"; die "the archive holds no bin/ollama"; }
+  if ! has_nvidia; then
+    # NVIDIA's CUDA libraries, about 2 GB, serve nothing without an NVIDIA GPU.
+    rm -rf "$tmp"/lib/ollama/cuda_*
+  fi
+  rm -rf "${DIR:?}/$v"; mv "$tmp" "$DIR/$v"
+  ln -sfn "$v" "$DIR/current"
+  for old in "$DIR"/*; do
+    [[ -d "$old" && ! -L "$old" && "$(basename "$old")" != "$v" ]] && rm -rf "$old"
+  done
+  rm -f "$archive"
+  # `ollama pull`, `ollama list` from a terminal; a file of the user's own stays.
+  if [[ -L "$LINK" || ! -e "$LINK" ]]; then ln -sfn "$DIR/current/bin/ollama" "$LINK"; fi
+  systemctl --user daemon-reload
+  systemctl --user enable "$UNIT" >/dev/null 2>&1
+  systemctl --user restart "$UNIT"
+  for _ in $(seq 1 30); do
+    curl -fs --max-time 2 "$API/api/version" >/dev/null 2>&1 && break
+    sleep 1
+  done
+  echo "Ollama $v answers on $API."
+  echo "Models: ollama pull <name>, from a terminal, or from the app that uses them."
+}
+
+update() {
+  local v
+  v="$(installed_version)"
+  if [[ -z "$v" ]]; then
+    [[ "${1:-}" == --if-installed ]] && return 0
+    die "not installed: local-models install"
+  fi
+  if [[ "$v" == "$OLLAMA_VERSION" ]]; then echo "Ollama $v is the release Lucciola pins"; return 0; fi
+  echo "Ollama $v installed, Lucciola pins $OLLAMA_VERSION: updating"
+  install
+}
+
+remove() {
+  systemctl --user disable --now "$UNIT" >/dev/null 2>&1 || true
+  if [[ -L "$LINK" && "$(readlink "$LINK")" == "$DIR/"* ]]; then rm -f "$LINK"; fi
+  rm -rf "$DIR" "$CACHE"/ollama-linux-amd64-*.tar.zst*
+  if [[ "${1:-}" == --models ]]; then
+    rm -rf "$HOME/.ollama"
+    echo "Ollama and its models are removed."
+  else
+    echo "Ollama is removed. The downloaded models stay in ~/.ollama: local-models remove --models deletes them too."
+  fi
+}
+
+case "${1:-status}" in
+  status) status ;;
+  install) install ;;
+  update) update "${2:-}" ;;
+  remove) remove "${2:-}" ;;
+  *) die "unknown action '${1}': status, install, update [--if-installed], remove [--models]" ;;
+esac

@@ -647,6 +647,22 @@ fi
 [[ -x /usr/libexec/gcr-ssh-agent ]] && ok "gcr-ssh-agent present" || bad "/usr/libexec/gcr-ssh-agent missing (gcr)"
 
 # ---------------------------------------------------------------------------
+hdr "6c2. Local AI models (Lucciola)"
+# ---------------------------------------------------------------------------
+# local-models installs Ollama for the user who asks (release and sha256
+# pinned in /usr/share/lucciola/models/ollama.release); the update timer is
+# enabled for every user and acts only where it is installed.
+if [[ "$EXPECTED_OS_NAME" != "Lucciola" ]]; then
+  info "skipped: Lucciola only"
+else
+  [[ -x /usr/libexec/lucciola/local-models ]] && ok "local-models present" || bad "/usr/libexec/lucciola/local-models missing"
+  grep -qE '^OLLAMA_SHA256=[0-9a-f]{64}$' /usr/share/lucciola/models/ollama.release 2>/dev/null \
+    && ok "Ollama release pinned with its sha256" || bad "/usr/share/lucciola/models/ollama.release names no sha256"
+  [[ -L /etc/systemd/user/timers.target.wants/lucciola-ollama-update.timer ]] \
+    && ok "local models update timer enabled for every user" || bad "lucciola-ollama-update.timer is not enabled for users"
+fi
+
+# ---------------------------------------------------------------------------
 hdr "6d. App colours in the Noctalia palette (Lucciola)"
 # ---------------------------------------------------------------------------
 # 28-app-colors.toml turns on Noctalia's gtk3, gtk4 and kcolorscheme

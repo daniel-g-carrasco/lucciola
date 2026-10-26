@@ -105,6 +105,7 @@ etc/systemd/user/sockets.target.wants/gcr-ssh-agent.socket
 etc/systemd/user/sockets.target.wants/pipewire-pulse.socket
 etc/systemd/user/sockets.target.wants/pipewire.socket
 etc/systemd/user/timers.target.wants/grub-boot-success.timer
+etc/systemd/user/timers.target.wants/lucciola-ollama-update.timer
 etc/systemd/user/timers.target.wants/systemd-tmpfiles-clean.timer
 usr/lib/systemd/system/factory-reset.target.wants/systemd-factory-reset-request.service
 usr/lib/systemd/system/factory-reset.target.wants/systemd-pcrphase-factory-reset.service

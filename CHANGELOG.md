@@ -7,6 +7,27 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Added (2026-10-26, local AI models)
+- **Language models on this PC, for every app that uses them.** Lucciola
+  System, Apps, Local AI Models (or `ujust lucciola-models`) installs
+  Ollama as a service of the user: no root, the release and the sha256 of
+  its Linux archive pinned in `/usr/share/lucciola/models/ollama.release`,
+  unpacked in `~/.local/share/lucciola/ollama`, `ollama` in `~/.local/bin`.
+  `lucciola-ollama.service` answers on 127.0.0.1:11434 only, with Vulkan
+  and integrated GPUs on (Ollama skips them otherwise) and a 16k context
+  for agents. Alpaca, Meridio, editors and agents find it at the address
+  they look at first. NVIDIA's CUDA libraries, about 2 GB, are left out on
+  PCs without an NVIDIA GPU. `lucciola-ollama-update.timer`, enabled for
+  every user, brings the users who have it to a new pin. Remove keeps the
+  downloaded models unless asked.
+- Measured on a Radeon 760M with the same GGUF (Qwen3.5 4B, a ~3500-token
+  prompt): 293 tokens/s reading and 11.8 writing on the GPU, 80 and 7.2 on
+  the processor; llama.cpp's own server gave the same numbers, as Ollama
+  runs it inside. Fedora's ollama (0.24) is too old for this year's models,
+  Ollama's container is 5 GB with Ubuntu's Mesa: the archive it is.
+  `tests/local-models.test.sh` (20 checks, in lint), two mutants, the
+  validator's 6c2, the guide's apps chapter.
+
 ### Fixed (2026-10-25, bootloader update after the move from Fedora 44)
 - **The HiDPI GRUB step no longer breaks bootupd's bootloader update.**
   From Fedora 45 bootupd updates the bootloader at boot. On the first boot

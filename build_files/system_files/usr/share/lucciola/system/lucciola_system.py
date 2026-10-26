@@ -883,3 +883,14 @@ def stream_defaults(wireless):
     """Resolution and bit rate by link: the air gets 720p at 4 Mbit/s, the
     cable 1080p at 8 Mbit/s."""
     return ("1280x720", 4000000) if wireless else ("1920x1080", 8000000)
+
+
+def models_state(text):
+    """`local-models status` -> (state, version): ("running", "0.40.11"),
+    ("stopped", "0.40.11"), ("absent", ""), or ("unknown", "") for anything else."""
+    words = (text or "").split()
+    if words == ["absent"]:
+        return ("absent", "")
+    if len(words) == 3 and words[0] == "installed" and words[2] in ("running", "stopped"):
+        return (words[2], words[1])
+    return ("unknown", "")
