@@ -786,12 +786,12 @@ ai_workflow:
     source_in_image_repo: build_files/60-custom.just
     gui:
       flatpak_id: com.jeffser.Alpaca
-      backend: ollama_bundled_in_flatpak_runtime
+      backend: ollama_managed_by_alpaca
       what_it_does: >
-        GUI chat with local LLMs. Alpaca ships its own Ollama backend
-        inside the Flatpak runtime, so no host install and no daemon
-        to run. Pick a model from inside the app on first launch —
-        Alpaca handles the download.
+        GUI chat with local LLMs. Alpaca 9 downloads and runs Ollama
+        inside its own sandbox (its Ollama Manager, Vulkan for AMD
+        graphics), so no host install and no daemon to run. Models are
+        picked and downloaded from inside the app.
     cli_pointer:
       tool: ramalama
       not_installed_by_recipe: true

@@ -226,10 +226,6 @@ def act_scheduler_off(args):
 def feature_on(name):
     """<name>-on: the feature's system part, through the feature helper."""
     def act(args):
-        if name == "ai":
-            if len(args) > 1 or (args and args[0] != "amd"):
-                raise SystemExit("ai-on takes at most one option: amd (the ROCm plugin for AMD GPUs)")
-            return [Step([FEATURE, "ai", "install"] + list(args))]
         no_args(f"{name}-on", args)
         return [Step([FEATURE, name, "install"])]
     return act

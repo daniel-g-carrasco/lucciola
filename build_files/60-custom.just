@@ -333,97 +333,33 @@ lucciola-scheduler $MODE="status":
     esac
 
 
-# Install Alpaca (Flatpak GUI for local LLMs; bundles Ollama backend
-# in the Flatpak runtime). No host install needed; first launch downloads
-# the chosen model.
-# GPU note: Alpaca is sandboxed, so it does NOT use the host ROCm that the
-# Bluefin base already ships — GPU acceleration in the Flatpak comes either
-# from the com.jeffser.Alpaca.Plugins.AMD extension (ROCm inside the sandbox,
-# offered below when an AMD GPU is detected) or from Ollama's Vulkan backend
-# (no plugin; great for integrated GPUs/APUs). CPU is the fallback.
-# RamaLama (Red Hat's CLI runner) is NOT installed by this recipe;
-# instructions printed below for power users who want it in distrobox — that
-# path CAN use the host ROCm directly.
-
-# Install Alpaca: a local-LLM GUI (Ollama backend) in a Flatpak sandbox.
+# Install Alpaca, a chat with local language models in a Flatpak sandbox.
+# Alpaca 9 (January 2026) runs the models with its own Ollama Manager: at
+# the first start it offers to download Ollama, and can run it on Vulkan,
+# the way for AMD graphics, integrated ones included. Its Flatpak plugins
+# (Ollama, and the ROCm build Lucciola installed for AMD until 2026-10-26)
+# are deprecated: the feature helper removes them.
 [group('Lucciola')]
 lucciola-ai:
     #!/usr/bin/bash
     set -euo pipefail
     cat <<'EOF'
-    == Lucciola AI workflow ==
-    This installs:
-      - com.jeffser.Alpaca (Flatpak) — GUI chat with local LLMs.
-        Alpaca bundles its own Ollama backend in the Flatpak, so no
-        host install or daemon-running is needed. First launch
-        downloads the chosen model (a few GB depending on choice —
-        llama3.1:8b is ~5 GB).
-    NOT installed by this recipe (do separately if you want):
-      - RamaLama (CLI, Red Hat's local-LLM container runner).
-        For that: open Ptyxis, then:
-          distrobox create --image fedora:42 --name ai
-          distrobox enter ai
-          sudo dnf install -y ramalama
-        Now `ramalama run llama3.1:8b` from inside `ai` works as
-        a CLI ChatGPT-like.
-      - Continue.dev / aichat / sgpt for VS Code or terminal-level
-        completion. Install in your dev distrobox.
-    Recommended starter models (downloadable from Alpaca's UI):
-      - llama3.1:8b      — general purpose, ~5 GB, fits 8 GB GPU
-      - qwen2.5-coder:7b — coding-focused, ~4 GB
-      - mistral:7b       — fast general, ~4 GB
-      - phi3.5:3.8b      — small footprint, ~2 GB (CPU-friendly)
-    GPU acceleration:
-      - The Flatpak is sandboxed and does NOT use the host ROCm. This
-        recipe offers the AMD ROCm plugin (com.jeffser.Alpaca.Plugins.AMD)
-        when it detects an AMD GPU. Vulkan is the no-plugin alternative
-        and is often best on integrated GPUs/APUs.
-      - NVIDIA: Flatpak auto-pulls the matching GL driver; Ollama uses CUDA
-        through it. Intel: Vulkan. No GPU: runs on CPU (fine, just slower —
-        consider phi3.5:3.8b on a 16 GB-RAM machine).
-    Hardware note:
-      - 8 GB VRAM is the comfort floor for ~7B-parameter models.
-    To uninstall: ujust lucciola-ai-remove
+    == Alpaca: language models on this machine ==
+    Installs Alpaca (com.jeffser.Alpaca) from Flathub, for every user.
+    At its first start Alpaca offers to download Ollama, which runs the
+    models inside its sandbox. With AMD graphics, integrated ones too,
+    turn on Vulkan in Alpaca's Ollama settings; NVIDIA uses CUDA, and
+    without a usable GPU the processor does the work, more slowly.
+    Models are downloaded from inside Alpaca. Two starting points:
+      - Qwen3.5 4B         about 3 GB, any PC with 16 GB of memory
+      - Gemma 4 26B-A4B    about 16 GB, for 32 GB of memory; good in Italian
+    To remove it: ujust lucciola-ai-remove
     EOF
     read -rp "Continue? [y/N] " ans
     case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "Aborted."; exit 0 ;; esac
-    gpu="$(lspci 2>/dev/null | grep -iE 'vga|3d controller|display controller' || true)"
-    OPTION=()
-    if echo "$gpu" | grep -qiE 'amd|ati|radeon'; then
-      echo
-      echo "AMD GPU detected. The ROCm plugin (com.jeffser.Alpaca.Plugins.AMD)"
-      echo "enables GPU acceleration inside Alpaca's sandbox (a sizeable download)."
-      read -rp "Install the AMD ROCm plugin too? [Y/n] " amd
-      case "$amd" in
-        [nN]|[nN][oO]) echo "Skipped — Alpaca will use Vulkan if available, else CPU." ;;
-        *) OPTION=(amd) ;;
-      esac
-    elif echo "$gpu" | grep -qiE 'nvidia'; then
-      echo
-      echo "NVIDIA GPU detected. Flatpak auto-pulls the matching GL driver and"
-      echo "Ollama uses CUDA through it. If the GPU isn't used, make sure the"
-      echo "proprietary driver is active and restart Alpaca."
-    else
-      echo
-      echo "No discrete AMD/NVIDIA GPU detected — Alpaca runs on CPU (or Intel"
-      echo "Vulkan if present). phi3.5:3.8b is the comfortable CPU-only pick."
-    fi
-    sudo /usr/libexec/lucciola/admin ai-on "${OPTION[@]}"
-    if (( ${#OPTION[@]} )); then
-      cat <<'EOF'
-    Integrated AMD GPU (APU, e.g. Radeon 7xxM / gfx110x)? ROCm may not detect
-    it until you set, in Alpaca → Preferences → environment:
-        HSA_OVERRIDE_GFX_VERSION=11.0.0
-    Or skip ROCm entirely and use Ollama's Vulkan backend, which usually works
-    on APUs out of the box. Check Alpaca's hardware list to see which the GPU
-    shows up under.
-    EOF
-    fi
-    cat <<'EOF'
-    == Done ==
-    Launch Alpaca from the launcher. The first run will ask you to pick a
-    model to download.
-    EOF
+    sudo /usr/libexec/lucciola/admin ai-on
+    echo
+    echo "Done: open Alpaca from the launcher."
 
 # Roll back the AI workflow (undo lucciola-ai).
 [group('Lucciola')]
@@ -432,7 +368,7 @@ lucciola-ai-remove:
     set -euo pipefail
     echo "This will:"
     echo "  - flatpak uninstall com.jeffser.Alpaca"
-    echo "  - flatpak uninstall com.jeffser.Alpaca.Plugins.AMD (if present)"
+    echo "  - flatpak uninstall its old plugins, if an older Lucciola added them"
     echo
     echo "  NOT touched: model files cached under"
     echo "    ~/.var/app/com.jeffser.Alpaca/data/  — delete by hand"
