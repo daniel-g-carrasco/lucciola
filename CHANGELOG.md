@@ -7,6 +7,14 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (2026-10-26, security baseline)
+- **Two boot units of Fedora's bootc base join the baseline.** Fedora's
+  bootc base images now enable `bootc-update-ca-trust.service` and
+  `bootc-update-crypto-policies.service` (fedora/bootc/base-images merge
+  request 663): before sysinit, on a booted bootc system, they regenerate
+  the CA trust store and the crypto-policies backends. The drift check
+  stopped every pull request build on them.
+
 ### Fixed (2026-10-25, bootloader update after the move from Fedora 44)
 - **The HiDPI GRUB step no longer breaks bootupd's bootloader update.**
   From Fedora 45 bootupd updates the bootloader at boot. On the first boot
