@@ -7,6 +7,19 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-26, AI)
+- **The AI feature follows Alpaca 9.** Alpaca 9 (January 2026) runs models
+  with its own Ollama Manager, which downloads Ollama into its sandbox and,
+  from 9.2, runs it on Vulkan; its Flatpak plugins are deprecated and it
+  asks to uninstall them. The feature still offered the ROCm plugin on AMD
+  graphics, fixed at December 2025, and its texts still said Alpaca bundles
+  Ollama, with 2024 models and an "8 GB of video memory" floor that means
+  nothing on integrated graphics. Now it installs Alpaca alone, removes the
+  old plugins at install and at remove, and says to turn on Vulkan in
+  Alpaca for AMD graphics; the recipe names this year's models (Qwen3.5 4B,
+  Gemma 4 26B-A4B). `ai-on` takes no option any more; the features page no
+  longer probes the GPU for it. Checks in `tests/system-logic.test.sh`.
+
 ### Changed (2026-10-26, security baseline)
 - **Two boot units of Fedora's bootc base join the baseline.** Fedora's
   bootc base images now enable `bootc-update-ca-trust.service` and
