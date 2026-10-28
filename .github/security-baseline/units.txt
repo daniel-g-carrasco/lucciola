@@ -73,6 +73,8 @@ etc/systemd/system/sockets.target.wants/systemd-sysupdate-notify-bootctl.socket
 etc/systemd/system/sockets.target.wants/systemd-sysupdate-notify-pcrlock.socket
 etc/systemd/system/sockets.target.wants/systemd-sysupdate-notify-sysext.socket
 etc/systemd/system/sockets.target.wants/systemd-userdbd.socket
+etc/systemd/system/sysinit.target.wants/bootc-update-ca-trust.service
+etc/systemd/system/sysinit.target.wants/bootc-update-crypto-policies.service
 etc/systemd/system/sysinit.target.wants/fips-crypto-policy-overlay.service
 etc/systemd/system/sysinit.target.wants/lvm2-lvmpolld.socket
 etc/systemd/system/sysinit.target.wants/lvm2-monitor.service

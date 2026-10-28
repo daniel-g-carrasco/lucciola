@@ -45,7 +45,11 @@ GAMING_RPMS=(gamescope vkBasalt mangohud goverlay)
 GAMING_NATIVE_FLATPAKS=(com.heroicgameslauncher.hgl com.usebottles.bottles
   com.github.Matoking.protontricks com.vysp3r.ProtonPlus)
 AI_APP=com.jeffser.Alpaca
-AI_AMD_PLUGIN=com.jeffser.Alpaca.Plugins.AMD
+# Alpaca's Flatpak plugins, Ollama and the ROCm build for AMD: Alpaca 9
+# (January 2026) replaced them with its own Ollama Manager, which can run
+# Ollama on Vulkan, and asks its users to uninstall them. Lucciola installed
+# the AMD one until 2026-10-26: removed with Alpaca, or at the next install.
+AI_OLD_PLUGINS=(com.jeffser.Alpaca.Plugins.AMD com.jeffser.Alpaca.Plugins.Ollama)
 DEVTOOLS_RPMS=(bcc bpftrace bpftop sysprof igt-gpu-tools gcc gcc-c++ make git-lfs git-credential-libsecret)
 DOCKER_RPMS=(docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin)
 VM_RPMS=(libvirt libvirt-nss qemu-kvm virt-manager virt-viewer virt-install edk2-ovmf swtpm dnsmasq
@@ -185,24 +189,32 @@ gaming_native_remove() {
 }
 
 # ── ai (Alpaca, a local LLM chat in a Flatpak) ─────────────────────────
+ai_old_plugins() {  # the old plugins still installed, one per line
+  local p
+  for p in "${AI_OLD_PLUGINS[@]}"; do has_flatpak "$p" && echo "$p"; done
+  return 0
+}
 ai_status() {
   if has_flatpak "$AI_APP"; then
-    if has_flatpak "$AI_AMD_PLUGIN"; then state installed "Alpaca is installed, with the AMD GPU plugin"
+    if [[ -n "$(ai_old_plugins)" ]]; then state installed "Alpaca is installed, with an old plugin it no longer uses (Install again removes it)"
     else state installed "Alpaca is installed"; fi
   else
     state absent "Alpaca: chat with language models that run on this machine"
   fi
 }
 ai_install() {
+  local p
   ensure_flathub
   say flatpak install --system -y --noninteractive --or-update flathub "$AI_APP"
-  if [[ "${1:-}" == amd ]]; then
-    say flatpak install --system -y --noninteractive --or-update flathub "$AI_AMD_PLUGIN" \
-      || echo "the AMD plugin did not install; Alpaca works on Vulkan or the CPU"
-  fi
+  for p in $(ai_old_plugins); do
+    say flatpak uninstall --system -y --noninteractive "$p" || true
+  done
 }
 ai_remove() {
-  say flatpak uninstall --system -y --noninteractive "$AI_AMD_PLUGIN" || true
+  local p
+  for p in $(ai_old_plugins); do
+    say flatpak uninstall --system -y --noninteractive "$p" || true
+  done
   say flatpak uninstall --system -y --noninteractive "$AI_APP" || true
 }
 

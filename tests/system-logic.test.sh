@@ -53,7 +53,6 @@ for f in gaming gaming-native ai devmode vscode devtools docker tailscale vm sun
   plan "$f-on";  check "$f-on plans the feature helper (rc $RC)"  bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/lucciola/feature $f install' '$T/out'"
   plan "$f-off"; check "$f-off plans the feature helper (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/lucciola/feature $f remove' '$T/out'"
 done
-plan ai-on amd;                   check "ai-on amd: the ROCm plugin as the one option (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/lucciola/feature ai install amd' '$T/out'"
 plan apps-slim;                   check "apps-slim (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/lucciola/feature slim install' '$T/out'"
 plan apps-naked;                  check "apps-naked (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/lucciola/feature naked install' '$T/out'"
 plan apps-restore;                check "apps-restore brings the stock set back (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/lucciola/feature slim remove' '$T/out'"
@@ -61,7 +60,7 @@ plan brew-remove;                 check "brew-remove runs devmode without sudo i
 plan printers-repair;             check "printers-repair (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/lucciola/printers-repair' '$T/out'"
 plan dock-wake;                   check "dock-wake forces the rescue (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/margine/dock-dp-rescue --force' '$T/out'"
 plan dock-rescue off;             check "dock-rescue off writes the switch (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -q \"write '/etc/margine/dock-dp-rescue': 'off\" '$T/out'"
-for bad in "ai-on nvidia" "gaming-on now" "dock-rescue maybe" "apps-slim please" "flatpak-unblock" "flatpak-unblock a b" "flatpak-unblock 'x; rm -rf /'" "flatpak-unblock ../etc" "flatpak-unblock -y" \
+for bad in "ai-on amd" "ai-on nvidia" "gaming-on now" "dock-rescue maybe" "apps-slim please" "flatpak-unblock" "flatpak-unblock a b" "flatpak-unblock 'x; rm -rf /'" "flatpak-unblock ../etc" "flatpak-unblock -y" \
            "update now" "rollback --force" "reboot" "--check" "kernel" "kernel foo" "kernel fedora now" \
            "tpm-unlock-enable '7;8'" "tpm-unlock-enable 7 8" "tpm-unlock-enable ../x" "grub-lock-on pw" "grub-lock-off x" \
            "autologin-on bob" "autologin-off x" "secureboot-enroll x" "scheduler" "scheduler lavd Turbo" "scheduler 'x;y' Auto" "scheduler LAVD" "scheduler-off x"; do
@@ -117,6 +116,12 @@ check "feature helper parses (rc $RC)" [ "$RC" = 0 ]
 for f in gaming gaming-native ai devmode vscode devtools docker tailscale vm sunshine phone slim naked; do
   check "feature helper knows $f" bash -c "grep -qE '^${f//-/_}_status\(\)' '$FEAT'"
 done
+# Alpaca 9 replaced its Flatpak plugins with its own Ollama Manager and asks
+# users to uninstall them: the AI feature installs Alpaca alone and takes
+# the old plugins away, at install and at remove.
+check "ai: Alpaca 9's deprecated plugins are known by name" bash -c "grep -q '^AI_OLD_PLUGINS=(com.jeffser.Alpaca.Plugins.AMD com.jeffser.Alpaca.Plugins.Ollama)' '$FEAT'"
+check "ai install installs Alpaca alone, never a plugin" bash -c "fbody() { awk -v f=\"\$1\" '\$0 ~ \"^\" f \"\\\\(\\\\) *\\\\{\" {on=1; next} on && /^\\}/ {on=0} on' '$FEAT'; }; b=\"\$(fbody ai_install)\"; grep -q 'flatpak install .*\"\$AI_APP\"' <<<\"\$b\" && ! grep -qE 'flatpak install.*(PLUGIN|Plugins)' <<<\"\$b\""
+check "ai install and remove uninstall the old plugins" bash -c "for f in ai_install ai_remove; do awk -v f=\"\$f\" '\$0 ~ \"^\" f \"\\\\(\\\\) *\\\\{\" {on=1; next} on && /^\\}/ {on=0} on' '$FEAT' | grep -q 'for p in \$(ai_old_plugins)' || exit 1; done"
 "$FEAT" nothing status > "$T/out" 2>&1 && RC=0 || RC=$?
 check "feature helper refuses an unknown feature (rc $RC)" [ "$RC" != 0 ]
 check "the phone layer's list names the packages the recipe explains" bash -c "grep -qx kdeconnectd '$ROOT/build_files/60-ujust-services/phone-packages.txt' && grep -qx fuse-sshfs '$ROOT/build_files/60-ujust-services/phone-packages.txt'"

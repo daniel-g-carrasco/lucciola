@@ -189,11 +189,12 @@ FEATURE_SPECS = (
      "working": "Adding the developer tools to the system.", "done": "Developer tools added: restart to use them",
      "remove": "The developer tools are removed from the system."},
     {"key": "ai", "group": "AI", "title": "Alpaca", "icon": "applications-science-symbolic", "restart": False,
-     "explain": "Chat with language models that run on this machine, in a sandbox: Alpaca from Flathub bundles its own Ollama. "
-                "The first start asks which model to download, a few GB each; 8 GB of video memory is the comfortable floor for the 7B models.",
-     "amd": "Adds the ROCm plugin so Alpaca uses the AMD GPU; a sizeable download. Without it, Alpaca uses Vulkan or the CPU.",
+     "explain": "Chat with language models that run on this machine, in a sandbox. At the first start Alpaca offers to download "
+                "Ollama, which runs the models; with AMD graphics, integrated ones too, turn on Vulkan in its settings. "
+                "A model is from about 3 GB (Qwen3.5 4B) to 16 GB (Gemma 4 26B-A4B), and needs as much free memory.",
      "working": "Installing Alpaca from Flathub.", "done": "Alpaca is installed: find it in the launcher",
-     "remove": "Alpaca is removed. Downloaded models stay in your home folder until you delete them."},
+     "remove": "Alpaca is removed, with the GPU plugin older versions of Lucciola added. "
+               "Downloaded models stay in your home folder until you delete them."},
 )
 FEATURE_GROUPS = (
     ("Phone", "The phone needs the KDE Connect app, from Google Play or F-Droid, on the same Wi-Fi."),
@@ -1341,7 +1342,6 @@ class SystemWindow(Adw.ApplicationWindow):
         self._autologin_guard = False
         self._dock_guard = False
         self._features = {}
-        self._amd_gpu = False
         self._profile = "stock"
         self._phone_devices = []
         self._phone_rows = []
@@ -2659,16 +2659,14 @@ class SystemWindow(Adw.ApplicationWindow):
             statuses = ls.feature_statuses(out) if rc == 0 else {}
             rc2, st_out, _ = run(["rpm-ostree", "status", "--json"])
             state = ls.parse_deployments(st_out if rc2 == 0 else "")
-            _, lspci, _ = run(["lspci"])
-            on_main(self._set_features, gen, statuses, state, ls.amd_gpu(lspci), err if rc != 0 else "")
+            on_main(self._set_features, gen, statuses, state, err if rc != 0 else "")
 
         in_thread(worker)
 
-    def _set_features(self, gen, statuses, state, amd, error):
+    def _set_features(self, gen, statuses, state, error):
         if not self._current("features", gen):
             return
         self._features = statuses
-        self._amd_gpu = amd
         unknown = {"state": "unknown", "detail": ""}
         pending = bool(state.get("staged"))
         for spec in FEATURE_SPECS:
@@ -2698,9 +2696,6 @@ class SystemWindow(Adw.ApplicationWindow):
         extra = None
         if key == "gaming":
             option = Adw.SwitchRow(title="Native Variant", subtitle=spec["native"])
-        elif key == "ai" and self._amd_gpu:
-            option = Adw.SwitchRow(title="AMD GPU Acceleration", subtitle=spec["amd"])
-            option.set_active(True)
         if option is not None:
             option.set_subtitle_lines(4)
             extra = Adw.PreferencesGroup()
@@ -2713,8 +2708,6 @@ class SystemWindow(Adw.ApplicationWindow):
             verb, args, then = f"{key}-on", [], None
             if key == "gaming" and option.get_active():
                 verb = "gaming-native-on"
-            if key == "ai" and option is not None and option.get_active():
-                args = ["amd"]
             if key == "devmode":
                 then = self._brew_install
             elif key == "sunshine":
