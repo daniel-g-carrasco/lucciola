@@ -83,6 +83,7 @@ HOME_RESTORE = "/usr/bin/lucciola-restore-stock-home"
 # their install/remove/status actions: the window runs the recipe itself,
 # so there is one definition and nothing to keep in step.
 UJUST = "/usr/bin/ujust"
+LOCAL_MODELS = "/usr/libexec/lucciola/local-models"
 SPOLA_APP = "io.github.daniel_g_carrasco.spola"
 SUNSHINE_APP = "dev.lizardbyte.app.Sunshine"
 ZEN_APP = "app.zen_browser.zen"
@@ -246,6 +247,18 @@ TWEAKS = {
         "heading_off": "Blender Back on the CPU?", "verb_off": "Turn Off",
         "explain_off": "The ROCm libraries and the override are removed; Blender renders on the CPU again.",
         "working_off": "Removing the override.", "done_off": "Blender is back on the CPU",
+    },
+    "models": {
+        "title": "Local AI Models", "on_label": "Install…", "off_label": "Remove…",
+        "argv_on": [UJUST, "lucciola-models", "install"], "argv_off": [UJUST, "lucciola-models", "remove"],
+        "heading_on": "Install Local AI Models?", "verb_on": "Install",
+        "explain_on": "Ollama runs language models on this PC, for every app that uses them: Alpaca, Meridio, editors and agents "
+                      "find it at 127.0.0.1:11434, and nothing leaves the PC. It runs on the graphics card through Vulkan, integrated ones too. "
+                      "It is installed for you alone; Ollama itself is about 1.5 GB to download, each model a few GB more.",
+        "working_on": "Downloading Ollama and starting it.", "done_on": "Ollama is running: download a model from the app that uses it, or with ollama pull",
+        "heading_off": "Remove Local AI Models?", "verb_off": "Remove",
+        "explain_off": "Ollama is stopped and removed. The models you downloaded stay in your home folder, in .ollama, until you delete them.",
+        "working_off": "Removing Ollama.", "done_off": "Ollama removed",
     },
 }
 
@@ -2793,6 +2806,7 @@ class SystemWindow(Adw.ApplicationWindow):
         more = Adw.PreferencesGroup(title="More Apps")
         page.add(more)
         self._spola_row = self._tweak_row(more, "folder-remote-symbolic", "spola")
+        self._models_row = self._tweak_row(more, "applications-science-symbolic", "models")
 
         tweaks = Adw.PreferencesGroup(title="Tweaks", description="Adjustments for single apps that Lucciola does not apply on its own.")
         page.add(tweaks)
@@ -2820,7 +2834,8 @@ class SystemWindow(Adw.ApplicationWindow):
 
     def _refresh_apps(self):
         gen = self._bump("apps")
-        for row in list(self._profile_rows.values()) + [self._spola_row, self._netflix_row, self._darktable_row, self._blender_row, self._excluded_row]:
+        for row in list(self._profile_rows.values()) + [self._spola_row, self._models_row, self._netflix_row, self._darktable_row,
+                                                        self._blender_row, self._excluded_row]:
             self._set_loading(row, True)
 
         def worker():
@@ -2846,11 +2861,13 @@ class SystemWindow(Adw.ApplicationWindow):
                 "darktable": (present[DARKTABLE_APP] and amd, ls.override_set(dt_show, "OCL_ICD_VENDORS")),
                 "blender": (present[BLENDER_APP] and amd, ls.override_set(bl_show, "blender-rocm")),
             }
-            on_main(self._set_apps, gen, profile, excluded, present[SPOLA_APP], netflix, tweaks)
+            rc_m, m_out, _ = run([LOCAL_MODELS, "status"], timeout=30)
+            models = ls.models_state(m_out if rc_m == 0 else "")
+            on_main(self._set_apps, gen, profile, excluded, present[SPOLA_APP], netflix, tweaks, models)
 
         in_thread(worker)
 
-    def _set_apps(self, gen, profile, excluded, spola, netflix, tweaks):
+    def _set_apps(self, gen, profile, excluded, spola, netflix, tweaks, models):
         if not self._current("apps", gen):
             return
         self._profile = profile
@@ -2871,6 +2888,12 @@ class SystemWindow(Adw.ApplicationWindow):
         self._excluded_row.set_subtitle(f"{len(excluded)} app" + ("" if len(excluded) == 1 else "s") if excluded else "None")
         self._set_tweak(self._spola_row, True, spola,
                         "Installed. Keeps folders in step with Koofr" if spola else "Not installed. A Koofr sync client made for Lucciola, with the sync state in Files")
+        state, version = models
+        self._set_tweak(self._models_row, True, state in ("running", "stopped"), {
+            "running": f"Running. Ollama {version} answers on this PC at 127.0.0.1:11434",
+            "stopped": f"Installed, Ollama {version}, but not running: Remove and Install again, or see the log in Report a Problem",
+            "absent": "Not installed. Language models on this PC for Alpaca, Meridio and other apps, on the GPU",
+        }.get(state, "The state could not be read"))
         self._set_tweak(self._netflix_row, netflix != "no-browser", netflix == "installed", {
             "installed": "On. Netflix sees an Opera user agent in Zen and plays in 1080p",
             "absent": "Off. Netflix plays in 720p in Zen",

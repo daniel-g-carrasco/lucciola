@@ -163,6 +163,12 @@ jobs:
         # templates into those Flatpaks, idempotent, never with
         # devtools.chrome.enabled. See tests/app-colors.test.sh.
         run: bash tests/app-colors.test.sh
+      - name: Local AI models (Ollama as a user service)
+        # local-models installs only the archive whose sha256 the image pins,
+        # leaves NVIDIA's libraries out without an NVIDIA GPU, updates when
+        # the pin moves and keeps the models on remove. See
+        # tests/local-models.test.sh.
+        run: bash tests/local-models.test.sh
       - name: Gaming alignment takes a new view of the repositories
         # build_files/custom-kernel/gaming-align.sh on a fake dnf: a view that
         # names a build no mirror holds is thrown away and planned again on

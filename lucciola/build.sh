@@ -481,6 +481,20 @@ systemctl --global enable lucciola-app-colors-flatpak.path lucciola-app-colors-f
   || { echo "ERROR: the app colour helpers or 28-app-colors.toml are missing" >&2; exit 1; }
 log "app colours: Flatpak apps read the Noctalia palette (GTK, Qt), Zen and Vesktop carried for every user"
 
+# Local AI models (ujust lucciola-models, Lucciola System > Apps): Ollama as
+# a service of the user who installs it, release and sha256 pinned in
+# /usr/share/lucciola/models/ollama.release. The update timer is enabled for
+# every user and acts only for those who installed it (its service's
+# ConditionPathExists): a Lucciola update that moves the pin reaches them.
+systemctl --global enable lucciola-ollama-update.timer
+[[ -L /etc/systemd/user/timers.target.wants/lucciola-ollama-update.timer ]] \
+  || { echo "ERROR: lucciola-ollama-update.timer is not enabled for users" >&2; exit 1; }
+[[ -x /usr/libexec/lucciola/local-models && -s /usr/lib/systemd/user/lucciola-ollama.service ]] \
+  || { echo "ERROR: local-models or lucciola-ollama.service is missing" >&2; exit 1; }
+grep -qE '^OLLAMA_SHA256=[0-9a-f]{64}$' /usr/share/lucciola/models/ollama.release \
+  || { echo "ERROR: /usr/share/lucciola/models/ollama.release names no sha256" >&2; exit 1; }
+log "local models: $(grep -E '^OLLAMA_VERSION=' /usr/share/lucciola/models/ollama.release), update timer enabled for every user"
+
 # 5f. /var/lib/greetd and /var/lib/noctalia-greeter come from tmpfiles.d at
 #     boot, on fresh installs and updated systems alike (lucciola-greeter.conf
 #     says why), so the image carries no copy of them.

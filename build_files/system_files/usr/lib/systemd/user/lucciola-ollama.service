@@ -1,0 +1,21 @@
+[Unit]
+Description=Local language models (Ollama) for this user
+Documentation=file:///usr/libexec/lucciola/local-models
+ConditionPathExists=%h/.local/share/lucciola/ollama/current/bin/ollama
+
+[Service]
+# This PC only. Vulkan for the GPU, and integrated GPUs too: Ollama drops
+# them unless OLLAMA_IGPU_ENABLE is set (2026-10-26, Radeon 760M: 0 B of
+# video memory used without it). A 16k context by default: an agent's
+# instructions and tools need more than the 4k Ollama picks with no
+# dedicated video memory.
+Environment=OLLAMA_HOST=127.0.0.1:11434
+Environment=OLLAMA_VULKAN=1
+Environment=OLLAMA_IGPU_ENABLE=1
+Environment=OLLAMA_CONTEXT_LENGTH=16384
+ExecStart=%h/.local/share/lucciola/ollama/current/bin/ollama serve
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

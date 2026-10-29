@@ -7,26 +7,26 @@ stable release is cut.
 
 ## [Unreleased]
 
-### Fixed (2026-10-26, AI)
-- **The AI feature follows Alpaca 9.** Alpaca 9 (January 2026) runs models
-  with its own Ollama Manager, which downloads Ollama into its sandbox and,
-  from 9.2, runs it on Vulkan; its Flatpak plugins are deprecated and it
-  asks to uninstall them. The feature still offered the ROCm plugin on AMD
-  graphics, fixed at December 2025, and its texts still said Alpaca bundles
-  Ollama, with 2024 models and an "8 GB of video memory" floor that means
-  nothing on integrated graphics. Now it installs Alpaca alone, removes the
-  old plugins at install and at remove, and says to turn on Vulkan in
-  Alpaca for AMD graphics; the recipe names this year's models (Qwen3.5 4B,
-  Gemma 4 26B-A4B). `ai-on` takes no option any more; the features page no
-  longer probes the GPU for it. Checks in `tests/system-logic.test.sh`.
-
-### Changed (2026-10-26, security baseline)
-- **Two boot units of Fedora's bootc base join the baseline.** Fedora's
-  bootc base images now enable `bootc-update-ca-trust.service` and
-  `bootc-update-crypto-policies.service` (fedora/bootc/base-images merge
-  request 663): before sysinit, on a booted bootc system, they regenerate
-  the CA trust store and the crypto-policies backends. The drift check
-  stopped every pull request build on them.
+### Added (2026-10-26, local AI models)
+- **Language models on this PC, for every app that uses them.** Lucciola
+  System, Apps, Local AI Models (or `ujust lucciola-models`) installs
+  Ollama as a service of the user: no root, the release and the sha256 of
+  its Linux archive pinned in `/usr/share/lucciola/models/ollama.release`,
+  unpacked in `~/.local/share/lucciola/ollama`, `ollama` in `~/.local/bin`.
+  `lucciola-ollama.service` answers on 127.0.0.1:11434 only, with Vulkan
+  and integrated GPUs on (Ollama skips them otherwise) and a 16k context
+  for agents. Alpaca, Meridio, editors and agents find it at the address
+  they look at first. NVIDIA's CUDA libraries, about 2 GB, are left out on
+  PCs without an NVIDIA GPU. `lucciola-ollama-update.timer`, enabled for
+  every user, brings the users who have it to a new pin. Remove keeps the
+  downloaded models unless asked.
+- Measured on a Radeon 760M with the same GGUF (Qwen3.5 4B, a ~3500-token
+  prompt): 293 tokens/s reading and 11.8 writing on the GPU, 80 and 7.2 on
+  the processor; llama.cpp's own server gave the same numbers, as Ollama
+  runs it inside. Fedora's ollama (0.24) is too old for this year's models,
+  Ollama's container is 5 GB with Ubuntu's Mesa: the archive it is.
+  `tests/local-models.test.sh` (20 checks, in lint), two mutants, the
+  validator's 6c2, the guide's apps chapter.
 
 ### Fixed (2026-10-25, bootloader update after the move from Fedora 44)
 - **The HiDPI GRUB step no longer breaks bootupd's bootloader update.**

@@ -1,0 +1,13 @@
+[Unit]
+Description=Check the local models service against Lucciola's pinned Ollama release
+Documentation=file:///usr/libexec/lucciola/local-models
+
+[Timer]
+# A few minutes after login, when the network is likely up, then daily: a
+# Lucciola update that moves the pin reaches the users who have the service.
+OnStartupSec=5min
+OnUnitActiveSec=1d
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

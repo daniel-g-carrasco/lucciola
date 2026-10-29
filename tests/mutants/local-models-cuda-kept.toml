@@ -1,0 +1,7 @@
+# NVIDIA's CUDA libraries are about 2 GB that serve nothing without an
+# NVIDIA GPU: they must go on AMD and Intel machines.
+name = "local-models-cuda-kept"
+file = "build_files/system_files/usr/libexec/lucciola/local-models"
+old = '''    rm -rf "$tmp"/lib/ollama/cuda_*'''
+new = '''    :'''
+must_fail = "bash tests/local-models.test.sh"

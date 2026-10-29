@@ -361,6 +361,17 @@ lucciola-ai:
     echo
     echo "Done: open Alpaca from the launcher."
 
+# Language models on this PC for every app that speaks Ollama's API
+# (Alpaca, Meridio, editors, agents): Ollama as a service of the user, on
+# the GPU through Vulkan, release and sha256 pinned by the image. No root;
+# the work is /usr/libexec/lucciola/local-models (status, install, update,
+# remove [--models]). Lucciola System, Apps, has the same as a row.
+[group('Lucciola')]
+lucciola-models ACTION="install":
+    #!/usr/bin/bash
+    set -euo pipefail
+    exec /usr/libexec/lucciola/local-models {{ ACTION }}
+
 # Roll back the AI workflow (undo lucciola-ai).
 [group('Lucciola')]
 lucciola-ai-remove:

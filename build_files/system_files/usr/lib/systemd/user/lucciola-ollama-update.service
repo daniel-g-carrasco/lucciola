@@ -1,0 +1,8 @@
+[Unit]
+Description=Bring the local models service to the Ollama release Lucciola pins
+Documentation=file:///usr/libexec/lucciola/local-models
+ConditionPathExists=%h/.local/share/lucciola/ollama/current
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/lucciola/local-models update --if-installed

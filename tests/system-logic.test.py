@@ -332,6 +332,11 @@ check("pinned video caps: the feed side carries no frame rate", "framerate" not 
 check("pinned video caps: a size that is not WxH falls back to 720p", "width=1280,height=720" in ls.video_caps("", "I420"))
 check("microphone caps: 16-bit stereo at the server's rate; jitter buffer under a quarter second",
       ls.MIC_CAPS == f"audio/x-raw,format=S16LE,rate={ls.MIC_RATE},channels={ls.MIC_CHANNELS},layout=interleaved" and 0 < ls.MIC_BUFFER_NS <= 250_000_000)
+check("local models: running, with its version", ls.models_state("installed 0.40.11 running\n") == ("running", "0.40.11"))
+check("local models: stopped", ls.models_state("installed 0.40.11 stopped") == ("stopped", "0.40.11"))
+check("local models: absent", ls.models_state("absent\n") == ("absent", ""))
+check("local models: anything else is unknown", ls.models_state("") == ("unknown", "") and ls.models_state("installed") == ("unknown", "")
+      and ls.models_state("installed 1 maybe") == ("unknown", ""))
 
 print("system-logic: all checks passed" if fails == 0 else f"system-logic: {fails} failed")
 sys.exit(1 if fails else 0)

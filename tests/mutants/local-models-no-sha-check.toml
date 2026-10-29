@@ -1,0 +1,7 @@
+# The archive comes from the network: without the sha256 check any file
+# served at the URL would be unpacked and run as the user's service.
+name = "local-models-no-sha-check"
+file = "build_files/system_files/usr/libexec/lucciola/local-models"
+old = '''    || { rm -f "$archive"; die "the download does not match the sha256 Lucciola expects for Ollama $v: removed"; }'''
+new = '''    || true'''
+must_fail = "bash tests/local-models.test.sh"
