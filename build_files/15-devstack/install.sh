@@ -239,11 +239,19 @@ fi
 # ublue-os-update-services from the ublue-os/packages COPR but not uupd.
 # Same COPR, key pinned by fingerprint, repo removed afterwards (the
 # package ships a preset that enables uupd.timer; enabled explicitly too).
+# Also ublue-os-udev-rules: Universal Blue's main images stopped shipping it
+# on 2026-10-27 (silverblue-main:45), and with it went the udev rules for
+# game controllers, FIDO/U2F and Titan security keys, Wooting keyboards and
+# Framework input modules; the package-removal guard stopped every main build.
+# Same package (0.10), same COPR.
 UBLUE_PACKAGES_FPR="AB4670779555943799BE7ED916BC8535A444A78A"
-if rpm -q uupd >/dev/null 2>&1; then
-  log "uupd already in the base"
+UBLUE_COPR_PKGS=()
+rpm -q uupd >/dev/null 2>&1 || UBLUE_COPR_PKGS+=(uupd)
+rpm -q ublue-os-udev-rules >/dev/null 2>&1 || UBLUE_COPR_PKGS+=(ublue-os-udev-rules)
+if (( ${#UBLUE_COPR_PKGS[@]} == 0 )); then
+  log "uupd and ublue-os-udev-rules already in the base"
 else
-  log "base lacks uupd, installing from the ublue-os/packages COPR"
+  log "base lacks ${UBLUE_COPR_PKGS[*]}, installing from the ublue-os/packages COPR"
   retry_curl_strict https://download.copr.fedorainfracloud.org/results/ublue-os/packages/pubkey.gpg /run/copr-ublue-packages.gpg
   verify_key_fpr /run/copr-ublue-packages.gpg "$UBLUE_PACKAGES_FPR" "copr ublue-os/packages" || exit 1
   rpm --import /run/copr-ublue-packages.gpg
@@ -258,9 +266,12 @@ gpgkey=file:///run/copr-ublue-packages.gpg
 repo_gpgcheck=0
 enabled=1
 REPOEOF
-  retry 3 30 dnf -y install --setopt=install_weak_deps=False uupd
+  retry 3 30 dnf -y install --setopt=install_weak_deps=False "${UBLUE_COPR_PKGS[@]}"
   rm -f /etc/yum.repos.d/_copr:copr.fedorainfracloud.org:ublue-os:packages.repo /run/copr-ublue-packages.gpg
 fi
+rpm -q uupd ublue-os-udev-rules >/dev/null || { err "uupd or ublue-os-udev-rules missing after the COPR step"; exit 1; }
+[[ -f /usr/lib/udev/rules.d/70-u2f.rules && -f /usr/lib/udev/rules.d/71-8bitdo-controllers.rules ]] \
+  || { err "ublue-os-udev-rules installed but its rules are not in /usr/lib/udev/rules.d"; exit 1; }
 systemctl enable uupd.timer
 # One updater. Universal Blue's main images enable their own timers:
 # rpm-ostreed-automatic.timer (stages the next deployment by itself),
