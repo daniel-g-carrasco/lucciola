@@ -7,6 +7,17 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-10-30, build)
+- **Every main build since 2026-10-27 stopped at the package-removal guard:
+  Universal Blue's base dropped `ublue-os-udev-rules`.** With it went the
+  udev rules for game controllers, FIDO/U2F and Titan security keys,
+  Wooting keyboards and Framework input modules. The build installs the
+  same package (0.10) from the ublue-os/packages COPR it already uses for
+  uupd, key pinned by fingerprint, and checks that the rules are in place.
+  Until a new image is published, machines with the gaming layer cannot
+  update either: the last image carries nss 3.131 from a Fedora 45 nightly,
+  which the frozen repositories no longer have in 32 bits.
+
 ### Added (2026-10-26, local AI models)
 - **Language models on this PC, for every app that uses them.** Lucciola
   System, Apps, Local AI Models (or `ujust lucciola-models`) installs
