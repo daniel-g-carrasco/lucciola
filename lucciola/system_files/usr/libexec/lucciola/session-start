@@ -41,30 +41,10 @@ if [ ! -e "$niri_cfg" ] || ! grep -Eqv '^[[:space:]]*(//.*)?$|^[[:space:]]*inclu
     if [ -e "$niri_cfg" ]; then echo; cat "$niri_cfg"; fi
   } > "$niri_cfg.new" && mv "$niri_cfg.new" "$niri_cfg"
 fi
-# Named workspaces live in ONE place, the personal file. niri inserts every
-# `workspace` section as is, without merging across includes, so the same
-# name declared in the system config and again in lucciola.kdl (to pin it to
-# a monitor with open-on-output) made two workspaces called "1". Lucciola's
-# two workspaces (Mod+1, Mod+2) are added to lucciola.kdl once, unless the
-# user's niri files already declare named workspaces; deleted, they stay so.
-niri_dir="${XDG_CONFIG_HOME:-$HOME/.config}/niri"
-ws_marker="${XDG_STATE_HOME:-$HOME/.local/state}/lucciola/niri-workspaces-seeded"
-if [ ! -e "$ws_marker" ]; then
-  if ! cat "$niri_dir/config.kdl" "$niri_dir/lucciola.kdl" 2>/dev/null \
-      | grep -Eq '^[[:space:]]*workspace[[:space:]]+"'; then
-    mkdir -p "$niri_dir"
-    cat >> "$niri_dir/lucciola.kdl" <<'KDL'
-
-// Lucciola's two workspaces (Mod+1, Mod+2), always present. To keep them on
-// one monitor, add its name as `niri msg outputs` shows it, for example:
-// workspace "1" { open-on-output "Dell Inc. DELL P2415Q 0123456789"; }
-workspace "1"
-workspace "2"
-KDL
-  fi
-  mkdir -p "${ws_marker%/*}"
-  : > "$ws_marker"
-fi
+# Workspaces are niri's own, dynamic (config.kdl, Mod+1 to Mod+9 by position).
+# Until 2026-10-31 two named ones, "1" and "2", were added to lucciola.kdl at
+# the first login; they are not any more, and a user's own named workspaces
+# there stay as they are.
 # Screenshots go where GNOME saves them: the XDG Pictures folder of
 # user-dirs.dirs (~/Pictures on a new account, translated with the locale;
 # whatever a user or an older Margine layout set it to otherwise), then GNOME

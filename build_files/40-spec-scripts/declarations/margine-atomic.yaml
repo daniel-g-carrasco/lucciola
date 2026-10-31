@@ -634,7 +634,7 @@ home:
     - dev
     - scratch
   xdg_user_dirs:
-    DESKTOP: "$HOME/"
+    DESKTOP: "$HOME/scratch/desktop"  # not $HOME: Flatpak apps with the xdg-desktop permission would get the whole home (2026-10-31)
     DOWNLOAD: "$HOME/scratch/downloads"
     TEMPLATES: "$HOME/data/templates"
     PUBLICSHARE: "$HOME/data/shared"

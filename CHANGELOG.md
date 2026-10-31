@@ -7,6 +7,15 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (2026-10-31, workspaces and Desktop)
+- **Mod+1 to Mod+9 go to the workspace at that position**, Mod+Shift+1 to
+  Mod+Shift+9 move the window there. Workspaces are niri's own, dynamic:
+  Lucciola no longer seeds two named ones at the first login, and Mod+3 no
+  longer leads nowhere.
+- **The Desktop folder is `~/scratch/desktop`, not the home.** With
+  XDG_DESKTOP_DIR on the home, Flatpak apps with the xdg-desktop permission
+  (Pinta, Heroic, Protontricks) were given the whole home.
+
 ### Fixed (2026-10-30, build)
 - **Every main build since 2026-10-27 stopped at the package-removal guard:
   Universal Blue's base dropped `ublue-os-udev-rules`.** With it went the

@@ -80,12 +80,11 @@ layout {
     }
 }
 
-// Two named workspaces always exist (Mod+1, Mod+2): with niri's scrolling
-// columns each holds far more than a GNOME one, so two are enough. They are
-// NOT declared here: niri does not merge `workspace` sections across
-// includes, so declaring them again in lucciola.kdl to pin them to a monitor
-// (open-on-output) made duplicates. session-start adds them to lucciola.kdl
-// once, where they can be given a monitor.
+// Workspaces are niri's own, dynamic: one appears when a window moves to the
+// empty one at the bottom, and goes away when it empties. Mod+1 to Mod+9 go to
+// the first nine of the focused monitor, by position (2026-10-31; until then
+// Lucciola kept two named ones, "1" and "2", and Mod+3 led nowhere). A user
+// who wants fixed ones declares named workspaces in lucciola.kdl.
 
 // Noctalia is the shell: bar, notifications, lock screen, launcher, OSD,
 // polkit agent, clipboard, night light, wallpaper. The wrapper seeds the
@@ -248,16 +247,28 @@ binds {
     Mod+Shift+Ctrl+Left  { move-column-to-monitor-left; }
     Mod+Shift+Ctrl+Right { move-column-to-monitor-right; }
 
-    // Workspaces
-    Mod+1 { focus-workspace "1"; }
-    Mod+2 { focus-workspace "2"; }
-    Mod+Shift+1 { move-column-to-workspace "1"; }
-    Mod+Shift+2 { move-column-to-workspace "2"; }
+    // Workspaces, by position on the focused monitor: Mod+N goes to the Nth,
+    // Mod+Shift+N moves the window there (the empty one at the bottom too).
+    // No up/down keys: they would wander into that empty workspace.
+    Mod+1 { focus-workspace 1; }
+    Mod+2 { focus-workspace 2; }
+    Mod+3 { focus-workspace 3; }
+    Mod+4 { focus-workspace 4; }
+    Mod+5 { focus-workspace 5; }
+    Mod+6 { focus-workspace 6; }
+    Mod+7 { focus-workspace 7; }
+    Mod+8 { focus-workspace 8; }
+    Mod+9 { focus-workspace 9; }
+    Mod+Shift+1 { move-column-to-workspace 1; }
+    Mod+Shift+2 { move-column-to-workspace 2; }
+    Mod+Shift+3 { move-column-to-workspace 3; }
+    Mod+Shift+4 { move-column-to-workspace 4; }
+    Mod+Shift+5 { move-column-to-workspace 5; }
+    Mod+Shift+6 { move-column-to-workspace 6; }
+    Mod+Shift+7 { move-column-to-workspace 7; }
+    Mod+Shift+8 { move-column-to-workspace 8; }
+    Mod+Shift+9 { move-column-to-workspace 9; }
 
-    // Fixed workspaces: Super+1 and Super+2 only. niri always keeps one
-    // empty workspace at the bottom of every screen; the up/down keys and the
-    // Super+wheel binds would lead there, so they are left out. (The
-    // three-finger vertical touchpad swipe still does; niri cannot turn it off.)
     Mod+WheelScrollRight { focus-column-right; }
     Mod+WheelScrollLeft  { focus-column-left; }
     Mod+Shift+WheelScrollDown { focus-column-right; }
