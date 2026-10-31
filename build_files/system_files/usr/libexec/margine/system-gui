@@ -89,6 +89,8 @@ SUNSHINE_APP = "dev.lizardbyte.app.Sunshine"
 ZEN_APP = "app.zen_browser.zen"
 DARKTABLE_APP = "org.darktable.Darktable"
 BLENDER_APP = "org.blender.Blender"
+BITWARDEN_APP = "com.bitwarden.desktop"
+BITWARDEN_WAYLAND = "/usr/libexec/lucciola/bitwarden-wayland"
 # KDE Connect's daemon on the session bus (the phone layer, Features page);
 # D-Bus activation starts it on the first call.
 KDECONNECTD = "/usr/bin/kdeconnectd"
@@ -225,6 +227,19 @@ TWEAKS = {
         "heading_off": "Back to the Normal User Agent?", "verb_off": "Turn Off",
         "explain_off": "The extension is removed from Zen. Quit Zen first.",
         "working_off": "Removing the extension.", "done_off": "Off: Zen looks like itself to Netflix again",
+    },
+    "bitwarden": {
+        "title": "Bitwarden on Wayland", "on_label": "Turn On…", "off_label": "Turn Off…",
+        "argv_on": [UJUST, "lucciola-bitwarden-wayland", "enable"], "argv_off": [UJUST, "lucciola-bitwarden-wayland", "disable"],
+        "heading_on": "Bitwarden on Wayland?", "verb_on": "Turn On",
+        "explain_on": "Bitwarden runs on X11 by default, and under niri its copies reach other apps only through the X11 bridge; "
+                      "on Wayland they cannot be pasted at all, because the protocol its copy needs is hidden from Flatpak apps. "
+                      "This gives Bitwarden the normal Wayland connection instead, and with it, in principle, niri's other privileged "
+                      "protocols too: screen capture, virtual keyboard and pointer. Bitwarden is closed now and runs on Wayland from its next start.",
+        "working_on": "Giving Bitwarden the Wayland connection.", "done_on": "Bitwarden runs on Wayland from its next start",
+        "heading_off": "Bitwarden Back on X11?", "verb_off": "Turn Off",
+        "explain_off": "Bitwarden goes back to its own setting, X11 with the restricted Flatpak connection. It is closed now.",
+        "working_off": "Removing the override.", "done_off": "Bitwarden is back on X11",
     },
     "darktable": {
         "title": "darktable on the GPU", "on_label": "Turn On…", "off_label": "Turn Off…",
@@ -2811,6 +2826,7 @@ class SystemWindow(Adw.ApplicationWindow):
         tweaks = Adw.PreferencesGroup(title="Tweaks", description="Adjustments for single apps that Lucciola does not apply on its own.")
         page.add(tweaks)
         self._netflix_row = self._tweak_row(tweaks, "video-display-symbolic", "netflix")
+        self._bitwarden_row = self._tweak_row(tweaks, "dialog-password-symbolic", "bitwarden")
         self._darktable_row = self._tweak_row(tweaks, "applications-graphics-symbolic", "darktable")
         self._blender_row = self._tweak_row(tweaks, "applications-graphics-symbolic", "blender")
         return page
@@ -2834,7 +2850,7 @@ class SystemWindow(Adw.ApplicationWindow):
 
     def _refresh_apps(self):
         gen = self._bump("apps")
-        for row in list(self._profile_rows.values()) + [self._spola_row, self._models_row, self._netflix_row, self._darktable_row,
+        for row in list(self._profile_rows.values()) + [self._spola_row, self._models_row, self._netflix_row, self._bitwarden_row, self._darktable_row,
                                                         self._blender_row, self._excluded_row]:
             self._set_loading(row, True)
 
@@ -2861,6 +2877,9 @@ class SystemWindow(Adw.ApplicationWindow):
                 "darktable": (present[DARKTABLE_APP] and amd, ls.override_set(dt_show, "OCL_ICD_VENDORS")),
                 "blender": (present[BLENDER_APP] and amd, ls.override_set(bl_show, "blender-rocm")),
             }
+            rc_b, b_out, _ = run([BITWARDEN_WAYLAND, "status"], timeout=30)
+            b_state = b_out.strip() if rc_b == 0 else "unknown"
+            tweaks["bitwarden"] = (b_state in ("on", "off"), b_state == "on")
             rc_m, m_out, _ = run([LOCAL_MODELS, "status"], timeout=30)
             models = ls.models_state(m_out if rc_m == 0 else "")
             on_main(self._set_apps, gen, profile, excluded, present[SPOLA_APP], netflix, tweaks, models)
@@ -2901,6 +2920,10 @@ class SystemWindow(Adw.ApplicationWindow):
         }.get(netflix, "The state could not be read"))
         if netflix in ("no-profile", "unknown"):
             self._netflix_row._on.set_visible(False)
+        applicable, on = tweaks["bitwarden"]
+        self._set_tweak(self._bitwarden_row, applicable, on,
+                        "On. Runs on Wayland with the normal connection; copies paste everywhere" if on
+                        else "Off. Runs on X11; copies reach other apps through the X11 bridge")
         for key, row in (("darktable", self._darktable_row), ("blender", self._blender_row)):
             applicable, on = tweaks[key]
             self._set_tweak(row, applicable, on,

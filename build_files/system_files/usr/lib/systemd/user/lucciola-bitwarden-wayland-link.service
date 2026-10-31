@@ -1,0 +1,18 @@
+[Unit]
+Description=Bitwarden on Wayland: a second name for the compositor socket
+Documentation=file:///usr/libexec/lucciola/bitwarden-wayland
+# Enabled per user by `lucciola-bitwarden-wayland enable` (Lucciola System,
+# Apps, Tweaks), never for everyone. The compositor socket changes with every
+# session, so the second name is made again at each login, before autostart.
+PartOf=graphical-session.target
+After=graphical-session.target
+Before=xdg-desktop-autostart.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/sh -c 'ln -f "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" "$XDG_RUNTIME_DIR/bitwarden-wayland"'
+ExecStop=/usr/bin/rm -f %t/bitwarden-wayland
+
+[Install]
+WantedBy=graphical-session.target

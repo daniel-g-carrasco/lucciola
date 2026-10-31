@@ -163,6 +163,10 @@ jobs:
         # templates into those Flatpaks, idempotent, never with
         # devtools.chrome.enabled. See tests/app-colors.test.sh.
         run: bash tests/app-colors.test.sh
+      - name: Bitwarden on Wayland (the clipboard workaround)
+        # Its three override keys in, exactly those out, the user's other
+        # overrides for Bitwarden kept. See tests/bitwarden-wayland.test.sh.
+        run: bash tests/bitwarden-wayland.test.sh
       - name: Local AI models (Ollama as a user service)
         # local-models installs only the archive whose sha256 the image pins,
         # leaves NVIDIA's libraries out without an NVIDIA GPU, updates when

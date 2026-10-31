@@ -1067,6 +1067,15 @@ lucciola-update-unblock APP="":
       exit 1
     fi
 
+# Bitwarden (Flatpak) on native Wayland with a clipboard that works under
+# niri: the compositor socket under a second name, given to Bitwarden alone.
+# The why and the price are in /usr/libexec/lucciola/bitwarden-wayland.
+[group('Lucciola')]
+lucciola-bitwarden-wayland ACTION="status":
+    #!/usr/bin/bash
+    set -euo pipefail
+    exec /usr/libexec/lucciola/bitwarden-wayland {{ ACTION }}
+
 # The Flatpak's own OpenCL is Mesa's rusticl, and since Mesa 26.2 (built
 # with LLVM 22's upstream libclc) it cannot build 7 of darktable's 42
 # kernels ("nir_shader not fully linked"), so darktable silently runs on the
