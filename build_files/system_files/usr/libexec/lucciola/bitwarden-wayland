@@ -1,0 +1,84 @@
+#!/usr/bin/bash
+# lucciola bitwarden-wayland: Bitwarden (Flatpak) on native Wayland with a
+# clipboard that works under niri.
+#
+#   bitwarden-wayland status    on, off or absent (Bitwarden not installed)
+#   bitwarden-wayland enable
+#   bitwarden-wayland disable
+#
+# Why (2026-10-31): Bitwarden copies through a native module that needs the
+# ext/wlr data-control protocol. Flatpak gives apps a restricted Wayland
+# connection (security context), where niri hides it; the module then falls
+# back to X11, and its copies reach Wayland apps only through xwayland-
+# satellite with an X11 window focused: with Bitwarden on Wayland they never
+# do, and on X11 they depend on that bridge. The workaround, from
+# bitwarden/clients#21288: the compositor socket under a second name
+# ($XDG_RUNTIME_DIR/bitwarden-wayland, made at each login by
+# lucciola-bitwarden-wayland-link.service), given to Bitwarden alone by a
+# user Flatpak override, which is the normal connection.
+#
+# The price: on that connection Bitwarden is not restricted, so it could also
+# use niri's other privileged protocols (screen capture, virtual keyboard and
+# pointer). Off by default; Lucciola System says so before turning it on.
+set -euo pipefail
+APP=com.bitwarden.desktop
+UNIT=lucciola-bitwarden-wayland-link.service
+OVR="${XDG_DATA_HOME:-$HOME/.local/share}/flatpak/overrides/$APP"
+
+installed() { flatpak info --user "$APP" >/dev/null 2>&1 || flatpak info --system "$APP" >/dev/null 2>&1; }
+
+# The override keys this tool owns, edited in place so that the user's other
+# overrides for Bitwarden stay.
+edit_override() {  # edit_override set|unset
+  mkdir -p "$(dirname "$OVR")"
+  python3 - "$OVR" "$1" <<'PY'
+import configparser, sys
+path, mode = sys.argv[1], sys.argv[2]
+kf = configparser.ConfigParser(interpolation=None, delimiters=("=",))
+kf.optionxform = str
+kf.read(path)
+for sec in ("Context", "Environment"):
+    if not kf.has_section(sec):
+        kf.add_section(sec)
+fs = [x for x in kf.get("Context", "filesystems", fallback="").split(";") if x and x != "xdg-run/bitwarden-wayland"]
+if mode == "set":
+    fs.append("xdg-run/bitwarden-wayland")
+    kf.set("Environment", "WAYLAND_DISPLAY", "bitwarden-wayland")
+    kf.set("Environment", "DISPLAY_MODE", "WAYLAND")
+else:
+    for k in ("WAYLAND_DISPLAY", "DISPLAY_MODE"):
+        kf.remove_option("Environment", k)
+if fs:
+    kf.set("Context", "filesystems", ";".join(fs) + ";")
+else:
+    kf.remove_option("Context", "filesystems")
+for sec in list(kf.sections()):
+    if not kf.items(sec):
+        kf.remove_section(sec)
+with open(path, "w") as f:
+    kf.write(f, space_around_delimiters=False)
+PY
+  [[ -s "$OVR" ]] || rm -f "$OVR"
+}
+
+is_on() {
+  [[ -f "$OVR" ]] && grep -qx 'WAYLAND_DISPLAY=bitwarden-wayland' "$OVR" \
+    && systemctl --user -q is-enabled "$UNIT" 2>/dev/null
+}
+
+case "${1:-status}" in
+  status)
+    if ! installed; then echo absent; elif is_on; then echo on; else echo off; fi ;;
+  enable)
+    installed || { echo "Bitwarden is not installed" >&2; exit 1; }
+    systemctl --user enable --now "$UNIT"
+    edit_override set
+    flatpak kill "$APP" >/dev/null 2>&1 || true
+    echo "Bitwarden runs on Wayland from its next start; it was closed if it was open." ;;
+  disable)
+    edit_override unset
+    systemctl --user disable --now "$UNIT" >/dev/null 2>&1 || true
+    flatpak kill "$APP" >/dev/null 2>&1 || true
+    echo "Bitwarden is back to its own setting (X11) from its next start." ;;
+  *) echo "usage: bitwarden-wayland status|enable|disable" >&2; exit 2 ;;
+esac

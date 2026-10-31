@@ -7,6 +7,22 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Added (2026-10-31, Bitwarden on Wayland)
+- **A tweak puts Bitwarden on native Wayland with a working clipboard.**
+  Bitwarden copies through a native module that needs the ext/wlr
+  data-control protocol, which niri hides from Flatpak apps (their
+  restricted, security-context connection). The module falls back to X11:
+  on Wayland its copies never reach other apps, on X11 they depend on the
+  xwayland-satellite bridge. Lucciola System, Apps, Tweaks, "Bitwarden on
+  Wayland" (or `ujust lucciola-bitwarden-wayland enable`) gives Bitwarden
+  the compositor socket under a second name, made at each login by
+  `lucciola-bitwarden-wayland-link.service`, through a user Flatpak
+  override: the normal connection, where the protocol is there. The price,
+  said in the dialog: on that connection Bitwarden could also use niri's
+  other privileged protocols. Off by default; it edits only its own
+  override keys. Workaround from bitwarden/clients#21288.
+  `tests/bitwarden-wayland.test.sh` (13 checks, in lint).
+
 ### Changed (2026-10-31, workspaces and Desktop)
 - **Mod+1 to Mod+9 go to the workspace at that position**, Mod+Shift+1 to
   Mod+Shift+9 move the window there. Workspaces are niri's own, dynamic:
