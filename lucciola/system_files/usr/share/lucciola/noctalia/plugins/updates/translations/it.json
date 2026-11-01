@@ -1,0 +1,20 @@
+{
+  "tooltip.title": "Aggiornamenti",
+  "tooltip.staged": "{version} è scaricata: riavvia per concludere",
+  "tooltip.running": "In uso",
+  "tooltip.working": "Aggiornamento in corso in sottofondo",
+  "tooltip.failed": "Aggiornamento automatico fallito",
+  "tooltip.reason": "Ultima esecuzione",
+  "tooltip.open": "Clic per aprire Lucciola System",
+
+  "error.title": "Aggiornamenti",
+
+  "settings.command.label": "Comando",
+  "settings.command.description": "Percorso del comando update-state che il plugin legge.",
+  "settings.open_command.label": "Apri con",
+  "settings.open_command.description": "Comando eseguito dal clic; Lucciola System di serie.",
+  "settings.show_staged.label": "Mostra un aggiornamento in attesa",
+  "settings.show_staged.description": "Tieni il simbolo sulla barra finché una nuova versione aspetta il riavvio.",
+  "settings.show_version.label": "Mostra la versione",
+  "settings.show_version.description": "Mostra la versione in attesa accanto al simbolo."
+}

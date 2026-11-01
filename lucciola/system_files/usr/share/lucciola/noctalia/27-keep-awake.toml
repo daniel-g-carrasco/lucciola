@@ -12,8 +12,10 @@ kind = "path"
 location = "/usr/share/lucciola/noctalia/plugins"
 enabled = true
 
+# The one list of enabled Lucciola plugins (a second fragment setting it
+# would replace this one): Keep Awake, and Updates (29-updates.toml).
 [plugins]
-enabled = ["lucciola/keep_awake"]
+enabled = ["lucciola/keep_awake", "lucciola/updates"]
 
 [widget.keep-awake]
 type = "lucciola/keep_awake:indicator"

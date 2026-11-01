@@ -167,6 +167,16 @@ jobs:
         # Its three override keys in, exactly those out, the user's other
         # overrides for Bitwarden kept. See tests/bitwarden-wayland.test.sh.
         run: bash tests/bitwarden-wayland.test.sh
+      - name: Update state for the bar and the notifier
+        # /usr/libexec/lucciola/update-state on fake rpm-ostree, systemctl
+        # and journalctl: the staged version, a running transaction, the
+        # channels with the failed one's reason. See tests/update-state.test.sh.
+        run: bash tests/update-state.test.sh
+      - name: Update notifications (ready, applied, failed runs)
+        # staged-update-notify on fakes: one notice per staged update, "now
+        # running" once after the restart, one notice per failed automatic
+        # run, nothing when all is well. See tests/update-notify.test.sh.
+        run: bash tests/update-notify.test.sh
       - name: Local AI models (Ollama as a user service)
         # local-models installs only the archive whose sha256 the image pins,
         # leaves NVIDIA's libraries out without an NVIDIA GPU, updates when

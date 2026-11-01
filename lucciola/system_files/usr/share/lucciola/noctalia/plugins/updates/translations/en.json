@@ -1,0 +1,20 @@
+{
+  "tooltip.title": "Updates",
+  "tooltip.staged": "{version} is downloaded: restart to finish",
+  "tooltip.running": "Running",
+  "tooltip.working": "Updating in the background",
+  "tooltip.failed": "Automatic update failed",
+  "tooltip.reason": "Last run",
+  "tooltip.open": "Click to open Lucciola System",
+
+  "error.title": "Updates",
+
+  "settings.command.label": "Command",
+  "settings.command.description": "Path of the update-state command the plugin reads.",
+  "settings.open_command.label": "Open with",
+  "settings.open_command.description": "Command a click runs; Lucciola System by default.",
+  "settings.show_staged.label": "Show a staged update",
+  "settings.show_staged.description": "Keep the glyph on the bar while a new version waits for a restart.",
+  "settings.show_version.label": "Show the version",
+  "settings.show_version.description": "Show the staged version next to the glyph."
+}

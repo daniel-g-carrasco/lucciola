@@ -1,0 +1,87 @@
+#!/usr/bin/python3
+"""lucciola update-state: the update situation of this machine, as JSON, for
+the bar and the session notifier.
+
+    /usr/libexec/lucciola/update-state [--json]
+
+Offline and unprivileged on purpose (it runs every minute from the bar):
+`rpm-ostree status --json` for the deployments and a running transaction,
+`systemctl show` and `list-timers` of both managers for the last and next
+runs of the update channels, the journal of a failed unit for its reason.
+The decisions are the ones Lucciola System shows (lucciola_system.py:
+channel_health, failure_excerpt), so the dot on the bar, the notification
+and the window never disagree. No registry call: whether a newer image is
+published is the window's question, asked when it opens.
+
+Output:
+    {"booted": "candidate.20261024", "staged": "candidate.20261101" | null,
+     "transaction": "" | "Upgrade", "failed": 1,
+     "channels": [{"key": "system", "title": "System", "outcome": "failed",
+                   "unit": "uupd.service", "user": false, "last": 1793528427,
+                   "next": 1793589132, "reason": "...", "line": "Failed today at 11:20: ..."}, ...],
+     "checked": 1793530000}
+"""
+
+import json
+import os
+import subprocess
+import sys
+import time
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..", "share", "lucciola", "system")))
+import lucciola_system as ls  # noqa: E402
+
+
+def run(argv, timeout=30):
+    try:
+        res = subprocess.run(argv, text=True, capture_output=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired):
+        return 1, ""
+    return res.returncode, res.stdout
+
+
+def collect():
+    now = time.time()
+    rc, out = run(["rpm-ostree", "status", "--json"])
+    state = ls.parse_deployments(out if rc == 0 else "")
+    units, timers = {}, {}
+    for scope, unit_names, timer_names in (
+        ([], ls.SYSTEM_UNITS, ls.SYSTEM_TIMERS),
+        (["--user"], ls.USER_UNITS, ls.USER_TIMERS),
+    ):
+        rc, out = run(["systemctl", *scope, "show", "--no-pager", "--timestamp=unix", "-p", ls.UNIT_PROPERTIES, *unit_names])
+        units.update(ls.parse_unit_show(out if rc == 0 else ""))
+        rc, out = run(["systemctl", *scope, "list-timers", "--all", "--no-pager", "--output=json", *timer_names])
+        timers.update(ls.parse_timers(out if rc == 0 else ""))
+    channels = ls.channel_health(units, timers, now)
+    for channel in channels:
+        channel.pop("log", None)
+        if channel["outcome"] not in ("failed", "hung") or not channel["unit"]:
+            continue
+        scope = ["--user"] if channel["user"] else []
+        rc, out = run(["journalctl", *scope, "-u", channel["unit"], "-n", "400", "-o", "cat", "--no-pager", "-q"], timeout=20)
+        channel["reason"] = ls.failure_excerpt(out if rc == 0 else "")
+        started = (units.get(channel["unit"]) or {}).get("started")
+        channel["line"] = ls.health_line(channel["outcome"], channel["last"], channel["next"], started, now, channel["reason"])
+    return {
+        "booted": state.get("booted"),
+        "staged": state.get("staged"),
+        "transaction": state.get("transaction") or "",
+        "failed": sum(1 for c in channels if c["outcome"] in ("failed", "hung")),
+        "channels": channels,
+        "checked": int(now),
+    }
+
+
+def main(argv):
+    if argv and argv != ["--json"]:
+        print(__doc__.strip().splitlines()[0], file=sys.stderr)
+        print("usage: update-state [--json]", file=sys.stderr)
+        return 2
+    print(json.dumps(collect(), ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
