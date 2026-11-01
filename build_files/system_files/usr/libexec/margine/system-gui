@@ -1668,7 +1668,7 @@ class SystemWindow(Adw.ApplicationWindow):
             subtitle="Every commit between the version that runs and the next one",
         )
         self._github_row.add_prefix(icon("web-browser-symbolic"))
-        self._github_row.add_suffix(icon("adw-external-link-symbolic"))
+        self._github_row.add_suffix(icon("go-next-symbolic"))
         self._github_row.set_activatable(True)
         self._github_row.connect("activated", self._on_open_compare)
         self._next_group.add(self._github_row)
