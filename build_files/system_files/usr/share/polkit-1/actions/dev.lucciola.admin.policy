@@ -41,6 +41,30 @@
     <annotate key="org.freedesktop.policykit.exec.argv1">rollback</annotate>
   </action>
 
+  <action id="dev.lucciola.admin.pin">
+    <description>Keep the running Lucciola version through later updates</description>
+    <message>Authentication is required to keep the running version of Lucciola in the boot menu through later updates.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">pin</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.unpin">
+    <description>Stop keeping the running Lucciola version</description>
+    <message>Authentication is required to let later updates replace the running version of Lucciola as usual.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">unpin</annotate>
+  </action>
+
   <action id="dev.lucciola.admin.flatpak-unblock">
     <description>Update an app excluded from automatic updates</description>
     <message>Authentication is required to update this app and take it back into automatic updates.</message>

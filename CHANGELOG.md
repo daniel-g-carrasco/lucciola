@@ -7,6 +7,26 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Added (2026-11-01, Lucciola System: what the next version brings)
+- **Next Version group** in the Overview while an update is staged or
+  published: *What Changed* reads the package diff and the security
+  advisories rpm-ostree keeps for a staged deployment ("358 packages
+  upgraded, 3 removed. 10 important, 16 moderate, 5 low and 2 unrated
+  security fixes", the list a click away) and *Changes on GitHub* opens
+  the compare view between the two builds, read from the revision label
+  the images carry.
+- **Phases in the download dialog**: "Checking the new image",
+  "Downloading the new image", "Resolving the extra packages", "Applying
+  the extra packages on top", "Preparing the next restart", read from the
+  helper's output; the raw lines stay under Details.
+- **Keep This Version** in Health and Recovery pins the running
+  deployment (`ostree admin pin`, new `pin`/`unpin` verbs of the admin
+  helper with their polkit actions), so later updates leave it in the
+  boot menu; Release takes the pin away.
+- Version labels come with their date: "candidate.20261101, built on
+  1 November 2026, candidate" in This Machine and at the top of the hero
+  sentences.
+
 ### Changed (2026-11-01, Lucciola System: the update page tells the truth)
 - **A staged update that is no longer the newest can be replaced.** The
   Overview said "Restart to Finish" for whatever was downloaded, however

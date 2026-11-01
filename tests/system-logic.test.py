@@ -414,5 +414,76 @@ check("excerpt: no error word, the last line", ls.failure_excerpt("one\ntwo\n\n"
 check("excerpt: empty", ls.failure_excerpt("") == "")
 check("excerpt: ansi stripped", "\x1b" not in ls.failure_excerpt("\x1b[31mError: red\x1b[0m\n"))
 
+# What the next version brings: rpm-ostree's cached-update block
+image_config = json.dumps({"config": {"Labels": {"org.opencontainers.image.revision": "8375c81c5f1cb311ed554334906e5553e115bb1d"}}})
+status_full = {
+    "transaction": None,
+    "deployments": [
+        {"staged": True, "version": "candidate.20261101", "checksum": "80bb" + "0" * 60,
+         "base-commit-meta": {"ostree.manifest-digest": "sha256:new", "ostree.container.image-config": image_config}},
+        {"booted": True, "version": "candidate.20261024", "pinned": True, "checksum": "be94" + "0" * 60,
+         "container-image-reference": f"ostree-image-signed:docker://{ls.REPO}:candidate",
+         "base-commit-meta": {"ostree.manifest-digest": "sha256:old",
+                              "ostree.container.image-config": json.dumps({"config": {"Labels": {"org.opencontainers.image.revision": "f8badaae27513eef32bf57e2180a976f97aba845"}}})}},
+    ],
+    "cached-update": {
+        "rpm-diff": {
+            "upgraded": [[0, "zstd", ["1.5.7-1.fc45", "x86_64"], ["1.5.8-1.fc45", "x86_64"]], [0, "7zip", ["26.03-1.fc45", "x86_64"], ["26.04-1.fc45", "x86_64"]]],
+            "downgraded": [], "added": [[0, "newpkg", "1.0-1.fc45", "noarch"]],
+            "removed": [[0, "kf6-kpackage", "6.31.0-1.fc45", "x86_64"], [0, "libplasma", "6.7.5-1.fc45", "x86_64"]],
+        },
+        "advisories": [
+            ["FEDORA-2026-aaaa", 1, 3, ["sudo-1.9.17-18.p2.fc45.x86_64"], {"cve_references": []}],
+            ["FEDORA-2026-bbbb", 1, 2, ["perl-libnet-3.16-1.fc45.noarch"], {"cve_references": []}],
+            ["FEDORA-2026-cccc", 1, 0, ["x-1.fc45.noarch"], {}],
+            ["FEDORA-2026-dddd", 2, 3, ["bugfix-1.fc45.noarch"], {}],
+        ],
+    },
+}
+st = ls.parse_deployments(json.dumps(status_full))
+check("revision of the booted and staged images", st["booted_revision"].startswith("f8badaae") and st["staged_revision"].startswith("8375c81c"))
+check("pinned and checksums parsed", st["booted_pinned"] and st["booted_checksum"].startswith("be94") and st["staged_checksum"].startswith("80bb"))
+check("revision missing: empty", ls.image_revision({"base-commit-meta": {}}) == "" and ls.image_revision({"base-commit-meta": {"ostree.container.image-config": "{nope"}}) == "")
+cu = ls.cached_update(json.dumps(status_full))
+check("cached update known with counts", cu["known"] and cu["counts"] == {"upgraded": 2, "downgraded": 0, "added": 1, "removed": 2})
+check("cached update: packages sorted by name with versions", cu["packages"]["upgraded"][0] == ("7zip", "26.03-1.fc45", "26.04-1.fc45") and cu["packages"]["removed"][1] == ("libplasma", "6.7.5-1.fc45", ""))
+check("cached update: security advisories only, by severity", cu["security"] == {"important": 1, "moderate": 1, "unknown": 1} and len(cu["advisories"]) == 3)
+check("cached update: advisories ordered worst first", [a[1] for a in cu["advisories"]] == ["important", "moderate", "unknown"])
+check("cached update: none", not ls.cached_update(json.dumps({"deployments": []}))["known"] and not ls.cached_update("")["known"])
+check("changes phrase", ls.changes_phrase(cu) == "2 packages upgraded, 1 added, 2 removed. 1 important, 1 moderate and 1 unrated security fixes")
+check("changes phrase: one fix", ls.security_phrase({"low": 1}) == "1 low security fix")
+check("changes phrase: two kinds", ls.security_phrase({"important": 10, "moderate": 16}) == "10 important and 16 moderate security fixes")
+check("changes phrase: nothing known", ls.changes_phrase({"known": False}) == "")
+check("compare url between two builds", ls.compare_url(st["booted_revision"], st["staged_revision"]) == f"{ls.COMPARE_URL}/f8badaae2751...8375c81c5f1c")
+check("compare url: same or missing", ls.compare_url("abc1234", "abc1234") == "" and ls.compare_url("", "abc1234") == "" and ls.compare_url("not a sha", "abc1234") == "")
+check("skopeo with a revision", ls.parse_skopeo("sha256:abc candidate.20261101 8375c81c5f1cb311ed554334906e5553e115bb1d") == ("candidate.20261101", "sha256:abc")
+      and ls.skopeo_revision("sha256:abc candidate.20261101 8375c81c5f1cb311ed554334906e5553e115bb1d").startswith("8375c81c"))
+check("skopeo without a revision", ls.skopeo_revision("sha256:abc candidate.20261101") == "" and ls.parse_skopeo("sha256:abc candidate.20261101") == ("candidate.20261101", "sha256:abc"))
+check("version phrase: candidate", ls.version_phrase("candidate.20261101") == "built on 1 November 2026, candidate")
+check("version phrase: stable", ls.version_phrase("stable.20261103") == "built on 3 November 2026")
+check("version phrase: second build of a day", ls.version_phrase("candidate.20261101.1") == "built on 1 November 2026, candidate")
+check("version phrase: not ours", ls.version_phrase("45.20261101") == "" and ls.version_phrase("abcdef012345") == "" and ls.version_phrase("") == "")
+
+# The phases of a system update
+check("phase: manifest", ls.update_phase("Pulling manifest: ostree-image-signed:docker://x") == "Checking the new image")
+check("phase: layers", ls.update_phase("Fetching layer sha256:ab (12.3 MB)") == "Downloading the new image")
+check("phase: checkout", ls.update_phase("Checking out tree 80bb340... done") == "Unpacking the new image")
+check("phase: resolving", ls.update_phase("Resolving dependencies... done") == "Resolving the extra packages")
+check("phase: importing packages", ls.update_phase("Importing packages... done") == "Downloading the extra packages")
+check("phase: applying", ls.update_phase("Relabeling... done") == "Applying the extra packages on top")
+check("phase: staging", ls.update_phase("Staging deployment... done") == "Preparing the next restart")
+check("phase: bootc queued", ls.update_phase("Queued for next boot: ghcr.io/x") == "Preparing the next restart")
+check("phase: done", ls.update_phase("Done. A new deployment is staged: reboot to switch into it") == "Done")
+check("phase: other lines say nothing", ls.update_phase("  7zip 26.03 -> 26.04") is None and ls.update_phase("") is None)
+
+# Keeping a version: the index ostree admin pin wants
+ostree_status = ("  default 80bb340e351c1261ad130ce8dede7c7012d3fe304975f28b8ffa63ddaf160871.0 (staged)\n    origin: <unknown origin type>\n"
+                 "* default be94c875ba35945aa5ce6fa58193b2cac242da8d858655746f0c9aea87a703b7.0\n    origin: <unknown origin type>\n"
+                 "  default ec4b20d6c3ef79c9fadb6f276ebed4b1926eda31b6df4d0fe01855dc164c92c5.0 (rollback)\n")
+check("pin index: booted after a staged one is 1", ls.pin_index(ostree_status) == 1)
+check("pin index: booted first is 0", ls.pin_index("* default " + "a" * 64 + ".0\n  default " + "b" * 64 + ".0 (rollback)\n") == 0)
+check("pin index: not found", ls.pin_index("") is None and ls.pin_index("garbage\n") is None)
+check("keep phrase", ls.keep_phrase(True, "v0").startswith("Kept") and ls.keep_phrase(False, "v0").startswith("Not kept"))
+
 print("system-logic: all checks passed" if fails == 0 else f"system-logic: {fails} failed")
 sys.exit(1 if fails else 0)

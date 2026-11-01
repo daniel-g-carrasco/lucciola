@@ -1345,6 +1345,8 @@ class SystemWindow(Adw.ApplicationWindow):
         self._latest_error = None
         self._hero_what = "checking"
         self._following = False
+        self._latest_revision = ""
+        self._phase_label = None
         self._busy = False
         self._generation = 0
         self._last_refresh = 0.0
@@ -1652,6 +1654,26 @@ class SystemWindow(Adw.ApplicationWindow):
         # they run next, and when one failed, why (the journal's reason, the
         # whole log under Details). Right under the verdict on purpose: a
         # failed run used to be invisible from here (2026-11-01).
+        # What the next version brings, while one is staged or published:
+        # the package diff and the security advisories rpm-ostree keeps for
+        # a staged deployment, and every commit between the two builds on
+        # GitHub (the images carry their revision).
+        self._next_group = Adw.PreferencesGroup(title="Next Version")
+        self._next_group.set_visible(False)
+        page.add(self._next_group)
+        self._changes_row = self._link_row(self._next_group, "What Changed", "view-list-symbolic", self._on_show_changes)
+        self._changes_row.set_subtitle_lines(3)
+        self._github_row = Adw.ActionRow(
+            title="Changes on GitHub",
+            subtitle="Every commit between the version that runs and the next one",
+        )
+        self._github_row.add_prefix(icon("web-browser-symbolic"))
+        self._github_row.add_suffix(icon("adw-external-link-symbolic"))
+        self._github_row.set_activatable(True)
+        self._github_row.connect("activated", self._on_open_compare)
+        self._next_group.add(self._github_row)
+        self._compare_url = ""
+
         health_group = Adw.PreferencesGroup(
             title="Automatic Updates",
             description="Lucciola updates on its own; this is how the last runs went",
@@ -1705,6 +1727,17 @@ class SystemWindow(Adw.ApplicationWindow):
         self._check_button = button_row(care_group, "Run System Check…", "emblem-system-symbolic", self._on_run_check)
         self._rollback_button = button_row(care_group, "Roll Back…", "edit-undo-symbolic", self._on_rollback, "destructive-action")
         self._rollback_button.set_sensitive(False)
+        # ostree keeps the booted version and one before it; a pinned
+        # deployment stays in the boot menu through later updates, the
+        # thing to do before a jump one may want to come back from.
+        self._keep_row = Adw.ActionRow(title="Keep This Version")
+        self._keep_row.set_subtitle_lines(3)
+        self._keep_row.add_prefix(icon("starred-symbolic"))
+        self._keep_button = Gtk.Button(label="Keep", valign=Gtk.Align.CENTER)
+        self._keep_button.connect("clicked", self._on_keep_toggle)
+        self._keep_row.add_suffix(self._keep_button)
+        care_group.add(self._keep_row)
+        self._set_loading(self._keep_row, True)
         return page
 
     def _refresh_overview(self):
@@ -1719,16 +1752,18 @@ class SystemWindow(Adw.ApplicationWindow):
         def worker():
             rc, out, _ = run(["rpm-ostree", "status", "--json"])
             state = ls.parse_deployments(out if rc == 0 else "")
+            state["cached"] = ls.cached_update(out if rc == 0 else "")
             on_main(self._set_state, gen, state)
             image = state.get("image") or ls.IMAGE
             rc, out, err = run(
                 ["skopeo", "inspect", "--no-tags", f"docker://{image}", "--format",
-                 "{{.Digest}} {{ index .Labels \"org.opencontainers.image.version\" }}"],
+                 "{{.Digest}} {{ index .Labels \"org.opencontainers.image.version\" }}"
+                 " {{ index .Labels \"org.opencontainers.image.revision\" }}"],
                 timeout=60,
             )
             if rc == 0:
                 version, digest = ls.parse_skopeo(out)
-                on_main(self._set_latest, gen, version, digest, None)
+                on_main(self._set_latest, gen, version, digest, None, ls.skopeo_revision(out))
             else:
                 on_main(self._set_latest, gen, None, "", self._explain_fetch(rc))
             rc, out, _ = run(["flatpak", "remote-ls", "--updates", "--columns=name,application"], 90)
@@ -1845,8 +1880,13 @@ class SystemWindow(Adw.ApplicationWindow):
             return
         self._state = state
         booted = state.get("booted") or "unknown"
+        built = ls.version_phrase(booted)
+        self._set_loading(self._keep_row, False)
+        self._keep_row.set_subtitle(ls.keep_phrase(state.get("booted_pinned"), state.get("rollback")))
+        self._keep_button.set_label("Release" if state.get("booted_pinned") else "Keep")
+        self._keep_button.set_sensitive(not self._busy and bool(state.get("booted")))
         for row, text in (
-            (self._version_row, booted),
+            (self._version_row, f"{booted}, {built}" if built else booted),
             (self._kernel_row, os.uname().release),
             (self._base_row, "Fedora → Universal Blue main → Lucciola"),
         ):
@@ -1866,12 +1906,13 @@ class SystemWindow(Adw.ApplicationWindow):
             self._rollback_button.set_sensitive(False)
         self._update_hero()
 
-    def _set_latest(self, gen, latest, latest_digest, error):
+    def _set_latest(self, gen, latest, latest_digest, error, revision=""):
         if not self._current("overview", gen):
             return
         self._latest = latest
         self._latest_digest = latest_digest or ""
         self._latest_error = error
+        self._latest_revision = revision or ""
         self._update_hero()
 
     def _set_counts(self, gen, flat, brew, excluded):
@@ -1903,6 +1944,12 @@ class SystemWindow(Adw.ApplicationWindow):
         self._secondary_button.set_visible(False)
         what = ls.hero_state(self._state, self._latest, self._latest_digest, self._latest_error)
         self._hero_what = what
+        self._refresh_next_version(what)
+
+        def lead(version):
+            built = ls.version_phrase(version)
+            return f"{built[0].upper()}{built[1:]}. " if built else ""
+
         if what == "working":
             self._hero_stack.set_visible_child_name("spinner")
             self._hero_title.set_text("Updating in the Background")
@@ -1918,7 +1965,7 @@ class SystemWindow(Adw.ApplicationWindow):
             self._show_hero_icon("software-update-available-symbolic", "accent")
             self._hero_title.set_text("Newer Update Available")
             self._hero_version.set_text(self._latest or "")
-            body = (f"{staged} is downloaded and waiting, but {self._latest} is already published. "
+            body = (f"{lead(self._latest)}{staged} is downloaded and waiting, but {self._latest} is already published. "
                     f"Download it to restart straight into the newest, or restart now with {staged}.")
             if layered:
                 body += " With extra packages installed, the download takes a while."
@@ -1930,7 +1977,7 @@ class SystemWindow(Adw.ApplicationWindow):
         if what == "staged":
             self._show_hero_icon("system-reboot-symbolic", "accent")
             self._hero_title.set_text("Restart to Finish")
-            self._hero_body.set_text(f"This version is downloaded and waiting. {booted} keeps running until you restart.")
+            self._hero_body.set_text(f"{lead(staged)}This version is downloaded and waiting. {booted} keeps running until you restart.")
             self._set_action("Restart Now", suggested=True)
             return
         if what == "checking":
@@ -1952,7 +1999,7 @@ class SystemWindow(Adw.ApplicationWindow):
                 body = (f"A newer build of {self._latest} is published. Two builds can share a version "
                         "label on the same day; this machine runs the older one.")
             else:
-                body = f"This machine runs {booted}. The published version is {self._latest}."
+                body = f"{lead(self._latest)}This machine runs {booted}. The published version is {self._latest}."
             if layered:
                 body += " With extra packages installed, the download takes a while."
             self._hero_body.set_text(body)
@@ -1982,6 +2029,79 @@ class SystemWindow(Adw.ApplicationWindow):
     def _on_secondary_action(self, _button):
         if self._hero_what == "staged-older":
             self._reboot()
+
+    def _refresh_next_version(self, what):
+        state = self._state
+        cached = state.get("cached") or {}
+        show = what in ("staged", "staged-older", "available")
+        self._next_group.set_visible(show)
+        if not show:
+            return
+        if cached.get("known"):
+            self._changes_row.set_subtitle(ls.changes_phrase(cached))
+            self._changes_row.set_activatable(True)
+        else:
+            self._changes_row.set_subtitle("The list of changed packages appears once the update is downloaded")
+            self._changes_row.set_activatable(False)
+        target = getattr(self, "_latest_revision", "") if what != "staged" else state.get("staged_revision")
+        self._compare_url = ls.compare_url(state.get("booted_revision"), target or state.get("staged_revision"))
+        self._github_row.set_visible(bool(self._compare_url))
+
+    def _on_show_changes(self, _row):
+        cached = (self._state.get("cached") or {})
+        if not cached.get("known"):
+            return
+        extra = []
+        if cached["advisories"]:
+            group = Adw.PreferencesGroup(
+                title="Security Fixes",
+                description=ls.security_phrase(cached["security"]).capitalize(),
+            )
+            for adv_id, severity, packages in cached["advisories"]:
+                row = Adw.ActionRow(title=adv_id, subtitle=f"{severity.capitalize()}: {', '.join(packages)}")
+                row.set_subtitle_lines(3)
+                row.add_prefix(icon("security-high-symbolic" if severity in ("critical", "important") else "security-medium-symbolic"))
+                group.add(row)
+            extra.append(group)
+        for kind, title in (("added", "Added"), ("removed", "Removed"), ("downgraded", "Downgraded"), ("upgraded", "Upgraded")):
+            packages = cached["packages"][kind]
+            if not packages:
+                continue
+            group = Adw.PreferencesGroup(title=f"{title} ({len(packages)})")
+            for name, old, new in packages:
+                subtitle = f"{old} → {new}" if new else old
+                row = Adw.ActionRow(title=name, subtitle=subtitle)
+                row.add_prefix(icon("package-x-generic-symbolic"))
+                group.add(row)
+            extra.append(group)
+        self._list_dialog(
+            "What Changed",
+            f"Between {self._state.get('booted')} and {self._state.get('staged') or self._latest}: {ls.changes_phrase(cached)}",
+            [], "", extra=extra,
+        )
+
+    def _on_open_compare(self, _row):
+        if self._compare_url:
+            Gtk.UriLauncher.new(self._compare_url).launch(self, None, None)
+
+    def _on_keep_toggle(self, _button):
+        pinned = bool(self._state.get("booted_pinned"))
+        rc, out, _ = run(["ostree", "admin", "status"])
+        index = ls.pin_index(out if rc == 0 else "")
+        if index is None:
+            self._toast("Could not find the running version among the deployments")
+            return
+        if pinned:
+            self._run_operation(
+                ["pkexec", ADMIN, "unpin", str(index)], title="Releasing This Version",
+                working="Letting later updates replace this version as usual.", done="This version is no longer kept",
+            )
+        else:
+            self._run_operation(
+                ["pkexec", ADMIN, "pin", str(index)], title="Keeping This Version",
+                working="Marking this version to stay in the boot menu through later updates.",
+                done="This version is kept: later updates leave it in the boot menu",
+            )
 
     def _show_hero_icon(self, name, css):
         self._hero_icon.set_from_icon_name(name)
@@ -2065,7 +2185,7 @@ class SystemWindow(Adw.ApplicationWindow):
                 working += " The extra packages are re-applied on top, which takes several minutes."
             self._run_operation(
                 ["pkexec", ADMIN, "update"], title="Downloading Update",
-                working=working, done="Update downloaded: restart to finish it",
+                working=working, done="Update downloaded: restart to finish it", phases=True,
             )
         else:
             self._refresh_overview()
@@ -3870,7 +3990,7 @@ class SystemWindow(Adw.ApplicationWindow):
 
     # ═════════════ runner for long operations, privileged or not ═════════════
 
-    def _run_operation(self, argv, title, working, done, stdin_text=None, then=None):
+    def _run_operation(self, argv, title, working, done, stdin_text=None, then=None, phases=False):
         """Runs argv and shows a progress dialog: a spinner and a sentence,
         the command's output under Details. The dialog can be closed while
         the work goes on; a toast tells the end, with the log a click away
@@ -3886,6 +4006,7 @@ class SystemWindow(Adw.ApplicationWindow):
         self._rollback_button.set_sensitive(False)
         self._last_log = ""
         self._last_log_title = title
+        self._phase_label = None
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         for side in ("top", "bottom", "start", "end"):
@@ -3902,6 +4023,15 @@ class SystemWindow(Adw.ApplicationWindow):
         status.set_wrap(True)
         status.set_justify(Gtk.Justification.CENTER)
         box.append(status)
+        if phases:
+            # A system update in plain words, phase by phase, read from
+            # the helper's output as it arrives (ls.update_phase); the raw
+            # lines stay under Details.
+            self._phase_label = Gtk.Label(label="Starting")
+            self._phase_label.add_css_class("dimmed")
+            self._phase_label.set_wrap(True)
+            self._phase_label.set_justify(Gtk.Justification.CENTER)
+            box.append(self._phase_label)
         buffer = Gtk.TextBuffer()
         view = Gtk.TextView(buffer=buffer, editable=False, monospace=True)
         view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
@@ -3960,6 +4090,10 @@ class SystemWindow(Adw.ApplicationWindow):
             if line is None:
                 return
             self._last_log += line + "\n"
+            if self._phase_label is not None:
+                phase = ls.update_phase(line)
+                if phase:
+                    self._phase_label.set_text(phase)
             buffer.insert(buffer.get_end_iter(), line + "\n")
             view.scroll_to_mark(buffer.create_mark(None, buffer.get_end_iter(), False), 0, False, 0, 0)
             self._read_line(src, buffer, view)
@@ -3969,6 +4103,7 @@ class SystemWindow(Adw.ApplicationWindow):
     def _on_operation_done(self, proc, result, payload):
         dialog, state, indicator, status, expander, done_message, then = payload
         state["done"] = True
+        self._phase_label = None
         try:
             proc.wait_finish(result)
             code = proc.get_exit_status() if proc.get_if_exited() else -1
