@@ -7,6 +7,30 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (2026-11-01, Lucciola System: the update page tells the truth)
+- **A staged update that is no longer the newest can be replaced.** The
+  Overview said "Restart to Finish" for whatever was downloaded, however
+  many builds had come out since; the comparison with the registry stopped
+  at the staged deployment. Now a staged version older than the published
+  one reads "Newer Update Available", with Download Newer (rpm-ostree
+  replaces the staged deployment with the one it pulls) and Restart with
+  the staged one as the second choice. `lucciola-status` already judged it
+  that way; the window now agrees.
+- **A running transaction is shown, not fought.** While rpm-ostreed works
+  (the daily uupd run, a terminal command), the Overview reads "Updating
+  in the Background", says what runs, hides the button that would have
+  failed with "transaction in progress", and looks again every 20 seconds
+  until it ends.
+- **Automatic updates have their own group, right under the verdict**: one
+  row per channel (System, Apps, Command-Line Tools) with the last run,
+  the next one, and, when a run failed or hung, the reason read from the
+  journal and the whole log under Details. On 2026-11-01 a distrobox that
+  no longer started had failed uupd for days and a Homebrew tap without a
+  bottle had failed the tools, and the window kept saying all was well.
+  With extra packages installed, the download sentences say the update
+  takes a while. `tests/system-logic.test.py` covers the new decisions
+  (50 checks added).
+
 ### Added (2026-10-31, Bitwarden on Wayland)
 - **A tweak puts Bitwarden on native Wayland with a working clipboard.**
   Bitwarden copies through a native module that needs the ext/wlr

@@ -7,6 +7,7 @@ how pending apps and checks are worded."""
 
 import json
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -337,6 +338,81 @@ check("local models: stopped", ls.models_state("installed 0.40.11 stopped") == (
 check("local models: absent", ls.models_state("absent\n") == ("absent", ""))
 check("local models: anything else is unknown", ls.models_state("") == ("unknown", "") and ls.models_state("installed") == ("unknown", "")
       and ls.models_state("installed 1 maybe") == ("unknown", ""))
+
+# A staged deployment that is no longer the published one (2026-11-01: the
+# window stopped at "restart", however old the staged one was)
+st_staged = {"booted": "v1", "booted_digest": "sha256:a", "staged": "v2", "staged_digest": "sha256:b"}
+check("staged is the published one: nothing newer", not ls.newer_than_staged(st_staged, "v2", "sha256:b"))
+check("staged older than published: newer", ls.newer_than_staged(st_staged, "v3", "sha256:c"))
+check("newer: labels decide without digests", ls.newer_than_staged({"staged": "v2", "staged_digest": ""}, "v3", ""))
+check("newer: nothing staged, nothing newer", not ls.newer_than_staged({"booted": "v1"}, "v3", "sha256:c"))
+check("hero: staged and current", ls.hero_state(st_staged, "v2", "sha256:b", None) == "staged")
+check("hero: staged, published is newer", ls.hero_state(st_staged, "v3", "sha256:c", None) == "staged-older")
+check("hero: staged before the registry answered", ls.hero_state(st_staged, None, "", None) == "staged")
+check("hero: staged, registry unreachable", ls.hero_state(st_staged, None, "", "offline") == "staged")
+check("hero: a running transaction wins", ls.hero_state(dict(st_staged, transaction="Upgrade"), "v3", "sha256:c", None) == "working")
+check("hero: checking", ls.hero_state({"booted": "v1", "booted_digest": "sha256:a"}, None, "", None) == "checking")
+check("hero: no state yet", ls.hero_state({}, None, "", None) == "checking")
+check("hero: offline", ls.hero_state({"booted": "v1", "booted_digest": "sha256:a"}, None, "", "This machine is offline") == "offline")
+check("hero: available", ls.hero_state({"booted": "v1", "booted_digest": "sha256:a"}, "v2", "sha256:b", None) == "available")
+check("hero: current", ls.hero_state({"booted": "v1", "booted_digest": "sha256:a"}, "v1", "sha256:a", None) == "current")
+
+# The running transaction, as rpm-ostree's JSON reports it
+check("transaction: idle", ls.transaction_title(None) == "" and ls.parse_deployments(json.dumps({"deployments": [], "transaction": None}))["transaction"] == "")
+check("transaction: the (title, sender, path) array", ls.transaction_title(["Upgrade", ":1.9", "/org/x"]) == "Upgrade")
+check("transaction: parsed with the deployments", ls.parse_deployments(json.dumps({"deployments": [], "transaction": ["upgrade", "s", "p"]}))["transaction"] == "upgrade")
+check("transaction phrase: upgrade", ls.transaction_phrase("Upgrade").startswith("Downloading"))
+check("transaction phrase: rollback", "previous" in ls.transaction_phrase("rollback"))
+check("transaction phrase: install", "extra packages" in ls.transaction_phrase("PkgInstall"))
+check("transaction phrase: other", ls.transaction_phrase("Cleanup") == "Working on the system")
+
+# Automatic updates: units, timers, outcomes, lines, reasons
+show = ("Id=uupd.service\nActiveState=failed\nResult=start-limit-hit\nExecMainStartTimestamp=@1793528407\nExecMainExitTimestamp=@1793528427\n\n"
+        "Id=margine-flatpak-update.service\nActiveState=inactive\nResult=success\nExecMainStartTimestamp=@1793525929\nExecMainExitTimestamp=@1793525930\n\n"
+        "Id=\nActiveState=inactive\nResult=success\n")
+units = ls.parse_unit_show(show)
+check("unit show: two units, the unknown one skipped", sorted(units) == ["margine-flatpak-update.service", "uupd.service"])
+check("unit show: result and epoch stamps", units["uupd.service"]["result"] == "start-limit-hit" and units["uupd.service"]["exited"] == 1793528427)
+check("unit show: empty input", ls.parse_unit_show("") == {})
+timers_json = json.dumps([
+    {"next": 1793589132825035, "last": 1793525929510372, "unit": "uupd.timer", "activates": "uupd.service"},
+    {"next": 18446744073709551615, "last": 0, "unit": "margine-brew-upgrade.timer"},
+])
+timers = ls.parse_timers(timers_json)
+check("timers: microseconds to seconds", timers["uupd.timer"] == {"last": 1793525929, "next": 1793589132})
+check("timers: never is None", timers["margine-brew-upgrade.timer"] == {"last": None, "next": None})
+check("timers: broken json", ls.parse_timers("[not") == {} and ls.parse_timers("") == {})
+check("outcome: failed", ls.unit_outcome(units["uupd.service"]) == "failed")
+check("outcome: ok", ls.unit_outcome(units["margine-flatpak-update.service"]) == "ok")
+check("outcome: hung", ls.unit_outcome({"result": "timeout", "active": "failed", "exited": 1}) == "hung")
+check("outcome: running", ls.unit_outcome({"result": "success", "active": "activating", "started": 1}) == "running")
+check("outcome: never", ls.unit_outcome(None) == "never" and ls.unit_outcome({"result": "", "active": "inactive", "started": None, "exited": None}) == "never")
+noon = time.mktime(time.strptime("2026-11-01 12:00:00", "%Y-%m-%d %H:%M:%S"))
+check("when: today", ls.when_phrase(noon - 3600, noon) == "today at 11:00")
+check("when: yesterday", ls.when_phrase(noon - 86400, noon) == "yesterday at 12:00")
+check("when: tomorrow", ls.when_phrase(noon + 86400, noon) == "tomorrow at 12:00")
+check("when: another day", ls.when_phrase(noon - 4 * 86400, noon) == "on 28 Oct at 12:00")
+check("when: none", ls.when_phrase(None, noon) == "")
+health = ls.channel_health(units, timers, noon)
+by_key = {c["key"]: c for c in health}
+check("health: three channels in order", [c["key"] for c in health] == ["system", "apps", "tools"])
+check("health: system failed on uupd", by_key["system"]["outcome"] == "failed" and by_key["system"]["unit"] == "uupd.service" and not by_key["system"]["user"])
+check("health: system line says failed and the next try", by_key["system"]["line"].startswith("Failed ") and "Next try" in by_key["system"]["line"])
+check("health: apps ok with its last run", by_key["apps"]["outcome"] == "ok" and by_key["apps"]["line"].startswith("Last run "))
+check("health: tools never ran, user unit", by_key["tools"]["outcome"] == "never" and by_key["tools"]["user"] and by_key["tools"]["line"] == "Not run yet")
+check("health line: reason goes after the time", ls.health_line("failed", noon - 60, noon + 60, None, noon, "brew: no bottle") == "Failed today at 11:59: brew: no bottle. Next try today at 12:01")
+check("health line: hung", ls.health_line("hung", noon - 60, None, None, noon).startswith("Hung and was stopped today"))
+check("health line: running", ls.health_line("running", None, None, noon - 120, noon) == "Running since today at 11:58")
+uupd_log = ('{"level":"INFO","msg":"Updating","title":"System"}\n'
+            '{"level":"ERROR","msg":"module_fail","output":{"Stdout":"distrobox: Installing basic packages...\\n\\u001b[1;31m Upgrading ladybird...\\n'
+            '\\u001b[0m\\u001b[31m Error: could not start entrypoint.\\n\\u001b[0m\\n","Failure":true,"Stderr":null,"Context":"Distroboxes for User: daniel"},"module":"Distroboxes for User: daniel"}\n'
+            '{"level":"ERROR","msg":"Updates finished with errors!"}\n')
+check("excerpt: uupd names the step and the error", ls.failure_excerpt(uupd_log) == "Distroboxes for User: daniel: Error: could not start entrypoint.")
+brew_log = "==> Upgrading node\n  26.12.1_1 -> 26.13.0_2\nError: No developer tools installed.\nInstall a system C compiler.\n==> Upgrading oven-sh/bun/bun\nbrew upgrade reported errors — see the output above\n"
+check("excerpt: brew's Error line, not the summary", ls.failure_excerpt(brew_log) == "Error: No developer tools installed.")
+check("excerpt: no error word, the last line", ls.failure_excerpt("one\ntwo\n\n") == "two")
+check("excerpt: empty", ls.failure_excerpt("") == "")
+check("excerpt: ansi stripped", "\x1b" not in ls.failure_excerpt("\x1b[31mError: red\x1b[0m\n"))
 
 print("system-logic: all checks passed" if fails == 0 else f"system-logic: {fails} failed")
 sys.exit(1 if fails else 0)

@@ -1343,6 +1343,8 @@ class SystemWindow(Adw.ApplicationWindow):
         self._latest = None
         self._latest_digest = ""
         self._latest_error = None
+        self._hero_what = "checking"
+        self._following = False
         self._busy = False
         self._generation = 0
         self._last_refresh = 0.0
@@ -1632,9 +1634,50 @@ class SystemWindow(Adw.ApplicationWindow):
         self._action_button.set_visible(False)
         self._action_button.connect("clicked", self._on_primary_action)
         hero.append(self._action_button)
+        # The second choice, when there is one: a staged version is waiting
+        # but a newer one is published, and restarting into the staged one
+        # is still a fair answer.
+        self._secondary_button = Gtk.Button()
+        self._secondary_button.add_css_class("pill")
+        self._secondary_button.add_css_class("flat")
+        self._secondary_button.set_halign(Gtk.Align.CENTER)
+        self._secondary_button.set_visible(False)
+        self._secondary_button.connect("clicked", self._on_secondary_action)
+        hero.append(self._secondary_button)
         hero_group = Adw.PreferencesGroup()
         hero_group.add(hero)
         page.add(hero_group)
+
+        # The unattended runs, one row per channel: when they last ran, when
+        # they run next, and when one failed, why (the journal's reason, the
+        # whole log under Details). Right under the verdict on purpose: a
+        # failed run used to be invisible from here (2026-11-01).
+        health_group = Adw.PreferencesGroup(
+            title="Automatic Updates",
+            description="Lucciola updates on its own; this is how the last runs went",
+        )
+        page.add(health_group)
+        self._health_rows = {}
+        for key, title, icon_name in (
+            ("system", "System", "drive-harddisk-symbolic"),
+            ("apps", "Apps", "view-grid-symbolic"),
+            ("tools", "Command-Line Tools", "utilities-terminal-symbolic"),
+        ):
+            row = Adw.ActionRow(title=title)
+            row.set_subtitle_lines(3)
+            row.add_prefix(icon(icon_name))
+            row._warning = icon("dialog-warning-symbolic")
+            row._warning.add_css_class("warning")
+            row._warning.set_visible(False)
+            row.add_suffix(row._warning)
+            row._details = Gtk.Button(label="Details", valign=Gtk.Align.CENTER)
+            row._details.set_visible(False)
+            row._details.connect("clicked", self._on_health_details, key)
+            row.add_suffix(row._details)
+            health_group.add(row)
+            self._set_loading(row, True)
+            self._health_rows[key] = row
+        self._health = []
 
         sys_group = Adw.PreferencesGroup(title="This Machine")
         page.add(sys_group)
@@ -1698,8 +1741,95 @@ class SystemWindow(Adw.ApplicationWindow):
                     brew = [x.strip() for x in out.splitlines() if x.strip()]
             excluded = ls.excluded_apps(read_file(BLOCKED))
             on_main(self._set_counts, gen, flat, brew, excluded)
+            on_main(self._set_health, gen, self._collect_health())
 
         in_thread(worker)
+
+    def _collect_health(self):
+        """The last runs of the update channels: unit results and timers
+        from both managers, and the journal's reason for a failed one.
+        Runs in the worker thread."""
+        units, timers = {}, {}
+        for scope, unit_names, timer_names in (
+            ([], ls.SYSTEM_UNITS, ls.SYSTEM_TIMERS),
+            (["--user"], ls.USER_UNITS, ls.USER_TIMERS),
+        ):
+            rc, out, _ = run(["systemctl", *scope, "show", "--no-pager", "--timestamp=unix", "-p", ls.UNIT_PROPERTIES, *unit_names])
+            units.update(ls.parse_unit_show(out if rc == 0 else ""))
+            rc, out, _ = run(["systemctl", *scope, "list-timers", "--all", "--no-pager", "--output=json", *timer_names])
+            timers.update(ls.parse_timers(out if rc == 0 else ""))
+        health = ls.channel_health(units, timers, time.time())
+        for channel in health:
+            if channel["outcome"] not in ("failed", "hung") or not channel["unit"]:
+                continue
+            scope = ["--user"] if channel["user"] else []
+            rc, out, _ = run(["journalctl", *scope, "-u", channel["unit"], "-n", "400", "-o", "cat", "--no-pager", "-q"], timeout=20)
+            log = out if rc == 0 else ""
+            channel["reason"] = ls.failure_excerpt(log)
+            channel["log"] = ls.ANSI.sub("", log)[-20000:]
+            started = (units.get(channel["unit"]) or {}).get("started")
+            channel["line"] = ls.health_line(channel["outcome"], channel["last"], channel["next"], started, time.time(), channel["reason"])
+        return health
+
+    def _set_health(self, gen, health):
+        if not self._current("overview", gen):
+            return
+        self._health = health
+        for channel in health:
+            row = self._health_rows.get(channel["key"])
+            if row is None:
+                continue
+            self._set_loading(row, False)
+            bad = channel["outcome"] in ("failed", "hung")
+            row.set_subtitle(channel["line"])
+            row._warning.set_visible(bad)
+            row._details.set_visible(bad)
+
+    def _on_health_details(self, _button, key):
+        channel = next((c for c in self._health if c["key"] == key), None)
+        if channel is None:
+            return
+        title = f"{channel['title']}: Last Automatic Update"
+        hints = {
+            "system": "Lucciola tries again on its own at the next run. To update the system "
+                      "right away, use the button at the top of the Overview.",
+            "apps": "Lucciola tries again on its own at the next run. Apps, then Update Apps Now, does it right away.",
+            "tools": "Lucciola tries again on its own next week. Command-Line Tools, then Update "
+                     "Command-Line Tools, does it right away and shows every line.",
+        }
+        page = preferences_page()
+        group = Adw.PreferencesGroup(title=title, description=channel["line"])
+        page.add(group)
+        reason_row = Adw.ActionRow(title="Reason", subtitle=channel.get("reason") or "The log does not say; see below")
+        reason_row.set_subtitle_lines(6)
+        reason_row.set_subtitle_selectable(True)
+        reason_row.add_prefix(icon("dialog-warning-symbolic"))
+        group.add(reason_row)
+        next_row = Adw.ActionRow(title="What Happens Now", subtitle=hints.get(key, ""))
+        next_row.set_subtitle_lines(4)
+        next_row.add_prefix(icon("alarm-symbolic"))
+        group.add(next_row)
+        log_group = Adw.PreferencesGroup(title="Log", description=f"The journal of {channel['unit']}")
+        page.add(log_group)
+        buffer = Gtk.TextBuffer()
+        buffer.set_text(channel.get("log") or "(no log could be read)")
+        view = Gtk.TextView(buffer=buffer, editable=False, monospace=True)
+        view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        view.update_property([Gtk.AccessibleProperty.LABEL], ["Update log"])
+        scroller = Gtk.ScrolledWindow(child=view, vexpand=True)
+        scroller.set_min_content_height(260)
+        scroller.add_css_class("card")
+        log_group.add(scroller)
+        toolbar = Adw.ToolbarView()
+        toolbar.add_top_bar(Adw.HeaderBar())
+        toolbar.set_content(page)
+        dialog = Adw.Dialog()
+        dialog.set_title(title)
+        dialog.set_content_width(640)
+        dialog.set_content_height(640)
+        dialog.set_child(toolbar)
+        dialog.present(self)
+        GLib.idle_add(lambda: view.scroll_to_mark(buffer.create_mark(None, buffer.get_end_iter(), False), 0, False, 0, 0) and False)
 
     def _explain_fetch(self, rc):
         if not Gio.NetworkMonitor.get_default().get_network_available():
@@ -1766,43 +1896,92 @@ class SystemWindow(Adw.ApplicationWindow):
     def _update_hero(self):
         staged = self._state.get("staged")
         booted = self._state.get("booted") or "unknown"
+        layered = bool(self._state.get("layered"))
         self._hero_version.set_text(staged or (booted if self._state else ""))
         self._hero_icon.remove_css_class("accent")
         self._hero_icon.remove_css_class("warning")
-        if staged:
+        self._secondary_button.set_visible(False)
+        what = ls.hero_state(self._state, self._latest, self._latest_digest, self._latest_error)
+        self._hero_what = what
+        if what == "working":
+            self._hero_stack.set_visible_child_name("spinner")
+            self._hero_title.set_text("Updating in the Background")
+            self._hero_version.set_text("")
+            self._hero_body.set_text(
+                f"{ls.transaction_phrase(self._state.get('transaction'))}. The daily update or a command started it; "
+                f"this page follows it and the machine keeps working meanwhile. {booted} runs until you restart."
+            )
+            self._action_button.set_visible(False)
+            self._follow_transaction()
+            return
+        if what == "staged-older":
+            self._show_hero_icon("software-update-available-symbolic", "accent")
+            self._hero_title.set_text("Newer Update Available")
+            self._hero_version.set_text(self._latest or "")
+            body = (f"{staged} is downloaded and waiting, but {self._latest} is already published. "
+                    f"Download it to restart straight into the newest, or restart now with {staged}.")
+            if layered:
+                body += " With extra packages installed, the download takes a while."
+            self._hero_body.set_text(body)
+            self._set_action("Download Newer", suggested=True)
+            self._secondary_button.set_label(f"Restart with {staged}")
+            self._secondary_button.set_visible(True)
+            return
+        if what == "staged":
             self._show_hero_icon("system-reboot-symbolic", "accent")
             self._hero_title.set_text("Restart to Finish")
             self._hero_body.set_text(f"This version is downloaded and waiting. {booted} keeps running until you restart.")
             self._set_action("Restart Now", suggested=True)
             return
-        if not self._state or (self._latest is None and self._latest_error is None):
+        if what == "checking":
             self._hero_stack.set_visible_child_name("spinner")
             self._hero_title.set_text("Checking for Updates")
             self._hero_body.set_text("Asking the registry which version is published…")
             self._action_button.set_visible(False)
             return
-        if self._latest_error:
+        if what == "offline":
             self._show_hero_icon("network-offline-symbolic", "warning")
             self._hero_title.set_text("Could Not Check for Updates")
             self._hero_body.set_text(f"{self._latest_error}. {booted} is what this machine runs.")
             self._set_action("Try Again", suggested=False)
             return
-        if ls.update_available(self._state, self._latest, self._latest_digest):
+        if what == "available":
             self._show_hero_icon("software-update-available-symbolic", None)
             self._hero_title.set_text("Update Available")
             if booted == self._latest:
-                self._hero_body.set_text(
-                    f"A newer build of {self._latest} is published. Two builds can share a version "
-                    "label on the same day; this machine runs the older one."
-                )
+                body = (f"A newer build of {self._latest} is published. Two builds can share a version "
+                        "label on the same day; this machine runs the older one.")
             else:
-                self._hero_body.set_text(f"This machine runs {booted}. The published version is {self._latest}.")
+                body = f"This machine runs {booted}. The published version is {self._latest}."
+            if layered:
+                body += " With extra packages installed, the download takes a while."
+            self._hero_body.set_text(body)
             self._set_action("Download Update", suggested=True)
             return
         self._show_hero_icon("object-select-symbolic", None)
         self._hero_title.set_text("Up to Date")
         self._hero_body.set_text(f"This machine matches the latest published version. Checked at {time.strftime('%H:%M')}.")
         self._set_action("Check Again", suggested=False)
+
+    def _follow_transaction(self):
+        """While rpm-ostreed works, look again every 20 seconds instead of
+        every ten minutes, so the page turns to "restart to finish" when
+        the staging ends. One follower at a time."""
+        if getattr(self, "_following", False):
+            return
+        self._following = True
+
+        def tick():
+            self._following = False
+            if self._hero_what == "working" and not self._busy:
+                self._refresh_overview()
+            return False
+
+        GLib.timeout_add_seconds(20, tick)
+
+    def _on_secondary_action(self, _button):
+        if self._hero_what == "staged-older":
+            self._reboot()
 
     def _show_hero_icon(self, name, css):
         self._hero_icon.set_from_icon_name(name)
@@ -1875,15 +2054,18 @@ class SystemWindow(Adw.ApplicationWindow):
         )
 
     def _on_primary_action(self, _button):
-        if self._state.get("staged"):
+        what = getattr(self, "_hero_what", None) or ls.hero_state(self._state, self._latest, self._latest_digest, self._latest_error)
+        if what == "staged":
             self._reboot()
-        elif self._latest_error:
-            self._refresh_overview()
-        elif ls.update_available(self._state, self._latest, self._latest_digest):
+        elif what in ("available", "staged-older"):
+            # The same helper either way: rpm-ostree replaces a staged
+            # deployment with the newer one it pulls.
+            working = "Downloading the next version. The machine keeps working meanwhile."
+            if self._state.get("layered"):
+                working += " The extra packages are re-applied on top, which takes several minutes."
             self._run_operation(
                 ["pkexec", ADMIN, "update"], title="Downloading Update",
-                working="Downloading the next version. The machine keeps working meanwhile.",
-                done="Update downloaded: restart to finish it",
+                working=working, done="Update downloaded: restart to finish it",
             )
         else:
             self._refresh_overview()
