@@ -1,0 +1,59 @@
+# Updates for Lucciola: a dot on the bar when something about updates wants
+# a look, and nothing otherwise. The facts come from
+# /usr/libexec/lucciola/update-state (the same decisions Lucciola System
+# shows), polled by the service; the indicator draws them:
+#
+#   a download glyph, lit   -> a new version is staged: restart to finish
+#   a refresh glyph         -> rpm-ostreed is working (the daily update)
+#   a warning glyph, red    -> an automatic update failed or hung
+#
+# Click opens Lucciola System on the Overview, where the version, the
+# reason of a failure and the buttons are.
+id = "lucciola/updates"
+name = "Updates"
+version = "1.0.0"
+plugin_api = 24
+author = "lucciola"
+license = "MIT"
+icon = "download"
+description = "A dot on the bar when an update is ready to restart into, running, or failed."
+tags = ["updates", "system"]
+dependencies = ["systemd"]
+
+[[setting]]
+key = "command"
+type = "string"
+label_key = "settings.command.label"
+description_key = "settings.command.description"
+default = "/usr/libexec/lucciola/update-state"
+advanced = true
+
+[[setting]]
+key = "open_command"
+type = "string"
+label_key = "settings.open_command.label"
+description_key = "settings.open_command.description"
+default = "gtk-launch dev.margine.System"
+advanced = true
+
+[[service]]
+id = "service"
+entry = "service.luau"
+
+[[widget]]
+id = "indicator"
+entry = "indicator.luau"
+
+  [[widget.setting]]
+  key = "show_staged"
+  type = "bool"
+  label_key = "settings.show_staged.label"
+  description_key = "settings.show_staged.description"
+  default = true
+
+  [[widget.setting]]
+  key = "show_version"
+  type = "bool"
+  label_key = "settings.show_version.label"
+  description_key = "settings.show_version.description"
+  default = false

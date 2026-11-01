@@ -1,0 +1,7 @@
+# Updates (plugins/updates): a dot on the bar when a new version is staged,
+# rpm-ostreed is working, or an automatic update failed; nothing otherwise.
+# The plugin is enabled in 27-keep-awake.toml, where the enabled list lives
+# (one list: a second fragment setting plugins.enabled would replace it);
+# "updates" sits in the bar's end list in 20-margine-style.toml.
+[widget.updates]
+type = "lucciola/updates:indicator"

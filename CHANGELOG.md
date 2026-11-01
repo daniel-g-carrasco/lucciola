@@ -7,6 +7,23 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Added (2026-11-01, updates on the bar and in the notifications)
+- **An Updates glyph on the bar** (Noctalia plugin `lucciola/updates`,
+  before Keep Awake): a lit download glyph while a new version waits for
+  a restart, a refresh glyph while rpm-ostreed works, a red warning glyph
+  while an automatic update failed or hung; nothing otherwise. The tooltip
+  says which version and why; a click opens Lucciola System. The facts
+  come from `/usr/libexec/lucciola/update-state`, a new offline,
+  unprivileged command that prints the update situation as JSON with the
+  same decisions the window shows (`lucciola_system.py`).
+- **Two notifications close the loop**: "Update applied: Lucciola X is now
+  running" once after the restart into a staged update, and "Automatic
+  update failed: <channel>" once per failed or hung run of uupd, the
+  Flatpak updaters or Homebrew, with the reason read from the journal and
+  a pointer to Lucciola System. Both from `staged-update-notify`, on its
+  existing timer. `tests/update-state.test.sh` (17 checks) and
+  `tests/update-notify.test.sh` (14 checks), in lint.
+
 ### Added (2026-11-01, Lucciola System: what the next version brings)
 - **Next Version group** in the Overview while an update is staged or
   published: *What Changed* reads the package diff and the security
