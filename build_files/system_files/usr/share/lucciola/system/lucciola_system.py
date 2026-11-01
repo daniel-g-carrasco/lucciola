@@ -37,7 +37,8 @@ def parse_deployments(status_json):
     state = {
         "booted": None, "staged": None, "rollback": None, "layered": [],
         "booted_digest": "", "staged_digest": "", "booted_ref": "", "staged_ref": "", "image": IMAGE,
-        "transaction": "",
+        "transaction": "", "booted_revision": "", "staged_revision": "", "booted_pinned": False,
+        "booted_checksum": "", "staged_checksum": "",
     }
     try:
         status = json.loads(status_json or "{}")
@@ -53,10 +54,15 @@ def parse_deployments(status_json):
             state["staged"] = version
             state["staged_digest"] = digest
             state["staged_ref"] = dep.get("container-image-reference") or ""
+            state["staged_revision"] = image_revision(dep)
+            state["staged_checksum"] = dep.get("checksum") or ""
         elif dep.get("booted"):
             state["booted"] = version
             state["booted_digest"] = digest
             state["booted_ref"] = dep.get("container-image-reference") or ""
+            state["booted_revision"] = image_revision(dep)
+            state["booted_pinned"] = bool(dep.get("pinned"))
+            state["booted_checksum"] = dep.get("checksum") or ""
             state["image"] = followed_image(state["booted_ref"])
             seen_booted = True
             state["layered"] = sorted(
@@ -140,11 +146,200 @@ def transaction_phrase(title):
 
 
 def parse_skopeo(output):
-    """`skopeo inspect --format '{{.Digest}} {{version label}}'` -> (version, digest)."""
-    digest, _, version = (output or "").strip().partition(" ")
-    if not version:
-        return (digest or None), ""
-    return version, digest
+    """`skopeo inspect --format '{{.Digest}} {{version label}} [{{revision label}}]'`
+    -> (version, digest); the revision, when asked for, is the third word
+    (skopeo_revision)."""
+    words = (output or "").split()
+    if not words:
+        return None, ""
+    if len(words) == 1:
+        return words[0], ""
+    return words[1], words[0]
+
+
+def skopeo_revision(output):
+    """The third word of the same skopeo output: the git commit the
+    published image was built from, or ''."""
+    words = (output or "").split()
+    return words[2] if len(words) > 2 and GIT_SHA.match(words[2]) else ""
+
+
+GIT_SHA = re.compile(r"^[0-9a-f]{7,64}$")
+COMPARE_URL = f"https://github.com/{REPO.removeprefix('ghcr.io/')}/compare"
+
+
+def image_revision(deployment):
+    """The git commit an image was built from: the OCI revision label,
+    carried inside the deployment's image config (a JSON string in
+    base-commit-meta)."""
+    meta = deployment.get("base-commit-meta") or {}
+    raw = meta.get("ostree.container.image-config")
+    try:
+        config = json.loads(raw) if isinstance(raw, str) else (raw or {})
+    except json.JSONDecodeError:
+        return ""
+    labels = (config.get("config") or {}).get("Labels") or {}
+    rev = labels.get("org.opencontainers.image.revision") or ""
+    return rev if GIT_SHA.match(rev) else ""
+
+
+def compare_url(from_rev, to_rev):
+    """Every commit between two builds, on GitHub; '' when a side is
+    missing or they are the same commit."""
+    if not (from_rev and to_rev) or from_rev == to_rev:
+        return ""
+    if not (GIT_SHA.match(from_rev) and GIT_SHA.match(to_rev)):
+        return ""
+    return f"{COMPARE_URL}/{from_rev[:12]}...{to_rev[:12]}"
+
+
+VERSION_LABEL = re.compile(r"^([a-z][a-z0-9-]*)\.(\d{4})(\d{2})(\d{2})(?:\.\d+)?$")
+MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
+
+
+def version_phrase(version):
+    """'candidate.20261101' -> 'built on 1 November 2026, candidate';
+    'stable.20261103' -> 'built on 3 November 2026'; '' when the label
+    is not one of ours."""
+    m = VERSION_LABEL.match(version or "")
+    if not m:
+        return ""
+    tag, year, month, day = m.group(1), int(m.group(2)), int(m.group(3)), int(m.group(4))
+    if not 1 <= month <= 12 or not 1 <= day <= 31:
+        return ""
+    text = f"built on {day} {MONTHS[month - 1]} {year}"
+    return text if tag == "stable" else f"{text}, {tag}"
+
+
+# ── what the next version brings ─────────────────────────────────────────
+# rpm-ostree keeps the package diff and the advisories of a staged (or
+# downloaded) deployment in the `cached-update` block of its status.
+SEVERITIES = {4: "critical", 3: "important", 2: "moderate", 1: "low", 0: "unknown"}
+ADVISORY_SECURITY = 1
+
+
+def cached_update(status_json):
+    """{'known': bool, 'counts': {upgraded, downgraded, added, removed},
+    'packages': {kind: [(name, old, new)]}, 'security': {severity: n},
+    'advisories': [(id, severity word, [packages])]}. known is False when
+    rpm-ostree has no cached update (nothing staged or downloaded)."""
+    out = {"known": False, "counts": {"upgraded": 0, "downgraded": 0, "added": 0, "removed": 0},
+           "packages": {"upgraded": [], "downgraded": [], "added": [], "removed": []},
+           "security": {}, "advisories": []}
+    try:
+        cached = (json.loads(status_json or "{}") or {}).get("cached-update") or {}
+    except (json.JSONDecodeError, AttributeError):
+        return out
+    if not isinstance(cached, dict) or not cached:
+        return out
+    diff = cached.get("rpm-diff") or {}
+    for kind in ("upgraded", "downgraded"):
+        for row in diff.get(kind) or []:
+            try:
+                _, name, old, new = row[:4]
+                out["packages"][kind].append((name, old[0] if isinstance(old, list) else str(old), new[0] if isinstance(new, list) else str(new)))
+            except (ValueError, TypeError, IndexError):
+                continue
+    for kind in ("added", "removed"):
+        for row in diff.get(kind) or []:
+            try:
+                _, name, version = row[:3]
+                out["packages"][kind].append((name, str(version), ""))
+            except (ValueError, TypeError):
+                continue
+    for kind in out["packages"]:
+        out["packages"][kind].sort(key=lambda p: p[0].lower())
+        out["counts"][kind] = len(out["packages"][kind])
+    for adv in cached.get("advisories") or []:
+        try:
+            adv_id, kind, severity, packages = adv[0], int(adv[1]), int(adv[2]), list(adv[3] or [])
+        except (ValueError, TypeError, IndexError):
+            continue
+        if kind != ADVISORY_SECURITY:
+            continue
+        word = SEVERITIES.get(severity, "unknown")
+        out["security"][word] = out["security"].get(word, 0) + 1
+        out["advisories"].append((str(adv_id), word, packages))
+    order = {w: i for i, w in enumerate(SEVERITIES.values())}
+    out["advisories"].sort(key=lambda a: (order.get(a[1], 9), a[0]))
+    out["known"] = True
+    return out
+
+
+def changes_phrase(cached):
+    """'358 packages upgraded, 3 removed. 10 important, 16 moderate, 5 low
+    and 2 unrated security fixes'."""
+    if not cached.get("known"):
+        return ""
+    counts = cached["counts"]
+    parts = []
+    if counts["upgraded"]:
+        parts.append(f"{counts['upgraded']} package{'s' if counts['upgraded'] != 1 else ''} upgraded")
+    for kind in ("added", "removed", "downgraded"):
+        if counts[kind]:
+            parts.append(f"{counts[kind]} {kind}")
+    text = ", ".join(parts) if parts else "No package changes"
+    sec = security_phrase(cached["security"])
+    return f"{text}. {sec}" if sec else text
+
+
+def security_phrase(security):
+    if not security:
+        return ""
+    words = [f"{security[w]} {('unrated' if w == 'unknown' else w)}" for w in SEVERITIES.values() if security.get(w)]
+    total = sum(security.values())
+    text = words[0] if len(words) == 1 else ", ".join(words[:-1]) + f" and {words[-1]}"
+    return f"{text} security fix{'es' if total != 1 else ''}"
+
+
+# ── the phases of a system update, from rpm-ostree's and bootc's output ──
+UPDATE_PHASES = (
+    (re.compile(r"Pulling manifest|Pulling from|layers already present|layers needed", re.I), "Checking the new image"),
+    (re.compile(r"Fetching (layer|ostree chunk)|Importing:|Fetching:|Downloading layer", re.I), "Downloading the new image"),
+    (re.compile(r"Checking out tree|Wrote commit|Writing objects", re.I), "Unpacking the new image"),
+    (re.compile(r"Enabled rpm-md|Updating metadata|Importing rpm-md|Resolving dependencies|Preparing pkg txn", re.I), "Resolving the extra packages"),
+    (re.compile(r"Downloading from|Importing packages|Downloading packages", re.I), "Downloading the extra packages"),
+    (re.compile(r"Applying \d+ overrides|Processing packages|Running pre|Running post|Relabeling|Installing \d+ packages|Applying", re.I), "Applying the extra packages on top"),
+    (re.compile(r"Staging deployment|Queued for next boot|Writing OSTree commit", re.I), "Preparing the next restart"),
+    (re.compile(r"Run \"systemctl reboot\"|reboot to switch|A new deployment is staged|Nothing new was staged|Already up-to-date|No upgrade available", re.I), "Done"),
+)
+
+
+def update_phase(line):
+    """The phase a line of `system-update` output announces, or None."""
+    text = (line or "").strip()
+    if not text:
+        return None
+    for pattern, phrase in UPDATE_PHASES:
+        if pattern.search(text):
+            return phrase
+    return None
+
+
+# ── keeping a version: ostree's pins ─────────────────────────────────────
+OSTREE_DEPLOYMENT = re.compile(r"^([* ]) \S+ [0-9a-f]{64}\.\d+")
+
+
+def pin_index(ostree_admin_status):
+    """The index `ostree admin pin` wants for the booted deployment: its
+    position in `ostree admin status`, which lists a staged deployment
+    first, exactly as the sysroot's deployment list does. None when the
+    booted one is not found."""
+    index = 0
+    for line in (ostree_admin_status or "").splitlines():
+        m = OSTREE_DEPLOYMENT.match(line)
+        if not m:
+            continue
+        if m.group(1) == "*":
+            return index
+        index += 1
+    return None
+
+
+def keep_phrase(pinned, rollback):
+    if pinned:
+        return "Kept: later updates leave this version in the boot menu until you release it"
+    return "Not kept: the second update from now replaces it as the previous version"
 
 
 # ── automatic updates: the last runs of each channel ────────────────────

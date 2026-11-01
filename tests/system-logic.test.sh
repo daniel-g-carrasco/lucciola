@@ -27,6 +27,8 @@ check "toolkit-free module: no FAIL line" bash -c "! grep -q '^FAIL' '$T/out'"
 plan() { python3 -I "$ADMIN" --check "$@" > "$T/out" 2>&1 && RC=0 || RC=$?; }
 plan update;                      check "update plans system-update (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/margine/system-update' '$T/out'"
 plan rollback;                    check "rollback plans rpm-ostree rollback (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx 'rpm-ostree rollback' '$T/out'"
+plan pin 1;                       check "pin plans ostree admin pin with the index (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx 'ostree admin pin 1' '$T/out'"
+plan unpin 0;                     check "unpin plans ostree admin pin --unpin (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx 'ostree admin pin --unpin 0' '$T/out'"
 plan flatpak-unblock com.example.App; check "flatpak-unblock: unmask, update, record (rc $RC)" \
   bash -c "[ '$RC' = 0 ] && grep -qx 'flatpak mask --remove com.example.App' '$T/out' && grep -qx 'flatpak update -y --noninteractive com.example.App' '$T/out'"
 plan kernel fedora;               check "kernel fedora: CONFIRM=yes, no prompt (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx 'CONFIRM=yes /usr/libexec/margine/kernel-switch fedora' '$T/out'"
@@ -62,6 +64,7 @@ plan dock-wake;                   check "dock-wake forces the rescue (rc $RC)" b
 plan dock-rescue off;             check "dock-rescue off writes the switch (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -q \"write '/etc/margine/dock-dp-rescue': 'off\" '$T/out'"
 for bad in "ai-on amd" "ai-on nvidia" "gaming-on now" "dock-rescue maybe" "apps-slim please" "flatpak-unblock" "flatpak-unblock a b" "flatpak-unblock 'x; rm -rf /'" "flatpak-unblock ../etc" "flatpak-unblock -y" \
            "update now" "rollback --force" "reboot" "--check" "kernel" "kernel foo" "kernel fedora now" \
+           "pin" "pin 12" "pin x" "pin -1" "unpin" "unpin 1 2" "pin '1; rm -rf /'" \
            "tpm-unlock-enable '7;8'" "tpm-unlock-enable 7 8" "tpm-unlock-enable ../x" "grub-lock-on pw" "grub-lock-off x" \
            "autologin-on bob" "autologin-off x" "secureboot-enroll x" "scheduler" "scheduler lavd Turbo" "scheduler 'x;y' Auto" "scheduler LAVD" "scheduler-off x"; do
   eval "python3 -I '$ADMIN' --check $bad" > "$T/out" 2>&1 && RC=0 || RC=$?
