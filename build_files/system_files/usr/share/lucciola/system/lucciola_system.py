@@ -37,11 +37,14 @@ def parse_deployments(status_json):
     state = {
         "booted": None, "staged": None, "rollback": None, "layered": [],
         "booted_digest": "", "staged_digest": "", "booted_ref": "", "staged_ref": "", "image": IMAGE,
+        "transaction": "",
     }
     try:
-        deployments = json.loads(status_json or "{}").get("deployments", [])
+        status = json.loads(status_json or "{}")
+        deployments = status.get("deployments", [])
     except (json.JSONDecodeError, AttributeError):
         return state
+    state["transaction"] = transaction_title(status.get("transaction"))
     seen_booted = False
     for dep in deployments:
         version = dep.get("version") or (dep.get("checksum") or "")[:12]
@@ -73,12 +76,276 @@ def update_available(state, latest, latest_digest):
     return bool(latest) and state.get("booted") != latest
 
 
+def newer_than_staged(state, latest, latest_digest):
+    """A deployment is staged, and the registry already publishes a newer
+    one: the staged digest is not the published digest (labels when a
+    digest is missing). Until 2026-11-01 the window stopped at "staged,
+    restart", however old the staged one had become: rpm-ostree replaces a
+    staged deployment with the next `upgrade`, so the newer one is a click
+    away, not a restart and a second update."""
+    if not state.get("staged"):
+        return False
+    staged_digest = state.get("staged_digest") or ""
+    if staged_digest and latest_digest:
+        return staged_digest != latest_digest
+    return bool(latest) and state.get("staged") != latest
+
+
+def hero_state(state, latest, latest_digest, error):
+    """What the top of the overview says, in one word: checking, working (a
+    transaction runs in rpm-ostreed), staged-older (staged, but a newer one
+    is published), staged, offline (the registry could not be asked),
+    available, current. The window maps the word to texts and buttons; the
+    tests check the word."""
+    if not state:
+        return "checking"
+    if state.get("transaction"):
+        return "working"
+    if state.get("staged"):
+        if newer_than_staged(state, latest, latest_digest):
+            return "staged-older"
+        return "staged"
+    if latest is None and not error:
+        return "checking"
+    if error:
+        return "offline"
+    if update_available(state, latest, latest_digest):
+        return "available"
+    return "current"
+
+
+def transaction_title(value):
+    """rpm-ostree's `transaction` field: null when idle, else the running
+    transaction's (title, sender, path), serialized as an array; be lenient
+    about the shape and return the title, or '' when idle."""
+    if not value:
+        return ""
+    if isinstance(value, (list, tuple)):
+        return str(value[0]) if value else ""
+    if isinstance(value, dict):
+        return str(value.get("title") or value.get("Title") or "transaction")
+    return str(value)
+
+
+def transaction_phrase(title):
+    """The running transaction in plain words."""
+    t = (title or "").lower()
+    if any(w in t for w in ("upgrade", "deploy", "rebase", "update")):
+        return "Downloading and preparing the next version"
+    if "rollback" in t:
+        return "Preparing the previous version for the next restart"
+    if any(w in t for w in ("install", "uninstall", "override", "layer")):
+        return "Changing the extra packages"
+    return "Working on the system"
+
+
 def parse_skopeo(output):
     """`skopeo inspect --format '{{.Digest}} {{version label}}'` -> (version, digest)."""
     digest, _, version = (output or "").strip().partition(" ")
     if not version:
         return (digest or None), ""
     return version, digest
+
+
+# ── automatic updates: the last runs of each channel ────────────────────
+# uupd stages the system image (and upgrades distroboxes) daily; Lucciola's
+# own timers update the system Flatpak apps twice a day, the user's own
+# apps once, Homebrew once a week. Until 2026-11-01 a failed run was a line
+# in the journal and nothing else (that day: a distrobox that no longer
+# started failed uupd for days, brew failed on a tap without a bottle, and
+# the window kept saying everything was fine).
+
+CHANNELS = (
+    # key, title, system units, user units, timers (system), timers (user)
+    ("system", "System", ("uupd.service",), (), ("uupd.timer",), ()),
+    ("apps", "Apps", ("margine-flatpak-update.service",), ("margine-flatpak-user-update.service",),
+     ("margine-flatpak-update.timer",), ("margine-flatpak-user-update.timer",)),
+    ("tools", "Command-Line Tools", (), ("margine-brew-upgrade.service",), (), ("margine-brew-upgrade.timer",)),
+)
+SYSTEM_UNITS = tuple(u for ch in CHANNELS for u in ch[2])
+USER_UNITS = tuple(u for ch in CHANNELS for u in ch[3])
+SYSTEM_TIMERS = tuple(u for ch in CHANNELS for u in ch[4])
+USER_TIMERS = tuple(u for ch in CHANNELS for u in ch[5])
+UNIT_PROPERTIES = "Id,Result,ActiveState,ExecMainStartTimestamp,ExecMainExitTimestamp"
+
+
+def parse_unit_show(text):
+    """`systemctl show --timestamp=unix -p Id,Result,ActiveState,ExecMain*
+    UNIT...` -> {unit: {"result", "active", "started", "exited"}}; the
+    timestamps are epoch seconds or None. A unit the manager does not know
+    comes back with an empty Id and is skipped."""
+    units = {}
+    for block in (text or "").split("\n\n"):
+        props = {}
+        for line in block.splitlines():
+            key, sep, value = line.partition("=")
+            if sep:
+                props[key.strip()] = value.strip()
+        unit = props.get("Id")
+        if not unit:
+            continue
+        units[unit] = {
+            "result": props.get("Result") or "",
+            "active": props.get("ActiveState") or "",
+            "started": _unix_stamp(props.get("ExecMainStartTimestamp")),
+            "exited": _unix_stamp(props.get("ExecMainExitTimestamp")),
+        }
+    return units
+
+
+def _unix_stamp(value):
+    value = (value or "").strip()
+    if value.startswith("@"):
+        value = value[1:]
+    try:
+        stamp = int(float(value))
+    except ValueError:
+        return None
+    return stamp or None
+
+
+def parse_timers(text):
+    """`systemctl list-timers --all --output=json TIMER...` -> {timer:
+    {"last": epoch or None, "next": epoch or None}} (the JSON carries
+    microseconds)."""
+    timers = {}
+    try:
+        rows = json.loads(text or "[]")
+    except json.JSONDecodeError:
+        return timers
+    for row in rows if isinstance(rows, list) else []:
+        unit = row.get("unit") if isinstance(row, dict) else None
+        if not unit:
+            continue
+        timers[unit] = {
+            "last": _usec(row.get("last")),
+            "next": _usec(row.get("next")),
+        }
+    return timers
+
+
+def _usec(value):
+    if not isinstance(value, (int, float)) or value <= 0:
+        return None
+    # systemd's "never" is the largest 64-bit value; anything past 2200 is it.
+    if value > 7_000_000_000_000_000:
+        return None
+    return int(value // 1_000_000)
+
+
+def when_phrase(stamp, now):
+    """'today at 10:38', 'yesterday at 23:10', 'on 28 Oct at 04:12',
+    'tomorrow at 04:12'; '' for None."""
+    if not stamp:
+        return ""
+    import time as _time
+    day = _time.strftime("%Y-%m-%d", _time.localtime(stamp))
+    hm = _time.strftime("%H:%M", _time.localtime(stamp))
+    today = _time.strftime("%Y-%m-%d", _time.localtime(now))
+    offset = round((_time.mktime(_time.strptime(day, "%Y-%m-%d")) - _time.mktime(_time.strptime(today, "%Y-%m-%d"))) / 86400)
+    if offset == 0:
+        return f"today at {hm}"
+    if offset == -1:
+        return f"yesterday at {hm}"
+    if offset == 1:
+        return f"tomorrow at {hm}"
+    return f"on {_time.strftime('%-d %b', _time.localtime(stamp))} at {hm}"
+
+
+def unit_outcome(unit):
+    """One word for a unit's last run: ok, failed, hung (killed on timeout),
+    running, never."""
+    if not unit:
+        return "never"
+    if unit.get("active") in ("activating", "active", "deactivating"):
+        return "running"
+    result = unit.get("result") or ""
+    if result == "timeout":
+        return "hung"
+    if result and result != "success":
+        return "failed"
+    if not unit.get("exited") and not unit.get("started"):
+        return "never"
+    return "ok"
+
+
+def channel_health(units, timers, now):
+    """One entry per update channel: the worst outcome among its units, the
+    unit that set it, when it ran, when the next run is due, and a sentence
+    for the row. Reasons (from the journal) are added by the caller."""
+    # A failure anywhere names the channel; a run in progress next; a
+    # channel is "never" only when none of its units ever ran (a user unit
+    # that has not run yet does not hide the system one's last run).
+    rank = {"failed": 0, "hung": 1, "running": 2, "ok": 3, "never": 4}
+    out = []
+    for key, title, sys_units, user_units, sys_timers, user_timers in CHANNELS:
+        members = [(u, False) for u in sys_units] + [(u, True) for u in user_units]
+        worst, worst_unit, worst_user = "never", None, False
+        last = None
+        for unit, is_user in members:
+            info = units.get(unit)
+            outcome = unit_outcome(info)
+            if info and info.get("exited") and (last is None or info["exited"] > last):
+                last = info["exited"]
+            if rank[outcome] < rank[worst] or worst_unit is None:
+                worst, worst_unit, worst_user = outcome, unit, is_user
+        nexts = [timers[t]["next"] for t in sys_timers + user_timers if t in timers and timers[t]["next"]]
+        next_run = min(nexts) if nexts else None
+        started = (units.get(worst_unit) or {}).get("started") if worst == "running" else None
+        out.append({
+            "key": key, "title": title, "outcome": worst, "unit": worst_unit, "user": worst_user,
+            "last": last, "next": next_run, "reason": "",
+            "line": health_line(worst, last, next_run, started, now),
+        })
+    return out
+
+
+def health_line(outcome, last, next_run, started, now, reason=""):
+    nxt = when_phrase(next_run, now)
+    if outcome == "running":
+        return f"Running since {when_phrase(started, now) or 'a moment ago'}"
+    if outcome == "never":
+        return f"Not run yet. First run {nxt}" if nxt else "Not run yet"
+    if outcome in ("failed", "hung"):
+        head = "Hung and was stopped" if outcome == "hung" else "Failed"
+        text = f"{head} {when_phrase(last, now)}".rstrip()
+        if reason:
+            text += f": {reason.rstrip('.')}"
+        return text + (f". Next try {nxt}" if nxt else "")
+    text = f"Last run {when_phrase(last, now)}".rstrip() if last else "Last run unknown"
+    return text + (f", next {nxt}" if nxt else "")
+
+
+ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+def failure_excerpt(journal_text, limit=160):
+    """The reason of a failed run, from the unit's journal (`-o cat`), in
+    one line. uupd logs JSON: the last `module_fail` names the step and
+    carries the command's output, whose last line is the error. Plain
+    scripts (brew-upgrade, the Flatpak updaters): the last line that speaks
+    of an error, else the last non-empty line."""
+    lines = [ANSI.sub("", ln).rstrip() for ln in (journal_text or "").splitlines()]
+    for line in reversed(lines):
+        if '"module_fail"' not in line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        output = entry.get("output") or {}
+        step = output.get("Context") or entry.get("module") or "a step"
+        text = ANSI.sub("", (output.get("Stderr") or "") + "\n" + (output.get("Stdout") or ""))
+        tail = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        errors = [ln for ln in tail if re.search(r"error|fail|cannot|could not|unable", ln, re.I)]
+        detail = (errors or tail or [""])[-1]
+        return f"{step}: {detail}"[:limit].rstrip(": ") if detail else str(step)[:limit]
+    plain = [ln.strip() for ln in lines if ln.strip() and not ln.startswith("{")]
+    errors = [ln for ln in plain if re.search(r"\berror\b|failed|cannot|could not|unable", ln, re.I)
+              and "reported errors" not in ln and not ln.startswith("+ ")]
+    if errors:
+        return errors[-1][:limit]
+    return plain[-1][:limit] if plain else ""
 
 
 def app_updates(remote_ls_output):
