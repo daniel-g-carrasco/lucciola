@@ -7,6 +7,14 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-11-01, Disks in the dock)
+- **Disks shows its own icon in the dock**: its window opens as
+  `gnome-disks` while its desktop file is `org.gnome.DiskUtility.desktop`
+  with no `StartupWMClass`, so Noctalia's dock found no match and drew the
+  generic executable icon. The build appends the key (a table in
+  `lucciola/build.sh` for any other app with the same gap) and stops if
+  the package one day names it itself.
+
 ### Added (2026-11-01, updates on the bar and in the notifications)
 - **An Updates glyph on the bar** (Noctalia plugin `lucciola/updates`,
   before Keep Awake): a lit download glyph while a new version waits for

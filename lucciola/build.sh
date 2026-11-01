@@ -495,6 +495,32 @@ grep -qE '^OLLAMA_SHA256=[0-9a-f]{64}$' /usr/share/lucciola/models/ollama.releas
   || { echo "ERROR: /usr/share/lucciola/models/ollama.release names no sha256" >&2; exit 1; }
 log "local models: $(grep -E '^OLLAMA_VERSION=' /usr/share/lucciola/models/ollama.release), update timer enabled for every user"
 
+# Dock icons: Noctalia's dock finds a window's icon through the desktop
+# file named like the window's app id, or the one whose StartupWMClass says
+# it. GNOME Shell also tries the Exec line, so a package can miss both and
+# still look right there. Disks (gnome-disk-utility 46, GTK 3) opens its
+# window as gnome-disks while its file is org.gnome.DiskUtility.desktop
+# with no StartupWMClass, and showed the generic executable icon in the
+# dock (2026-11-01). Each line: desktop file, window app id. Appending the
+# key changes the file's size, which keeps it in the committed layer.
+while read -r desktop wmclass; do
+  f="/usr/share/applications/${desktop}"
+  [[ -f "$f" ]] || { echo "ERROR: ${f} is missing (the dock icon fix names it)" >&2; exit 1; }
+  if grep -q '^StartupWMClass=' "$f"; then
+    grep -qx "StartupWMClass=${wmclass}" "$f" \
+      || { echo "ERROR: ${f} now names another StartupWMClass: $(grep '^StartupWMClass=' "$f")" >&2; exit 1; }
+    log "dock icon: ${desktop} already says StartupWMClass=${wmclass} upstream, drop its line"
+    continue
+  fi
+  [[ "$(grep -c '^\[' "$f")" == 1 ]] \
+    || { echo "ERROR: ${f} has more groups than [Desktop Entry], appending would land in the wrong one" >&2; exit 1; }
+  printf 'StartupWMClass=%s\n' "$wmclass" >> "$f"
+  desktop-file-validate "$f" || { echo "ERROR: ${f} no longer validates" >&2; exit 1; }
+  log "dock icon: ${desktop} gets StartupWMClass=${wmclass}"
+done <<'EOF'
+org.gnome.DiskUtility.desktop gnome-disks
+EOF
+
 # 5f. /var/lib/greetd and /var/lib/noctalia-greeter come from tmpfiles.d at
 #     boot, on fresh installs and updated systems alike (lucciola-greeter.conf
 #     says why), so the image carries no copy of them.
