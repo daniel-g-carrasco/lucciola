@@ -63,4 +63,41 @@ run "$T/missing-welcome"
 check "no welcome program in the image: nothing opens" not_opened
 check "no welcome program in the image: Noctalia still starts" shell_ran
 
+# A plugin the image added later, for accounts with a saved list in
+# Noctalia's settings.toml (which wins over the fragments).
+SAVED="$T/home/.local/state/noctalia/settings.toml"
+OFFERED="$STATE/noctalia-plugin-updates-offered"
+saved_with() { mkdir -p "${SAVED%/*}"; printf '[general]\nenabled = [ "not-this-one" ]\n\n[plugins]\n%s\n\n[shell]\nenabled = [ "nor-this" ]\n' "$1" > "$SAVED"; }
+plugins_line() { sed -n '/^\[plugins\]/,/^\[shell\]/p' "$SAVED" | grep '^enabled'; }
+line_is() { [ "$(plugins_line)" = "$1" ]; }
+others_kept() { grep -qx 'enabled = \[ "not-this-one" \]' "$SAVED" && grep -qx 'enabled = \[ "nor-this" \]' "$SAVED"; }
+marked() { [ -e "$OFFERED" ]; }
+
+fresh
+run
+check "plugin: no saved list, nothing written, only the marker" bash -c "[ ! -e '$SAVED' ] && [ -e '$OFFERED' ]"
+fresh
+saved_with 'enabled = [ "lucciola/keep_awake", "daniel-g-carrasco/spola" ]'
+run
+check "plugin: a saved list gets it" line_is 'enabled = [ "lucciola/keep_awake", "daniel-g-carrasco/spola", "lucciola/updates" ]'
+check "plugin: other sections untouched" others_kept
+check "plugin: marked as offered" marked
+check "plugin: Noctalia still starts" shell_ran
+saved_with 'enabled = [ "lucciola/keep_awake" ]'
+run
+check "plugin: switched off afterwards, it stays off" line_is 'enabled = [ "lucciola/keep_awake" ]'
+fresh
+saved_with 'enabled = [ "lucciola/updates", "lucciola/keep_awake" ]'
+run
+check "plugin: already there, not added twice" line_is 'enabled = [ "lucciola/updates", "lucciola/keep_awake" ]'
+fresh
+saved_with 'enabled = [ ]'
+run
+check "plugin: an empty list stays empty" line_is 'enabled = [ ]'
+fresh
+saved_with 'enabled = ['
+run
+check "plugin: a list it cannot read stays as it is" line_is 'enabled = ['
+check "plugin: and Noctalia still starts" shell_ran
+
 [ "$fails" -eq 0 ] && echo "all session-start welcome tests passed" || { echo "$fails failed"; exit 1; }

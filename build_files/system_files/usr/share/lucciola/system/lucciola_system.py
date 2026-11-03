@@ -447,14 +447,47 @@ def when_phrase(stamp, now):
     return f"on {_time.strftime('%-d %b', _time.localtime(stamp))} at {hm}"
 
 
+# systemd forgets a unit's result at every restart, so right after one every
+# channel would read "Not run yet" and a failure would vanish. The manager's
+# own lines in the journal keep the last run; systemd-journald answers these
+# in milliseconds, so the bar can ask at every poll.
+JOURNAL_RUN = re.compile(r"^(\d+)(?:\.\d+)?\s.*?:\s(?:Finished\s|\S+: Failed with result '([^']+)')")
+
+
+def journal_run_args(unit):
+    """journalctl arguments for the manager's last line about a unit's run."""
+    name = re.escape(unit)
+    return ["-u", unit, "-r", "-n", "1", "-o", "short-unix", "--no-pager", "-q",
+            "-g", f"^(Finished {name}|{name}: Failed with result)"]
+
+
+def parse_journal_run(text):
+    """The unit entry for a run read from the journal, or None. A run killed
+    by a signal was stopped by the restart that made systemd forget it (15 s
+    into uupd, 2026-11-03): interrupted, not failed."""
+    found = JOURNAL_RUN.match((text or "").strip().splitlines()[0]) if (text or "").strip() else None
+    if not found:
+        return None
+    result = found.group(2) or "success"
+    return {"result": "interrupted" if result == "signal" else result, "active": "inactive",
+            "started": None, "exited": int(found.group(1))}
+
+
+def forgotten_units(units, names):
+    """The units of a list with no run in this boot."""
+    return [name for name in names if unit_outcome(units.get(name)) == "never"]
+
+
 def unit_outcome(unit):
     """One word for a unit's last run: ok, failed, hung (killed on timeout),
-    running, never."""
+    interrupted (by a restart), running, never."""
     if not unit:
         return "never"
     if unit.get("active") in ("activating", "active", "deactivating"):
         return "running"
     result = unit.get("result") or ""
+    if result == "interrupted":
+        return "interrupted"
     if result == "timeout":
         return "hung"
     if result and result != "success":
@@ -471,7 +504,7 @@ def channel_health(units, timers, now):
     # A failure anywhere names the channel; a run in progress next; a
     # channel is "never" only when none of its units ever ran (a user unit
     # that has not run yet does not hide the system one's last run).
-    rank = {"failed": 0, "hung": 1, "running": 2, "ok": 3, "never": 4}
+    rank = {"failed": 0, "hung": 1, "running": 2, "interrupted": 3, "ok": 4, "never": 5}
     out = []
     for key, title, sys_units, user_units, sys_timers, user_timers in CHANNELS:
         members = [(u, False) for u in sys_units] + [(u, True) for u in user_units]
@@ -486,6 +519,11 @@ def channel_health(units, timers, now):
                 worst, worst_unit, worst_user = outcome, unit, is_user
         nexts = [timers[t]["next"] for t in sys_timers + user_timers if t in timers and timers[t]["next"]]
         next_run = min(nexts) if nexts else None
+        # Nothing known about the runs (a journal this account may not read):
+        # the timers still remember when they fired.
+        fired = [timers[t]["last"] for t in sys_timers + user_timers if t in timers and timers[t]["last"]]
+        if worst == "never" and fired:
+            last = max(fired)
         started = (units.get(worst_unit) or {}).get("started") if worst == "running" else None
         out.append({
             "key": key, "title": title, "outcome": worst, "unit": worst_unit, "user": worst_user,
@@ -499,8 +537,12 @@ def health_line(outcome, last, next_run, started, now, reason=""):
     nxt = when_phrase(next_run, now)
     if outcome == "running":
         return f"Running since {when_phrase(started, now) or 'a moment ago'}"
+    if outcome == "never" and last:
+        return f"Last started {when_phrase(last, now)}" + (f", next {nxt}" if nxt else "")
     if outcome == "never":
         return f"Not run yet. First run {nxt}" if nxt else "Not run yet"
+    if outcome == "interrupted":
+        return f"Interrupted by a restart {when_phrase(last, now)}".rstrip() + (f", next {nxt}" if nxt else "")
     if outcome in ("failed", "hung"):
         head = "Hung and was stopped" if outcome == "hung" else "Failed"
         text = f"{head} {when_phrase(last, now)}".rstrip()

@@ -45,9 +45,10 @@ echo '{"booted": "candidate.20261024", "staged": null, "transaction": "", "faile
 run; check "all well: runs, says nothing (rc $RC)" bash -c "[ $RC = 0 ] && [ $(notices) = 0 ]"
 
 # A staged update appears: one notice, then silence; the stamp holds its checksum.
-cat > "$FAKE/status.json" <<'J'
+# Built now: an older staged image also gets the "staged for N days" notice.
+cat > "$FAKE/status.json" <<J
 {"deployments": [
-  {"staged": true, "version": "candidate.20261101", "checksum": "80bb", "timestamp": 1793517242},
+  {"staged": true, "version": "candidate.20261101", "checksum": "80bb", "timestamp": $(date +%s)},
   {"booted": true, "version": "candidate.20261024", "checksum": "be94", "timestamp": 1793000000}]}
 J
 : > "$FAKE/notify-refuses"

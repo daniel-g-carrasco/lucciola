@@ -7,6 +7,19 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-11-03, updates after a restart)
+- **The Updates glyph reaches accounts with a saved plugin list.** Noctalia's
+  `settings.toml` wins over the image's fragments, so anyone who had switched
+  a plugin on or off, or installed Spola, never got `lucciola/updates`.
+  `session-start` adds a new image plugin to a saved list once per plugin,
+  before Noctalia starts; switching it off afterwards stays off.
+- **Automatic Updates remembers across a restart.** systemd forgets a unit's
+  result when the machine restarts, so every row read "Not run yet" and a
+  failure disappeared. The window, the bar and the notifier now read the last
+  run from the journal when this boot has none. A run killed by the restart
+  itself reads "Interrupted by a restart" and is not a failure; an account
+  that cannot read the journal sees when the timer last fired.
+
 ### Fixed (2026-11-01, Disks in the dock)
 - **Disks shows its own icon in the dock**: its window opens as
   `gnome-disks` while its desktop file is `org.gnome.DiskUtility.desktop`

@@ -1791,6 +1791,9 @@ class SystemWindow(Adw.ApplicationWindow):
         ):
             rc, out, _ = run(["systemctl", *scope, "show", "--no-pager", "--timestamp=unix", "-p", ls.UNIT_PROPERTIES, *unit_names])
             units.update(ls.parse_unit_show(out if rc == 0 else ""))
+            for unit in ls.forgotten_units(units, unit_names):
+                rc, out, _ = run(["journalctl", *scope, *ls.journal_run_args(unit)], timeout=10)
+                units[unit] = ls.parse_journal_run(out if rc == 0 else "") or units.get(unit)
             rc, out, _ = run(["systemctl", *scope, "list-timers", "--all", "--no-pager", "--output=json", *timer_names])
             timers.update(ls.parse_timers(out if rc == 0 else ""))
         health = ls.channel_health(units, timers, time.time())
