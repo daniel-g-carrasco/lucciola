@@ -10,6 +10,7 @@
 # second request for a key starts with "Bad passphrase": whatever is saved for
 # that key has just failed, so it goes, and gcr then asks the user. Drop this
 # when gcr carries the fix.
+set -eu
 case "${1:-}" in
   "Bad passphrase, try again for "*)
     key="${1#Bad passphrase, try again for }"
