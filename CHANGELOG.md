@@ -7,6 +7,20 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (2026-11-03, after Fedora 45's release)
+- **The notes about the coming `:stable` are gone** from the README, the home
+  page and the guide: it exists now, and `:fedora-kernel` follows it.
+- **`keyring-legacy-aside` left the image.** It renamed a Fedora 44 plaintext
+  keyring for oo7 0.7.0~beta. The oo7 Fedora 45 shipped with reads that format
+  itself, so the script had stopped doing anything. `keyring-import-legacy`
+  stays for accounts where the file was already set aside.
+
+### Fixed (2026-11-03, the upgrade smoke test)
+- **The weekly upgrade test no longer fails on a slow first shell.** The
+  `bluefin:stable` cell failed before anything of Lucciola was involved: what
+  the driver typed was lost while Bluefin's profile printed its banner (23 s).
+  The driver now asks again until the shell answers.
+
 ### Fixed (2026-11-03, Fedora 45's final RPM Fusion package)
 - **The image keeps its phone camera module.** RPM Fusion's final release
   package for Fedora 45 moved its key and repository files from `/etc` to

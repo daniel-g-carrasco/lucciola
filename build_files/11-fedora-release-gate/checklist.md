@@ -14,15 +14,14 @@ matches the base; go through this list first, then bump the number.
   `org.freedesktop.secrets.service` and Lucciola starts it with niri
   (`niri.service.d/50-lucciola-secrets.conf`). Without them a niri session
   has no Secret Service at all.
-- oo7 migrates gnome-keyring's encrypted keyring with the login password,
-  but not the plaintext one `lucciola-keyring blank` left on Fedora 44: with
-  the password at hand oo7-daemon exits on it ("File header doesn't
-  match"), without it oo7 starts an empty Login keyring.
-  `keyring-legacy-aside` (ExecStartPre of oo7-daemon) renames the file,
-  `keyring-import-legacy` moves its items over (at login, or
-  `ujust lucciola-keyring import`). Only for oo7 0.7.0~beta: upstream
-  migrates the plaintext format itself since #579 (2026-09-26), so the
-  aside step stands down on any other version. Rehearsed in a `silverblue-main:45`
+- oo7 migrates gnome-keyring's encrypted keyring with the login password.
+  The plaintext one `lucciola-keyring blank` left on Fedora 44 made oo7
+  0.7.0~beta exit ("File header doesn't match"), so the image renamed it
+  before oo7-daemon started and `keyring-import-legacy` moved its items over
+  (at login, or `ujust lucciola-keyring import`). Upstream reads that format
+  since #579 (2026-09-26), and the build Fedora 45 shipped with contains it,
+  so the renaming left the image on 2026-11-03; the import stays for accounts
+  where the file was already set aside. Rehearsed in a `silverblue-main:45`
   container with a real oo7-daemon: text, network and binary items, lookup
   by attribute and by schema, persistence across a daemon restart.
 - `lucciola-keyring` no longer blanks the keyring (oo7 refuses an empty

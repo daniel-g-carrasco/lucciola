@@ -3,10 +3,11 @@
 
 `ujust lucciola-keyring blank` (Fedora 44 and older) set the login keyring's
 password to empty, and gnome-keyring then keeps the keyring as a plaintext
-key file ("[keyring]" ...). oo7, the Secret Service from Fedora 45, migrates
-only gnome-keyring's encrypted format, so keyring-legacy-aside renames the
-plaintext file to login.keyring.margine-plaintext before oo7-daemon starts
-(otherwise the daemon fails to start, or starts an empty Login keyring).
+key file ("[keyring]" ...). oo7 0.7.0~beta, Fedora 45's Secret Service during
+its pre-release, could not read that format, so the image renamed the file to
+login.keyring.margine-plaintext before oo7-daemon started. The build Fedora 45
+shipped with reads it itself (linux-credentials/oo7#579) and nothing renames
+it any more; this stays for the accounts where the file was already set aside.
 
 This copies every item of that file into the default collection over the
 Secret Service API, with its label and attributes, then marks the file

@@ -209,8 +209,8 @@ fi
 
 # A.4.keyring: login keyring on oo7 (Fedora 45). lucciola-keyring opens the
 # keyring at login with a TPM-bound credential (fingerprint, autologin);
-# keyring-legacy-aside runs before oo7-daemon so a Fedora 44 plaintext
-# keyring cannot stop it, keyring-import-legacy moves its items over; the
+# keyring-import-legacy moves over the items of a Fedora 44 plaintext keyring
+# that the pre-release set aside; the
 # D-Bus activation file starts oo7 outside GNOME's session target (Lucciola).
 check_exec "usr/bin/lucciola-keyring" "A.4.keyring"
 # A.4.names: the commands are lucciola-* since 2026-10-18; the margine-*
@@ -221,10 +221,8 @@ for n in autologin dev-groups fetch keyring status tpm-unlock validate-margine-s
     || { echo "::error::A.4.names usr/bin/margine-$n is not a link to lucciola-$n"; fail=1; }
 done
 check_exec "usr/bin/seahorse" "A.4.keyring"
-check_exec "usr/libexec/margine/keyring-legacy-aside" "A.4.keyring"
 check_exec "usr/libexec/margine/keyring-import-legacy" "A.4.keyring"
-for f in usr/lib/systemd/user/oo7-daemon.service.d/50-margine-keyring-legacy.conf \
-         usr/share/dbus-1/services/org.freedesktop.secrets.service \
+for f in usr/share/dbus-1/services/org.freedesktop.secrets.service \
          usr/lib/systemd/user/graphical-session.target.wants/margine-keyring-import.service; do
   [[ -e "$ROOTFS/$f" ]] || { echo "::error::$f missing (A.4.keyring)"; fail=1; }
 done

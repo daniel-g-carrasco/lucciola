@@ -196,13 +196,19 @@ def main():
         if not s.expect(r"Password: ?", 60):
             raise SystemExit("MARGINE-UPGRADE: FAIL no password prompt")
         s.send(a.password + "\n")
-        time.sleep(3)
         # A bare bash: no profile, so no shell integration and no colour
-        # prompt; our own prompt marks the end of each command.
-        s.send("exec bash --noprofile --norc\n")
-        time.sleep(1)
-        s.send(f"stty -echo; PS1='{PROMPT}'; unset HISTFILE PROMPT_COMMAND\n")
-        if not s.expect(re.escape(PROMPT) + r"\s*$", 60):
+        # prompt; our own prompt marks the end of each command. The profile
+        # can take its time, and what is typed meanwhile can be lost (Bluefin's
+        # took 23 s on 2026-11-01, printing its banner, and the cell failed
+        # before anything of Lucciola was involved): ask again until it answers.
+        for _attempt in range(6):
+            time.sleep(3)
+            s.send("exec bash --noprofile --norc\n")
+            time.sleep(1)
+            s.send(f"stty -echo; PS1='{PROMPT}'; unset HISTFILE PROMPT_COMMAND\n")
+            if s.expect(re.escape(PROMPT) + r"\s*$", 20):
+                break
+        else:
             say(s.tail())
             raise SystemExit("MARGINE-UPGRADE: FAIL shell prompt not reached after login")
 
