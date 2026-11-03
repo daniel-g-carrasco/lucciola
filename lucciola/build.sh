@@ -460,6 +460,20 @@ systemctl --global enable gcr-ssh-agent.socket
 [[ -L /etc/systemd/user/sockets.target.wants/gcr-ssh-agent.socket ]] \
   || { echo "ERROR: gcr-ssh-agent.socket is not enabled for users" >&2; exit 1; }
 log "ssh agent: gcr-ssh-agent.socket enabled for every user ($(rpm -q --qf '%{NAME}-%{VERSION}' gcr))"
+# A mistyped passphrase saved by gcr made ssh hang for good, with ssh-add at
+# 100% of a core and no dialog (gcr #151): the guard in front of gcr's askpass
+# forgets a saved passphrase ssh-add has just rejected (ssh-askpass-guard says
+# how). It reads ssh-add's wording, so the build stops if that or the program
+# gcr calls has changed, rather than dropping the guard in silence.
+askpass=/usr/libexec/gcr4-ssh-askpass
+grep -aq "$askpass" /usr/lib64/libgcr-4.so.4 \
+  || { echo "ERROR: gcr-ssh-agent (libgcr-4) no longer runs $askpass" >&2; exit 1; }
+grep -aq 'Bad passphrase, try again for ' /usr/bin/ssh-add \
+  || { echo "ERROR: ssh-add no longer says 'Bad passphrase, try again for': ssh-askpass-guard must follow" >&2; exit 1; }
+command -v secret-tool >/dev/null || { echo "ERROR: ssh-askpass-guard needs secret-tool" >&2; exit 1; }
+mv "$askpass" "$askpass.real"
+install -m 0755 /usr/libexec/lucciola/ssh-askpass-guard "$askpass"
+log "ssh agent: guard in front of $askpass"
 
 # Apps in the Noctalia palette: 28-app-colors.toml turns on Noctalia's gtk3,
 # gtk4 and kcolorscheme templates. Every Flatpak app may read those colours,

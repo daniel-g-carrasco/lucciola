@@ -1,0 +1,22 @@
+#!/usr/bin/bash
+# Lucciola: gcr-ssh-agent's askpass, with a guard against a wrong saved
+# passphrase. The build moves gcr's own program to gcr4-ssh-askpass.real and
+# puts this in its place.
+#
+# gcr saves what is typed in "Unlock private key" before anything has checked
+# it, and then answers every request from the keyring: ssh-add gets the same
+# wrong passphrase back without end, at 100% of a core, no dialog ever opens
+# and ssh hangs (gcr #151, 2026-11-03: one mistyped passphrase). ssh-add's
+# second request for a key starts with "Bad passphrase": whatever is saved for
+# that key has just failed, so it goes, and gcr then asks the user. Drop this
+# when gcr carries the fix.
+set -euo pipefail
+case "${1:-}" in
+  "Bad passphrase, try again for "*)
+    key="${1#Bad passphrase, try again for }"
+    key="${key%: }"
+    key="${key% (will confirm each use)}"
+    timeout 5 secret-tool clear unique "ssh-store:$key" >/dev/null 2>&1 || true
+    ;;
+esac
+exec /usr/libexec/gcr4-ssh-askpass.real "$@"

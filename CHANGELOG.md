@@ -7,6 +7,15 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-11-03, a mistyped SSH passphrase)
+- **A wrong passphrase no longer locks a key out.** With "Automatically unlock"
+  ticked, gcr saves what was typed before anything has checked it, then answers
+  every request from the keyring: ssh hung for good, `ssh-add` ran at 100% of a
+  core and no dialog opened (gcr #151, open upstream). A guard in front of
+  gcr's askpass forgets a saved passphrase as soon as `ssh-add` rejects it, so
+  the dialog comes back. `tests/ssh-askpass-guard.test.sh` runs the real
+  `ssh-add` on a throwaway key.
+
 ### Added (2026-11-03, a switch for SSH)
 - **Allow Remote Login** in Lucciola System, Login: one switch starts SSH and
   opens the firewall for it, or stops it and closes the firewall, with no
