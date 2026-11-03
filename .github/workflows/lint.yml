@@ -138,6 +138,11 @@ jobs:
         # See tests/session-start-welcome.test.sh.
         run: bash tests/session-start-welcome.test.sh
 
+      - name: A wrong saved SSH passphrase
+        # The guard in front of gcr's askpass, with the real ssh-add on a
+        # throwaway key. See tests/ssh-askpass-guard.test.sh.
+        run: bash tests/ssh-askpass-guard.test.sh
+
       - name: Lucciola System without a display
         # The toolkit-free module (which image is followed, what rpm-ostree
         # says, how pending updates are worded), the privileged helper's
