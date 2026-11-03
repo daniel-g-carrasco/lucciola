@@ -132,6 +132,17 @@ check("pcrs rule", ls.pcrs_ok("7") and ls.pcrs_ok("7+14") and not ls.pcrs_ok("7;
 check("autologin enabled", ls.parse_autologin('autologin: ENABLED for user "daniel" (login screen: GDM)') == (True, "daniel"))
 check("autologin disabled", ls.parse_autologin("autologin: disabled\nlucciola-autologin: note: …") == (False, None))
 check("autologin unknown", ls.parse_autologin("") == (None, None))
+check("ssh: on", ls.ssh_state("active\n", "yes\n") == "on")
+check("ssh: off", ls.ssh_state("inactive\n", "no\n") == "off" and ls.ssh_state("", "") == "off")
+check("ssh: running behind a closed firewall", ls.ssh_state("active\n", "no\n") == "blocked")
+check("ssh: firewall open, nothing answers", ls.ssh_state("inactive\n", "yes\n") == "open")
+check("ssh: a stopped firewall blocks nothing", ls.ssh_state("active\n", "not running\n") == "on" and ls.ssh_state("failed\n", "not running\n") == "off")
+check("ssh: addresses without loopback, containers and VMs", ls.ip_addresses("lo UNKNOWN 127.0.0.1/8\nwlp1s0 UP 192.168.2.80/24\npodman0 UP 10.88.0.1/16\nvirbr0 UP 192.168.122.1/24\ntailscale0 UNKNOWN 100.64.0.2/32\n") == ["192.168.2.80", "100.64.0.2"])
+check("ssh: no addresses", ls.ip_addresses("") == [] and ls.ip_addresses(None) == [])
+check("ssh phrase: on names how to reach it", ls.ssh_phrase("on", "daniel", ["192.168.2.80"]) == "On. From another computer: daniel@192.168.2.80")
+check("ssh phrase: on with no network", "not on a network" in ls.ssh_phrase("on", "daniel", []))
+check("ssh phrase: half states say what the switch does", "Turn this on" in ls.ssh_phrase("blocked", "d", []) and "Turn this on" in ls.ssh_phrase("open", "d", []))
+check("ssh phrase: off", ls.ssh_phrase("off", "d", []).startswith("Off."))
 
 kr = "== lucciola-keyring status ==\n  login keyring: unlocked [OK]\n  unlock at login: TPM credential, used at this login [OK]\n"
 check("keyring: unlocked, tpm used", ls.parse_keyring_status(kr) == {"unlocked": True, "at_login": "tpm-used"})

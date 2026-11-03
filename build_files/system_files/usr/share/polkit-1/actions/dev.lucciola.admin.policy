@@ -161,6 +161,30 @@
     <annotate key="org.freedesktop.policykit.exec.argv1">grub-lock-off</annotate>
   </action>
 
+  <action id="dev.lucciola.admin.ssh-on">
+    <description>Allow logging in to this computer from another one (SSH)</description>
+    <message>Authentication is required to start SSH and open the firewall for it.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">ssh-on</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.ssh-off">
+    <description>Stop logging in to this computer from another one (SSH)</description>
+    <message>Authentication is required to stop SSH and close the firewall for it.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">ssh-off</annotate>
+  </action>
+
   <action id="dev.lucciola.admin.autologin-on">
     <description>Log this user in automatically at startup</description>
     <message>Authentication is required to log you in automatically at startup, without a password or fingerprint.</message>

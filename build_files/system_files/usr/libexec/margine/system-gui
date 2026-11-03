@@ -1359,6 +1359,7 @@ class SystemWindow(Adw.ApplicationWindow):
         self._page_generation = {}
         self._sched_mode = 0
         self._autologin_guard = False
+        self._ssh_guard = False
         self._dock_guard = False
         self._features = {}
         self._profile = "stock"
@@ -2579,6 +2580,12 @@ class SystemWindow(Adw.ApplicationWindow):
         self._autologin_switch = Adw.SwitchRow(title="Log In Automatically", subtitle="Checking…")
         self._autologin_switch.connect("notify::active", self._on_autologin_toggled)
         auto.add(self._autologin_switch)
+
+        remote = Adw.PreferencesGroup(title="Remote Login", description="Log in to this computer from another one, over SSH.")
+        page.add(remote)
+        self._ssh_switch = Adw.SwitchRow(title="Allow Remote Login", subtitle="Checking…")
+        self._ssh_switch.connect("notify::active", self._on_ssh_toggled)
+        remote.add(self._ssh_switch)
         return page
 
     def _refresh_login(self):
@@ -2592,6 +2599,10 @@ class SystemWindow(Adw.ApplicationWindow):
             _, out, err = run([AUTOLOGIN, "status"])
             enabled, user = ls.parse_autologin(out + err)
             on_main(self._set_autologin, gen, enabled, user)
+            _, active, _ = run(["systemctl", "is-active", "sshd.service"])
+            _, firewall, _ = run(["firewall-cmd", "--query-service=ssh"])
+            _, addresses, _ = run(["ip", "-4", "-br", "addr", "show", "up"])
+            on_main(self._set_ssh, gen, ls.ssh_state(active, firewall), ls.ip_addresses(addresses))
             _, out, err = run([KEYRING, "status"], timeout=30)
             on_main(self._set_keyring, gen, ls.parse_keyring_status(out + err))
 
@@ -2612,6 +2623,15 @@ class SystemWindow(Adw.ApplicationWindow):
             f"{user} is logged in at startup without a password or fingerprint" if enabled
             else "The login screen asks for a fingerprint or the password at startup"
         )
+
+    def _set_ssh(self, gen, state, addresses):
+        if not self._current("login", gen):
+            return
+        self._ssh_guard = True
+        self._ssh_switch.set_active(state == "on")
+        self._ssh_guard = False
+        self._ssh_switch.set_sensitive(not self._busy)
+        self._ssh_switch.set_subtitle(ls.ssh_phrase(state, GLib.get_user_name(), addresses))
 
     def _set_keyring(self, gen, st):
         if not self._current("login", gen):
@@ -2700,6 +2720,29 @@ class SystemWindow(Adw.ApplicationWindow):
         else:
             self._run_operation(["pkexec", ADMIN, "autologin-off"], title="Turning Automatic Login Off",
                                 working="Writing the login screen's setting.", done="The login screen asks again from the next startup")
+
+    def _on_ssh_toggled(self, switch, _pspec):
+        if self._ssh_guard:
+            return
+        wanted = switch.get_active()
+        # Put the switch back until the helper has done it; the refresh sets the real state.
+        self._ssh_guard = True
+        switch.set_active(not wanted)
+        self._ssh_guard = False
+        if wanted:
+            self._confirm(
+                "Allow Remote Login?",
+                "Anyone who can reach this computer on the network can try to log in, with an account's password or a key "
+                "listed in its .ssh folder. It stays on after a restart, until you turn it off.",
+                "Allow",
+                lambda: self._run_operation(["pkexec", ADMIN, "ssh-on"], title="Turning Remote Login On",
+                                            working="Opening the firewall and starting SSH.", done="Remote login is on"),
+                destructive=True,
+            )
+        else:
+            self._run_operation(["pkexec", ADMIN, "ssh-off"], title="Turning Remote Login Off",
+                                working="Stopping SSH and closing the firewall.",
+                                done="Remote login is off. Connections already open last until they end")
 
     # ═══════════════════════════ Hardware ═══════════════════════════
 
