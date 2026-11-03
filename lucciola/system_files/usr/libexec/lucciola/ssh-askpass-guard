@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/bash
 # Lucciola: gcr-ssh-agent's askpass, with a guard against a wrong saved
 # passphrase. The build moves gcr's own program to gcr4-ssh-askpass.real and
 # puts this in its place.
@@ -10,7 +10,7 @@
 # second request for a key starts with "Bad passphrase": whatever is saved for
 # that key has just failed, so it goes, and gcr then asks the user. Drop this
 # when gcr carries the fix.
-set -eu
+set -euo pipefail
 case "${1:-}" in
   "Bad passphrase, try again for "*)
     key="${1#Bad passphrase, try again for }"
