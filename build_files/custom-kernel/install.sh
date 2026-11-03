@@ -480,9 +480,13 @@ MACROS
       fi
     fi
     rm -f /etc/rpm/macros.zz-margine-reproducible
-    dnf -y remove rpmfusion-free-release
-    rm -f /etc/yum.repos.d/rpmfusion-free*.repo
   fi
+  # Out of the image in every case, also after a refused key or a failed
+  # install. trust_repo_file rewrote the repository files, so rpm keeps them
+  # as .rpmsave: those go too (three of them were in every image until
+  # 2026-11-03).
+  rpm -q rpmfusion-free-release >/dev/null 2>&1 && dnf -y remove rpmfusion-free-release
+  rm -f /etc/yum.repos.d/rpmfusion-free*.repo* /usr/share/dnf5/repos.d/rpmfusion-free*.repo*
   restore_akmodsbuild
 fi
 
