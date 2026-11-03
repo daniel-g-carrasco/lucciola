@@ -204,5 +204,35 @@ build "trust_repo_file '$T/off.repo' '$T/build.repo' /etc/pki/rpm-gpg/k"
 check "build: trust_repo_file refuses gpgcheck=0" [ "$RC" = 1 ]
 check "build: ...nothing written" absent "$T/build.repo"
 
+# --- RPM Fusion's release package: its files in either layout
+# The final Fedora 45 package moved them from /etc to /usr/share (2026-11-03).
+RF_VER="$(rpm -E %fedora 2>/dev/null || echo 45)"
+rf_layout() {  # rf_layout <name>: a clean key dir and repo dir, with the pinned key and one repo file
+  rm -rf "${T:?}/$1"; mkdir -p "$T/$1/keys" "$T/$1/repos"
+  cp "$T/binary-tail.asc" "$T/$1/keys/RPM-GPG-KEY-rpmfusion-free-fedora-$RF_VER"
+  cp "$T/good.repo" "$T/$1/repos/rpmfusion-free.repo"
+}
+rf_verify() {  # rf_verify <key dirs> <repo dirs>
+  build "RPMFUSION_FREE_FPR=$PIN MARGINE_RPM_GPG_DIRS='$1' MARGINE_REPO_DIRS='$2' verify_rpmfusion_keys free"
+}
+rf_layout new; rf_layout old
+rm -rf "$T/none"; mkdir -p "$T/none"
+rf_verify "$T/new/keys $T/none" "$T/new/repos $T/none"
+check "rpmfusion: the new layout, first in the list, verifies" [ "$RC" = 0 ]
+check "rpmfusion: ...its repository file now names that key only" grep -qx "gpgkey=file://$T/new/keys/RPM-GPG-KEY-rpmfusion-free-fedora-$RF_VER" "$T/new/repos/rpmfusion-free.repo"
+rf_verify "$T/none $T/old/keys" "$T/none $T/old/repos"
+check "rpmfusion: the old layout, second in the list, still verifies" [ "$RC" = 0 ]
+rf_layout other; cp "$T/other.asc" "$T/other/keys/RPM-GPG-KEY-rpmfusion-free-fedora-$RF_VER"
+rf_verify "$T/other/keys" "$T/other/repos"
+check "rpmfusion: another key is refused" [ "$RC" = 1 ]
+rf_verify "$T/none" "$T/new/repos"
+check "rpmfusion: no key file is refused" [ "$RC" = 1 ]
+rf_layout norepo; rm "$T/norepo/repos/rpmfusion-free.repo"
+rf_verify "$T/norepo/keys" "$T/norepo/repos $T/none"
+check "rpmfusion: no repository file is refused" [ "$RC" = 1 ]
+rf_layout off; cp "$T/off.repo" "$T/off/repos/rpmfusion-free.repo"
+rf_verify "$T/off/keys" "$T/off/repos"
+check "rpmfusion: a repository file with gpgcheck=0 is refused" [ "$RC" = 1 ]
+
 if (( fails )); then echo "$fails rpm-trust case(s) failed"; exit 1; fi
 echo "all rpm-trust cases passed"

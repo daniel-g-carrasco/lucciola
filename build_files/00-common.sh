@@ -170,21 +170,39 @@ trust_repo_file() {
   log "repository file $dest: signature checking on, key $keyfile"
 }
 
-# Verifies the key files a rpmfusion-<flavor>-release RPM just dropped in
-# /etc/pki/rpm-gpg, and the repository files it dropped next to them.
+# Verifies the key file a rpmfusion-<flavor>-release RPM just dropped, and the
+# repository files it dropped next to it. Since the final Fedora 45 package
+# (2026-11-03) they are where Fedora's own are, /usr/share/pki/rpm-gpg and
+# /usr/share/dnf5/repos.d; before that in /etc/pki/rpm-gpg and
+# /etc/yum.repos.d. MARGINE_RPM_GPG_DIRS and
+# MARGINE_REPO_DIRS (tests) override the places looked at.
 # Called BEFORE any package is pulled from those repos, which is the only
 # moment the check is worth anything.
 verify_rpmfusion_keys() {
-  local ver flavor fprvar key repo rc=0
+  local ver flavor fprvar key dir repo found rc=0
+  local -a key_dirs repo_dirs
+  read -ra key_dirs <<<"${MARGINE_RPM_GPG_DIRS:-/usr/share/pki/rpm-gpg /etc/pki/rpm-gpg}"
+  read -ra repo_dirs <<<"${MARGINE_REPO_DIRS:-/usr/share/dnf5/repos.d /etc/yum.repos.d}"
   ver="$(rpm -E %fedora)"
   for flavor in "$@"; do
     fprvar="RPMFUSION_${flavor^^}_FPR"
-    key="/etc/pki/rpm-gpg/RPM-GPG-KEY-rpmfusion-${flavor}-fedora-${ver}"
-    verify_key_fpr "$key" "${!fprvar}" "rpmfusion-${flavor}" || { rc=1; continue; }
-    for repo in /etc/yum.repos.d/rpmfusion-"${flavor}"*.repo; do
-      [[ -f "$repo" ]] || { err "rpmfusion-${flavor}: no repository file"; rc=1; break; }
-      trust_repo_file "$repo" "$repo" "$key" || rc=1
+    key="${key_dirs[0]}/RPM-GPG-KEY-rpmfusion-${flavor}-fedora-${ver}"
+    for dir in "${key_dirs[@]}"; do
+      if [[ -f "$dir/RPM-GPG-KEY-rpmfusion-${flavor}-fedora-${ver}" ]]; then
+        key="$dir/RPM-GPG-KEY-rpmfusion-${flavor}-fedora-${ver}"
+        break
+      fi
     done
+    verify_key_fpr "$key" "${!fprvar}" "rpmfusion-${flavor}" || { rc=1; continue; }
+    found=0
+    for dir in "${repo_dirs[@]}"; do
+      for repo in "$dir"/rpmfusion-"${flavor}"*.repo; do
+        [[ -f "$repo" ]] || continue
+        found=1
+        trust_repo_file "$repo" "$repo" "$key" || rc=1
+      done
+    done
+    (( found )) || { err "rpmfusion-${flavor}: no repository file"; rc=1; }
   done
   return $rc
 }

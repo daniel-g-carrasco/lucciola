@@ -7,6 +7,17 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-11-03, Fedora 45's final RPM Fusion package)
+- **The image keeps its phone camera module.** RPM Fusion's final release
+  package for Fedora 45 moved its key and repository files from `/etc` to
+  `/usr/share`, where the key check did not look, and its first build (45-1)
+  could not even be installed (a dependency written with a trailing slash,
+  fixed upstream the same day in 45-2). The best-effort step that builds
+  `v4l2loopback` was skipped, and the package guard stopped the build before
+  it published an image without the module. The check now reads either
+  layout. The repository files no longer stay in the image as `.rpmsave`, and
+  the release package leaves it also when the key is refused.
+
 ### Fixed (2026-11-03, a mistyped SSH passphrase)
 - **A wrong passphrase no longer locks a key out.** With "Automatically unlock"
   ticked, gcr saves what was typed before anything has checked it, then answers
