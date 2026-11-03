@@ -207,6 +207,25 @@ def act_autologin_off(args):
     return [Step([AUTOLOGIN, "off"])]
 
 
+def act_ssh_on(args):
+    no_args("ssh-on", args)
+    return [
+        Step(["firewall-cmd", "--permanent", "--add-service=ssh"]),
+        Step(["firewall-cmd", "--add-service=ssh"]),
+        Step(["systemctl", "enable", "--now", "sshd.service"]),
+    ]
+
+
+def act_ssh_off(args):
+    no_args("ssh-off", args)
+    # The firewall steps may fail (firewalld stopped): SSH is off all the same.
+    return [
+        Step(["systemctl", "disable", "--now", "sshd.service"]),
+        Step(["firewall-cmd", "--permanent", "--remove-service=ssh"], optional=True),
+        Step(["firewall-cmd", "--remove-service=ssh"], optional=True),
+    ]
+
+
 def act_secureboot_enroll(args):
     no_args("secureboot-enroll", args)
     return [
@@ -311,6 +330,8 @@ ACTIONS = {
     "grub-lock-off": act_grub_lock_off,
     "autologin-on": act_autologin_on,
     "autologin-off": act_autologin_off,
+    "ssh-on": act_ssh_on,
+    "ssh-off": act_ssh_off,
     "secureboot-enroll": act_secureboot_enroll,
     "secureboot-never": act_secureboot_never,
     "scheduler": act_scheduler,

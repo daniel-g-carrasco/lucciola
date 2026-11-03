@@ -42,6 +42,10 @@ plan grub-lock-on;                check "grub-lock-on: password on stdin twice, 
 plan grub-lock-off;               check "grub-lock-off (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/margine/grub-lock off' '$T/out'"
 plan autologin-on;                check "autologin-on names the invoking user (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx \"/usr/bin/lucciola-autologin on $(id -un)\" '$T/out'"
 plan autologin-off;               check "autologin-off (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/bin/lucciola-autologin off' '$T/out'"
+plan ssh-on;                      check "ssh-on: firewall kept and live, then the service (rc $RC)" \
+  bash -c "[ '$RC' = 0 ] && grep -qx 'firewall-cmd --permanent --add-service=ssh' '$T/out' && grep -qx 'firewall-cmd --add-service=ssh' '$T/out' && grep -qx 'systemctl enable --now sshd.service' '$T/out'"
+plan ssh-off;                     check "ssh-off: the service, then the firewall (rc $RC)" \
+  bash -c "[ '$RC' = 0 ] && grep -qx 'systemctl disable --now sshd.service' '$T/out' && grep -qx 'firewall-cmd --permanent --remove-service=ssh' '$T/out' && grep -qx 'firewall-cmd --remove-service=ssh' '$T/out'"
 plan secureboot-enroll;           check "secureboot-enroll: switch file away, enroll, timeout (rc $RC)" \
   bash -c "[ '$RC' = 0 ] && grep -qx 'rm -f /etc/margine/secureboot-enroll' '$T/out' && grep -qx '/usr/libexec/margine/mok-enroll enroll' '$T/out' && grep -qx 'mokutil --timeout -1' '$T/out'"
 plan secureboot-never;            check "secureboot-never: writes off, revokes (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -q \"write '/etc/margine/secureboot-enroll': 'off\" '$T/out' && grep -qx 'mokutil --revoke-import' '$T/out'"
@@ -66,7 +70,7 @@ for bad in "ai-on amd" "ai-on nvidia" "gaming-on now" "dock-rescue maybe" "apps-
            "update now" "rollback --force" "reboot" "--check" "kernel" "kernel foo" "kernel fedora now" \
            "pin" "pin 12" "pin x" "pin -1" "unpin" "unpin 1 2" "pin '1; rm -rf /'" \
            "tpm-unlock-enable '7;8'" "tpm-unlock-enable 7 8" "tpm-unlock-enable ../x" "grub-lock-on pw" "grub-lock-off x" \
-           "autologin-on bob" "autologin-off x" "secureboot-enroll x" "scheduler" "scheduler lavd Turbo" "scheduler 'x;y' Auto" "scheduler LAVD" "scheduler-off x"; do
+           "autologin-on bob" "autologin-off x" "ssh-on x" "ssh-off x" "secureboot-enroll x" "scheduler" "scheduler lavd Turbo" "scheduler 'x;y' Auto" "scheduler LAVD" "scheduler-off x"; do
   eval "python3 -I '$ADMIN' --check $bad" > "$T/out" 2>&1 && RC=0 || RC=$?
   check "admin refuses: $bad (rc $RC)" [ "$RC" != 0 ]
 done

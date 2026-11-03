@@ -732,6 +732,45 @@ def parse_autologin(text):
     return None, None
 
 
+# Interfaces that are not a way in from another computer: containers, VMs.
+SSH_SKIP_INTERFACES = ("lo", "podman", "docker", "veth", "virbr", "br-", "vnet")
+
+
+def ip_addresses(ip_brief):
+    """`ip -4 -br addr show up` -> the addresses another computer can use."""
+    found = []
+    for line in (ip_brief or "").splitlines():
+        words = line.split()
+        if len(words) >= 3 and not words[0].startswith(SSH_SKIP_INTERFACES):
+            found.append(words[2].split("/")[0])
+    return found
+
+
+def ssh_state(active, firewall):
+    """`systemctl is-active sshd.service` and `firewall-cmd --query-service=ssh`
+    -> on, off, or a half state: blocked (running behind a closed firewall),
+    open (the firewall lets it through, nothing answers). A firewall that is
+    not running blocks nothing."""
+    running = (active or "").strip() == "active"
+    passes = (firewall or "").strip() in ("yes", "not running")
+    if running:
+        return "on" if passes else "blocked"
+    return "open" if (firewall or "").strip() == "yes" else "off"
+
+
+def ssh_phrase(state, user, addresses):
+    """The switch's subtitle."""
+    if state == "on":
+        if addresses:
+            return "On. From another computer: " + " or ".join(f"{user}@{a}" for a in addresses)
+        return "On, but this computer is not on a network right now"
+    if state == "blocked":
+        return "SSH is running, but the firewall keeps other computers out. Turn this on to let them in"
+    if state == "open":
+        return "The firewall is open, but SSH is not running. Turn this on to start it"
+    return "Off. Nobody can log in to this computer from another one"
+
+
 def parse_keyring_status(text):
     """`lucciola-keyring status` -> {'unlocked': bool|None, 'at_login': ...}.
     at_login: 'tpm-used' (credential present and used at this login),

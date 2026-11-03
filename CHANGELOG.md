@@ -7,6 +7,14 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Added (2026-11-03, a switch for SSH)
+- **Allow Remote Login** in Lucciola System, Login: one switch starts SSH and
+  opens the firewall for it, or stops it and closes the firewall, with no
+  terminal. Off by default; turning it on says who can then try to log in and
+  that it stays on after a restart. While on, the row shows the address to use.
+  New `ssh-on` and `ssh-off` verbs of the admin helper with their polkit
+  actions. Connections already open last until they end.
+
 ### Fixed (2026-11-03, updates after a restart)
 - **The Updates glyph reaches accounts with a saved plugin list.** Noctalia's
   `settings.toml` wins over the image's fragments, so anyone who had switched
