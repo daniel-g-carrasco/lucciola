@@ -1,0 +1,10 @@
+# The lock screen: the wallpaper in sight, one quiet fade. What stands on it
+# (clock, account picture, name, password field, session actions) is placed for
+# each monitor by /usr/libexec/lucciola/bar-widths, in the same order as the
+# login screen: 31-lucciola-lock.toml in the user's Noctalia folder.
+[lockscreen]
+transition = ["fade"]
+transition_duration = 300
+blurred_desktop = false
+blur_intensity = 0.0
+tint_intensity = 0.15

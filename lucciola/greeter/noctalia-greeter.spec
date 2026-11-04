@@ -11,7 +11,7 @@
 
 Name:           noctalia-greeter
 Version:        %{greeter_version}
-Release:        7%{?dist}
+Release:        8%{?dist}
 Summary:        Login greeter for greetd with the look of Noctalia Shell
 License:        MIT AND (Apache-2.0 OR MIT)
 URL:            https://github.com/noctalia-dev/noctalia-greeter
@@ -40,6 +40,8 @@ Patch4:         0005-password-follows-the-conversation.patch
 # The form keeps its place when a message arrives on the status line, instead
 # of moving up by half a line as the centred panel grows.
 Patch5:         0006-keep-the-login-panel-still.patch
+# The field's outline and the centred status line, as on the lock screen.
+Patch6:         0007-field-and-status-like-the-lock-screen.patch
 
 # The pkg-config names come from meson.build of the tag.
 BuildRequires:  gcc
@@ -116,6 +118,9 @@ install -m 0644 %{SOURCE1} %{buildroot}%{_datadir}/noctalia-greeter/assets/nocta
 %{_datadir}/polkit-1/actions/org.noctalia.greeter.apply-appearance.policy
 
 %changelog
+* Wed Nov 04 2026 Daniel Grasso Carrasco <code@danielgrasso.com> - %{greeter_version}-8
+- The field's outline and the centred status line, as on the lock screen (0007).
+
 * Wed Nov 04 2026 Daniel Grasso Carrasco <code@danielgrasso.com> - %{greeter_version}-7
 - The login form keeps its place when a message arrives on the status line
   (0006).
