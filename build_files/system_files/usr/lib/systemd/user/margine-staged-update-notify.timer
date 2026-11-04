@@ -9,10 +9,14 @@ Description=Lucciola: periodic check for long-staged updates
 # (observed 2026-07-10: no tick for 38h of calendar time). OnCalendar
 # + Persistent fires promptly after resume instead. The script itself
 # rate-limits every notification class.
-OnStartupSec=20min
-OnCalendar=*-*-* 09,13,17,21:00:00
+#
+# Every five minutes since 2026-11-04: four ticks a day meant an update staged
+# at night and applied by hand before 09:00 was never announced at all. A tick
+# costs what the bar's Updates indicator already spends every minute.
+OnStartupSec=1min
+OnCalendar=*:0/5
 Persistent=true
-AccuracySec=10min
+AccuracySec=1min
 
 [Install]
 WantedBy=timers.target

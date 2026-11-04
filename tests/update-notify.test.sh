@@ -3,9 +3,9 @@
 # update-state answer from files, margine-notify records what it is asked
 # (and can refuse, as with no notification daemon around). Covered: the
 # first sight of a staged update (once), the stamp written only after a
-# notification went through, "now running" after the restart into it
-# (once, stamp cleared), a failed automatic run (once per run, again when
-# the run time changes), nothing when all is well. Needs jq.
+# notification went through, nothing on a locked screen or without a session,
+# the stamp cleared once nothing is staged, a failed automatic run (once per
+# run, again when the run time changes), nothing when all is well. Needs jq.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SN="$ROOT/build_files/system_files/usr/libexec/margine/staged-update-notify"
@@ -16,6 +16,13 @@ mkdir -p "$T/bin" "$T/libexec/margine" "$T/libexec/lucciola" "$T/state"
 cat > "$T/bin/rpm-ostree" <<'SH'
 #!/bin/sh
 cat "$FAKE/status.json"
+SH
+cat > "$T/bin/loginctl" <<'SH'
+#!/bin/sh
+case "$1" in
+  show-user) cat "$FAKE/display" ;;
+  show-session) cat "$FAKE/locked" ;;
+esac
 SH
 cat > "$T/libexec/lucciola/update-state" <<'SH'
 #!/bin/sh
@@ -33,6 +40,7 @@ sed -e "s|/usr/libexec/margine/margine-notify|$T/libexec/margine/margine-notify|
     -e "s|/usr/libexec/lucciola/update-state|$T/libexec/lucciola/update-state|" \
     -e "s|/var/lib/margine/update-watchdog/blocked|$T/blocked|" "$SN" > "$T/notify.sh"
 export FAKE="$T/fake"; mkdir -p "$FAKE"
+echo 2 > "$FAKE/display"; echo no > "$FAKE/locked"
 run() { : > "$T/notify.log"; RC=0; env -i PATH="$T/bin:/usr/bin:/bin" HOME="$T" XDG_STATE_HOME="$T/state" FAKE="$FAKE" NOTIFY_LOG="$T/notify.log" bash "$T/notify.sh" > "$T/out" 2>&1 || RC=$?; }
 notices() { wc -l < "$T/notify.log" | tr -d ' '; }
 STAMPS="$T/state/margine"
@@ -54,19 +62,23 @@ J
 : > "$FAKE/notify-refuses"
 run; check "no notification daemon: no notice, no stamp" bash -c "[ $(notices) = 0 ] && [ ! -e '$STAMPS/staged-seen' ]"
 rm "$FAKE/notify-refuses"
+echo yes > "$FAKE/locked"
+run; check "screen locked: no notice, no stamp, the unlock will say it" bash -c "[ $(notices) = 0 ] && [ ! -e '$STAMPS/staged-seen' ]"
+echo no > "$FAKE/locked"; : > "$FAKE/display"
+run; check "no graphical session: no notice, no stamp" bash -c "[ $(notices) = 0 ] && [ ! -e '$STAMPS/staged-seen' ]"
+echo 2 > "$FAKE/display"
 run; check "staged: one 'Update ready' notice" bash -c "[ $(notices) = 1 ] && grep -q 'Update ready' '$T/notify.log' && grep -q 'candidate.20261101' '$T/notify.log'"
 check "stamp holds the staged checksum" [ "$(cat "$STAMPS/staged-seen")" = "80bb" ]
 run; check "staged again: silence" [ "$(notices)" = 0 ]
 
-# The restart happened: the stamped checksum is the booted one.
+# The restart happened: margine-upgrade-notify says it at login, not this script.
 cat > "$FAKE/status.json" <<'J'
 {"deployments": [
   {"booted": true, "version": "candidate.20261101", "checksum": "80bb", "timestamp": 1793517242},
   {"version": "candidate.20261024", "checksum": "be94"}]}
 J
-run; check "after the restart: one 'Update applied' notice naming the version" bash -c "[ $(notices) = 1 ] && grep -q 'Update applied' '$T/notify.log' && grep -q 'candidate.20261101 is now running' '$T/notify.log'"
+run; check "after the restart: no notice from here" [ "$(notices)" = 0 ]
 check "stamp cleared" [ ! -e "$STAMPS/staged-seen" ]
-run; check "and silence afterwards" [ "$(notices)" = 0 ]
 
 # A failed automatic run: once per run; a later run that fails again is told again.
 echo '{"booted": "candidate.20261101", "staged": null, "transaction": "", "failed": 1, "channels": [

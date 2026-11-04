@@ -21,6 +21,19 @@ stable release is cut.
   second real kernel still stops the build. CachyOS images were never affected:
   they replace the base's kernel.
 
+### Fixed (2026-11-04, update notifications under niri)
+- **The notice after restarting into a new version arrives.** It fired as the
+  session started, before Noctalia owned the notification name, and was lost at
+  every login since the move from GNOME, with the service reporting success.
+  Every notification now waits for the daemon, and one that cannot be delivered
+  fails its service.
+- **"Update ready" comes within five minutes, not at the next of four daily
+  checks,** and never on a locked screen, where nobody would read it: the first
+  check after the unlock says it. A restart now gives one notice, not two.
+- **The VM test sees this.** Before the password login it makes that login look
+  like the first after an update, then requires the notice in Noctalia's own
+  history, and it fails on any failed Lucciola user service.
+
 ### Changed (2026-11-03, after Fedora 45's release)
 - **The notes about the coming `:stable` are gone** from the README, the home
   page and the guide: it exists now, and `:fedora-kernel` follows it.

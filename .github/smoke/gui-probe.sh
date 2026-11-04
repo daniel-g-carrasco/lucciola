@@ -360,6 +360,33 @@ as_user busctl --user --timeout=10 call org.freedesktop.Notifications /org/freed
   org.freedesktop.Notifications GetServerInformation >/dev/null 2>&1 \
   || fail "Noctalia owns org.freedesktop.Notifications but GetServerInformation got no answer"
 
+# ---- 3a. The login notice reached Noctalia ----------------------------------
+# margine-upgrade-notify runs as the session starts, and under niri that is
+# before Noctalia owns the notification name: from 2026-10-08 to 2026-11-04 the
+# notice was lost at every login, with the unit reporting success and nothing
+# looking. greetd-login.py left a false previous image in the state file, so
+# this login counts as the first after an update. The state moves on only after
+# a notification went through, and Noctalia's own history must hold it.
+NOTICE_STATE="$SMOKE_HOME/.local/state/margine/last-booted-digest"
+NOTICE_HISTORY="$SMOKE_HOME/.local/state/noctalia/notification_history.json"
+notice_moved() { [[ -s "$NOTICE_STATE" && "$(cat "$NOTICE_STATE" 2>/dev/null)" != sha256:smoke-previous-image ]]; }
+notice_held() { grep -q 'Update applied' "$NOTICE_HISTORY" 2>/dev/null; }
+notice_log() {
+  journalctl -b -q --no-pager -o cat _UID="$SMOKE_UID" _SYSTEMD_USER_UNIT=margine-upgrade-notify.service 2>/dev/null \
+    | tail -n 3 | tr '\n' ' ' | cut -c1-240
+}
+for _ in $(seq 1 30); do
+  notice_moved && notice_held && break
+  sleep 3
+done
+notice_moved || fail "the login notice was not delivered: its state still names the previous image. Notifier log: $(notice_log)"
+notice_held || fail "the login notice left its state but is not in Noctalia's history. Notifier log: $(notice_log)"
+
+# A Lucciola unit that fails says so here, instead of in a journal nobody reads.
+FAILED_UNITS="$(as_user systemctl --user --failed --no-legend --plain 2>/dev/null \
+  | awk '{print $1}' | grep -E '^(margine|lucciola)-' | tr '\n' ' ' || true)"
+[[ -z "$FAILED_UNITS" ]] || fail "failed user units: $FAILED_UNITS"
+
 # ---- 3b. The Login keyring: pam_oo7 opened it with the password -------------
 # The password login handed the password to oo7: pam_oo7 in greetd's PAM
 # stack keeps it, oo7-daemon (started with niri.service) receives it from
