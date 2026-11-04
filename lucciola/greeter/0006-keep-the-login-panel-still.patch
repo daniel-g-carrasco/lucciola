@@ -1,0 +1,79 @@
+Lucciola: keep the login form still when a message arrives
+
+The panel is centred on the screen and its height followed its contents, so
+the fingerprint prompt arriving on the status line grew the panel and pushed
+the whole form up by half a line (24 physical pixels at 2880x1920, measured on
+screenshots before and after the message). The user's name above the field and
+the choice between the password and the user picker moved it in the same way.
+
+Every part now keeps its room whether or not it has something to show: the
+status line, the name, and the taller of the two forms. The status line stays
+one line, with an ellipsis for what does not fit: wrapping would move the form
+again. The messages seen in practice fit (the panel takes about 60 characters).
+
+Applied by lucciola/greeter/noctalia-greeter.spec to the v1.6.0 tag, after
+0005. Could be proposed upstream (noctalia-dev/noctalia-greeter).
+
+diff --git a/src/greeter/greeter_surface.cpp b/src/greeter/greeter_surface.cpp
+index 26ce0f6..e7add21 100644
+--- a/src/greeter/greeter_surface.cpp
++++ b/src/greeter/greeter_surface.cpp
+@@ -1173,18 +1173,20 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
+   const float glyphScale = std::clamp(1.0f - (userCount - 2.0f) * 0.08f, 0.75f, 1.0f);
+   const float headerGlyphSize = Style::scaled(kHeaderUserIconBase) * glyphScale;
+ 
+-  if (m_passwordVisible && !m_users.empty() && m_selectedUser < m_users.size()) {
+-    m_formSubtitleLabel->setText(m_users[m_selectedUser]);
+-    m_formSubtitleLabel->setVisible(true);
+-  } else {
+-    m_formSubtitleLabel->setVisible(false);
+-  }
+-  if (m_formSubtitleLabel->visible()) {
+-    m_formSubtitleLabel->measure(*renderer);
+-  }
++  // The panel is centred on the screen, so any height that changes moves all
++  // of it: a status message arriving pushed the form up by half a line. Every
++  // part keeps its room whether or not it has something to show. The height of
++  // the subtitle is that of a line, measured with text when there is none.
++  const bool showsSubtitle = m_passwordVisible && !m_users.empty() && m_selectedUser < m_users.size();
++  m_formSubtitleLabel->setText(showsSubtitle ? m_users[m_selectedUser] : std::string("Xy"));
++  m_formSubtitleLabel->setVisible(true);
++  m_formSubtitleLabel->measure(*renderer);
++  const float subtitleGap = 6.0f + m_formSubtitleLabel->height();
++  m_formSubtitleLabel->setVisible(showsSubtitle);
++  m_statusLabel->setMaxWidth(panelWidth - panelPadding * 2.0f);
++  m_statusLabel->setMaxLines(1);
+   m_statusLabel->measure(*renderer);
+ 
+-  const float subtitleGap = m_formSubtitleLabel->visible() ? (6.0f + m_formSubtitleLabel->height()) : 0.0f;
+   const float headerTopPadding = Style::spaceSm();
+   const float headerGlyphBlock = headerGlyphSize + Style::spaceMd();
+   const float headerToContentGap = Style::spaceLg();
+@@ -1196,7 +1198,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
+   const float userBlockHeight = showsUserDropdown() ? rowHeight : 0.0f;
+   const float userPickerContentHeight = userBlockHeight + sessionRowGap + sessionRowH;
+   const float passwordContentHeight = Style::controlHeight() + sessionRowGap + sessionRowH;
+-  const float contentBlockHeight = m_passwordVisible ? passwordContentHeight : userPickerContentHeight;
++  const float contentBlockHeight = std::max(passwordContentHeight, userPickerContentHeight);
+ 
+   const bool hasStatus = !m_status.empty();
+   const std::string actualStatus = m_status;
+@@ -1207,7 +1209,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
+   m_statusLabel->measure(*renderer);
+ 
+   const float statusGap = Style::spaceSm();
+-  const float statusBlockHeight = hasStatus ? (statusGap + statusLineHeight) : 0.0f;
++  const float statusBlockHeight = statusGap + statusLineHeight;
+   const float panelTopPadding = panelPadding;
+   const float panelBottomPadding = panelPadding;
+   const float panelInnerHeight = headerBlockHeight + contentBlockHeight + statusBlockHeight;
+@@ -1402,8 +1404,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
+     m_backButton->setVisible(false);
+   }
+ 
+-  const float sessionY = m_passwordVisible ? (contentTop + Style::controlHeight() + sessionRowGap)
+-                                           : (contentTop + userBlockHeight + sessionRowGap);
++  const float sessionY = contentTop + contentBlockHeight - sessionRowH;
+   layoutPanelSessionSelector(contentLeft, sessionY, contentWidth, sessionRowH);
+ 
+   if (hasStatus) {

@@ -34,6 +34,12 @@ stable release is cut.
   the driver typed was lost while Bluefin's profile printed its banner (23 s).
   The driver now asks again until the shell answers.
 
+### Fixed (2026-11-04, the login screen)
+- **The login form no longer moves when the fingerprint prompt appears.** The
+  panel is centred and grew with its contents, so the message pushed everything
+  up by half a line. Each part now keeps its room whether or not it has
+  something to show.
+
 ### Fixed (2026-11-03, Fedora 45's final RPM Fusion package)
 - **The image keeps its phone camera module.** RPM Fusion's final release
   package for Fedora 45 moved its key and repository files from `/etc` to
