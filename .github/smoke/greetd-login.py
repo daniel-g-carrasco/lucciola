@@ -267,6 +267,17 @@ def avc_report():
     return "WARN", f"{len(hits)} distinct (would be blocked when enforcing): " + " | ".join(f"{n}x {k}" for k, n in top)
 
 
+def seed_login_notice():
+    """A false previous image makes the password login the first one after an
+    update, as margine-upgrade-notify sees it; gui-probe.sh checks the notice
+    got through. The notifier runs as the session starts, so this is the only
+    way to try it at the moment that matters."""
+    state = os.path.join(pwd.getpwnam(USER).pw_dir, ".local/state/margine")
+    sh("runuser", "-u", USER, "--", "mkdir", "-p", state)
+    sh("runuser", "-u", USER, "--", "sh", "-c",
+       f"printf sha256:smoke-previous-image > {shlex.quote(state)}/last-booted-digest")
+
+
 def main():
     uid = uid_of(USER)
     if uid is None:
@@ -355,6 +366,7 @@ def main():
         write_result(login="fail", reason="no password file")
         out("MARGINE-GREETD: DONE")
         return 0
+    seed_login_notice()
     since = int(time.time())
     ok, detail = password_login(password)
     if not ok:
