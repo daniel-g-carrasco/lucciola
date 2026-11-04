@@ -1884,7 +1884,7 @@ class SystemWindow(Adw.ApplicationWindow):
             return
         self._state = state
         booted = state.get("booted") or "unknown"
-        built = ls.version_phrase(booted)
+        built = ls.version_phrase(booted, state.get("image"))
         self._set_loading(self._keep_row, False)
         self._keep_row.set_subtitle(ls.keep_phrase(state.get("booted_pinned"), state.get("rollback")))
         self._keep_button.set_label("Release" if state.get("booted_pinned") else "Keep")
@@ -1951,7 +1951,7 @@ class SystemWindow(Adw.ApplicationWindow):
         self._refresh_next_version(what)
 
         def lead(version):
-            built = ls.version_phrase(version)
+            built = ls.version_phrase(version, (self._state or {}).get("image"))
             return f"{built[0].upper()}{built[1:]}. " if built else ""
 
         if what == "working":

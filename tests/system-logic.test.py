@@ -484,6 +484,14 @@ check("skopeo without a revision", ls.skopeo_revision("sha256:abc candidate.2026
 check("version phrase: candidate", ls.version_phrase("candidate.20261101") == "built on 1 November 2026, candidate")
 check("version phrase: stable", ls.version_phrase("stable.20261103") == "built on 3 November 2026")
 check("version phrase: second build of a day", ls.version_phrase("candidate.20261101.1") == "built on 1 November 2026, candidate")
+check("version phrase: a stable build keeps its candidate label, the word goes",
+      all(ls.version_phrase("candidate.20261103", f"{ls.REPO}:{tag}") == "built on 3 November 2026"
+          for tag in ("stable", "stable.20261104", "20261104")))
+check("version phrase: the word stays on any other tag",
+      all(ls.version_phrase("candidate.20261103", f"{ls.REPO}:{tag}") == "built on 3 November 2026, candidate"
+          for tag in ("candidate", "pr-76")))
+check("version phrase: the reserve keeps its name",
+      ls.version_phrase("fedora-kernel.20261104", f"{ls.REPO}:fedora-kernel") == "built on 4 November 2026, fedora-kernel")
 check("version phrase: not ours", ls.version_phrase("45.20261101") == "" and ls.version_phrase("abcdef012345") == "" and ls.version_phrase("") == "")
 
 # The phases of a system update

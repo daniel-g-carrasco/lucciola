@@ -197,10 +197,12 @@ VERSION_LABEL = re.compile(r"^([a-z][a-z0-9-]*)\.(\d{4})(\d{2})(\d{2})(?:\.\d+)?
 MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
 
 
-def version_phrase(version):
+def version_phrase(version, image=""):
     """'candidate.20261101' -> 'built on 1 November 2026, candidate';
     'stable.20261103' -> 'built on 3 November 2026'; '' when the label
-    is not one of ours."""
+    is not one of ours. A promotion moves :stable onto the very image
+    :candidate was, so a stable build keeps the candidate label: on a machine
+    following :stable (`image`, state["image"]) that word is left out."""
     m = VERSION_LABEL.match(version or "")
     if not m:
         return ""
@@ -208,7 +210,9 @@ def version_phrase(version):
     if not 1 <= month <= 12 or not 1 <= day <= 31:
         return ""
     text = f"built on {day} {MONTHS[month - 1]} {year}"
-    return text if tag == "stable" else f"{text}, {tag}"
+    if tag == "stable" or (tag == "candidate" and re.fullmatch(r"stable(\.\d{8})?|\d{8}", (image or "").rpartition(":")[2])):
+        return text
+    return f"{text}, {tag}"
 
 
 # ── what the next version brings ─────────────────────────────────────────

@@ -397,9 +397,8 @@ jobs:
         # promote=false (manual runs only) tests an image without touching
         # :stable, e.g. to prove a gate rejects an old, broken image.
         # The repository variable LUCCIOLA_PROMOTE_STABLE holds every
-        # promotion until it is 'true': Lucciola's first :stable waits for
-        # Fedora 45's release (before it, Fedora keeps updates-testing on),
-        # and until then builds stop at :candidate.
+        # promotion unless it is 'true': it kept :stable back until Fedora
+        # 45's release, and it is the way to stop promotions again.
         if: success() && steps.boot.outputs.passed == 'true' && github.event.inputs.promote != 'false' && vars.LUCCIOLA_PROMOTE_STABLE == 'true'
         env:
           GHCR_USER: ${{ github.actor }}

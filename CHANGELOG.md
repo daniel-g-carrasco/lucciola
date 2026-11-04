@@ -14,6 +14,11 @@ stable release is cut.
   keyring for oo7 0.7.0~beta. The oo7 Fedora 45 shipped with reads that format
   itself, so the script had stopped doing anything. `keyring-import-legacy`
   stays for accounts where the file was already set aside.
+- **A machine on `:stable` no longer reads "candidate" in the words beside its
+  version.** A promotion moves the tag onto the same image, so a stable build
+  keeps the `candidate.YYYYMMDD` label it was built with, and Lucciola System
+  added ", candidate" after the date. It now looks at the tag the machine
+  follows. The label itself stays: it is part of the image.
 
 ### Fixed (2026-11-03, the upgrade smoke test)
 - **The weekly upgrade test no longer fails on a slow first shell.** The
