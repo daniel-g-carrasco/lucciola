@@ -11,7 +11,7 @@
 
 Name:           noctalia-greeter
 Version:        %{greeter_version}
-Release:        6%{?dist}
+Release:        7%{?dist}
 Summary:        Login greeter for greetd with the look of Noctalia Shell
 License:        MIT AND (Apache-2.0 OR MIT)
 URL:            https://github.com/noctalia-dev/noctalia-greeter
@@ -37,6 +37,9 @@ Patch3:         0004-quiet-bare-password-prompt.patch
 # With several outputs, what is typed in the password field follows the
 # conversation (0002) to the output in use, instead of staying behind.
 Patch4:         0005-password-follows-the-conversation.patch
+# The form keeps its place when a message arrives on the status line, instead
+# of moving up by half a line as the centred panel grows.
+Patch5:         0006-keep-the-login-panel-still.patch
 
 # The pkg-config names come from meson.build of the tag.
 BuildRequires:  gcc
@@ -113,6 +116,10 @@ install -m 0644 %{SOURCE1} %{buildroot}%{_datadir}/noctalia-greeter/assets/nocta
 %{_datadir}/polkit-1/actions/org.noctalia.greeter.apply-appearance.policy
 
 %changelog
+* Wed Nov 04 2026 Daniel Grasso Carrasco <code@danielgrasso.com> - %{greeter_version}-7
+- The login form keeps its place when a message arrives on the status line
+  (0006).
+
 * Tue Oct 20 2026 Daniel Grasso Carrasco <code@danielgrasso.com> - %{greeter_version}-6
 - With several outputs, the typed password moves with the login
   conversation to the output in use (or that survives an unplug), so
