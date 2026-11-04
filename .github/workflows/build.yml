@@ -398,9 +398,17 @@ jobs:
 
       - name: Get current date
         id: date
+        env:
+          PUBLISH_TAG: ${{ steps.base.outputs.publish_tag }}
         run: |
           echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
           echo "ymd=$(date -u +%Y%m%d)" >> $GITHUB_OUTPUT
+          # The version does not take the tag's name: a promotion copies this
+          # same image to :stable, so "candidate" would stay on it for good.
+          # A trial is not a Lucciola release, and says so.
+          NAME="$IMAGE_NAME"
+          [ "$PUBLISH_TAG" != trial ] || NAME=trial
+          echo "version=${NAME}.$(date -u +%Y%m%d)" >> $GITHUB_OUTPUT
 
       - name: Image metadata
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
@@ -422,7 +430,7 @@ jobs:
             org.opencontainers.image.title=${{ env.IMAGE_NAME }}
             org.opencontainers.image.url=https://github.com/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}/tree/${{ github.sha }}
             org.opencontainers.image.vendor=${{ github.repository_owner }}
-            org.opencontainers.image.version=${{ env.CANDIDATE_TAG }}.${{ steps.date.outputs.ymd }}
+            org.opencontainers.image.version=${{ steps.date.outputs.version }}
             io.artifacthub.package.deprecated=false
             io.artifacthub.package.keywords=${{ env.IMAGE_KEYWORDS }}
             io.artifacthub.package.license=Apache-2.0
@@ -725,7 +733,7 @@ jobs:
           # user (see .github/renovate.json5). v0.7.0 since 2026-10-03.
           CHUNKAH_REF: quay.io/coreos/chunkah:v0.7.1@sha256:71e593421c5de7dcc7c8c5c50e98d3bac572055a76f399f61a491d123c20a523
           KVER: ${{ steps.kver.outputs.kver }}
-          VERSION: ${{ steps.base.outputs.publish_tag }}.${{ steps.date.outputs.ymd }}
+          VERSION: ${{ steps.date.outputs.version }}
           REVISION: ${{ github.sha }}
           IMAGE_DESC: ${{ env.IMAGE_DESC }}
           IMAGE_KEYWORDS: ${{ env.IMAGE_KEYWORDS }}

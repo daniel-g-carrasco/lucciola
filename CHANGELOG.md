@@ -7,6 +7,12 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (2026-11-04, the version's name)
+- **The version is now called `lucciola.YYYYMMDD`.** It was `candidate.YYYYMMDD`
+  on every image, `:stable` too, because a promotion copies the same image to
+  the new tag. The tags do not change, and the reserve stays
+  `fedora-kernel.YYYYMMDD`. A machine shows the new name from its next update.
+
 ### Fixed (2026-11-04, the kernel reserve)
 - **`:fedora-kernel` builds again.** Its first build after the first `:stable`
   stopped at "expected exactly one kernel": silverblue-main now carries a
@@ -26,7 +32,7 @@ stable release is cut.
   version.** A promotion moves the tag onto the same image, so a stable build
   keeps the `candidate.YYYYMMDD` label it was built with, and Lucciola System
   added ", candidate" after the date. It now looks at the tag the machine
-  follows. The label itself stays: it is part of the image.
+  follows.
 
 ### Fixed (2026-11-03, the upgrade smoke test)
 - **The weekly upgrade test no longer fails on a slow first shell.** The
