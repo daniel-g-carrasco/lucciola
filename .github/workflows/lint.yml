@@ -101,6 +101,11 @@ jobs:
         # with Secure Boot off unable to ever turn it on (2026-10-04).
         run: bash tests/mok-enroll.test.sh
 
+      - name: A stray folder in /usr/lib/modules goes, a kernel never does
+        # The kernel reserve keeps the base's kernel and needs one folder.
+        # See tests/stray-module-dirs.test.sh.
+        run: bash tests/stray-module-dirs.test.sh
+
       - name: GRUB menu lock helper
         # Writes the bootloader's password file: what it accepts, refuses
         # and removes is tested, not assumed. See tests/grub-lock.test.sh.

@@ -45,7 +45,6 @@ build_files/system_files/usr/libexec/margine/kernel-switch            every refu
 build_files/system_files/usr/libexec/margine/mok-enroll               mokutil's answers decide the next step; a non-zero one is an answer, not an error
 build_files/system_files/usr/libexec/margine/signed-origin            the rebase's failure is the reported outcome (exit 1 after the message), every other failure a no-op
 build_files/system_files/usr/bin/lucciola-dev-groups                  runs at every boot over the wheel members; one usermod failing must not skip the others
-build_files/system_files/usr/libexec/margine/keyring-legacy-aside     ExecStartPre of oo7-daemon: every step is `|| exit 0`, a missing keyring is the normal case
 lucciola/system_files/usr/libexec/lucciola/autologin-session          greetd session launcher: falls back on every missing piece (desktop file, Exec line) instead of exiting
 lucciola/system_files/usr/libexec/lucciola/default-avatar             loop over the accounts: one bad account must not stop the others
 lucciola/system_files/usr/libexec/lucciola/login-migrate              each step handled in place, the marker written only on success, so a failure is retried next boot

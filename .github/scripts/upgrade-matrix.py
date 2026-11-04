@@ -12,11 +12,10 @@ build) walks every starting point the guide names, from the image people
 run today to the stock desktops, one VM at a time:
 
   margine:lucciola with cowsay layered   the move real users make
-  margine:lucciola with steam layered    only once :stable is promoted
-                                         (vars.LUCCIOLA_PROMOTE_STABLE):
-                                         before Fedora 45's release the
-                                         layered Steam cannot resolve, a
-                                         known pre-GA state, not a regression
+  margine:lucciola with steam layered    only while :stable is promoted
+                                         (vars.LUCCIOLA_PROMOTE_STABLE): before
+                                         Fedora 45's release the layered Steam
+                                         could not resolve, a known state then
   fedora-silverblue:45, fedora-kinoite:45, bluefin:stable
                                          the documented stock starts; the
                                          Kinoite cell is the one that meets
