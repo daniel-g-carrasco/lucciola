@@ -24,6 +24,7 @@
 #         margine-logo (in the image as an alias of the same tile);
 #   name  /usr/share/margine/product-name (Lucciola), else os-release
 #         NAME, else "Lucciola".
+# Waits up to MARGINE_NOTIFY_WAIT seconds (60) for the notification daemon.
 # Exit: non-zero when no notification daemon answered (callers use this
 # to retry at the next tick instead of burning their once-only stamps).
 set -euo pipefail
@@ -71,6 +72,19 @@ esac
 HINTS="{'image-path': <'${ICON}'>, 'urgency': <byte ${URGENCY}>"
 [[ -n "$DESKTOP_ID" ]] && HINTS+=", 'desktop-entry': <'${DESKTOP_ID}'>"
 HINTS+="}"
+
+# Under GNOME the shell owns the name before the session's services start.
+# Under niri the daemon is Noctalia, which the compositor spawns, and it comes up
+# after them: a notice sent in that gap is refused as "not activatable". Every
+# login notice was lost that way from the move off GNOME until 2026-11-04.
+name_owned() {
+  [[ "$(gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus \
+    --method org.freedesktop.DBus.NameHasOwner org.freedesktop.Notifications 2>/dev/null || true)" == *true* ]]
+}
+for (( i = 0; i < ${MARGINE_NOTIFY_WAIT:-60}; i++ )); do
+  name_owned && break
+  sleep 1
+done
 
 # `--` is load-bearing: without it gdbus eats "-1" as an option.
 exec gdbus call --session \

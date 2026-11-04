@@ -16,7 +16,11 @@ Reassures them that the reboot actually did something.
  - the unit moved from default.target.wants to
    graphical-session.target.wants: default.target starts before the
    session's notification daemon is up, so the toast fired into the
-   void."""
+   void.
+
+2026-11-04: under niri even graphical-session.target comes before the
+daemon. margine-notify now waits for it, and a notice that still cannot be
+delivered fails the unit: exiting 0 here hid the loss for four weeks."""
 
 import json
 import os
@@ -70,16 +74,17 @@ if not state_file.exists() and legacy.exists():
 previous = state_file.read_text().strip() if state_file.exists() else ""
 
 if previous and previous != digest:
-    title = "Lucciola updated"
-    body = f"Now running: {version}\nDigest: {digest[:23]}…"
+    title = "Update applied"
+    body = f"{version} is now running."
     # margine-notify, not notify-send: it fills the fdo app_icon field
     # so the logo also shows on the lock screen (docs/BRANDING.md).
     r = subprocess.run(
-        ["/usr/libexec/margine/margine-notify", "-u", "normal", title, body]
+        ["/usr/libexec/margine/margine-notify", "-u", "normal", "-d", "dev.margine.System", title, body]
     )
     if r.returncode != 0:
-        # No notification daemon yet: keep the old state so the next
-        # login retries instead of silently losing the announcement.
-        sys.exit(0)
+        # No notification daemon: keep the old state so the next login
+        # retries, and fail so that the loss shows (the GUI smoke reads it).
+        print("no notification daemon answered: the update notice was not delivered", file=sys.stderr)
+        sys.exit(1)
 
 state_file.write_text(digest)
