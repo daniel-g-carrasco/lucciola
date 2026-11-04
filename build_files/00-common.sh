@@ -362,3 +362,22 @@ regenerate_initramfs() {
   rm -f "$saved"
   return "$rc"
 }
+
+# A folder in /usr/lib/modules that is no kernel: no vmlinuz, no module, and no
+# package owns it. silverblue-main has carried one since 2026-11-03, named after
+# the newest Fedora kernel (7.2.14, a day later 7.2.15) beside the kernel it
+# ships (7.2.13): depmod's index files over an empty tree of folders, 28 KB. An
+# image holds one kernel folder, so this one goes. Anything that could be a
+# kernel stays, for the caller's own check to refuse.
+# MARGINE_MODULES_DIR exists for tests/stray-module-dirs.test.sh.
+prune_stray_module_dirs() {
+  local root="${MARGINE_MODULES_DIR:-/usr/lib/modules}" d
+  for d in "$root"/*/; do
+    d="${d%/}"
+    [[ -d "$d" && ! -e "$d/vmlinuz" ]] || continue
+    [[ -z "$(find "$d" -type f -name '*.ko*' -print -quit)" ]] || continue
+    ! rpm -qf "$d" >/dev/null 2>&1 || continue
+    log "removing $d: no vmlinuz, no module, no package owns it"
+    rm -rf "$d"
+  done
+}

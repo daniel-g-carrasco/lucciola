@@ -7,6 +7,14 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-11-04, the kernel reserve)
+- **`:fedora-kernel` builds again.** Its first build after the first `:stable`
+  stopped at "expected exactly one kernel": silverblue-main now carries a
+  second folder in `/usr/lib/modules`, named after Fedora's newest kernel, with
+  no kernel in it, no module and no package owning it. That folder goes. A
+  second real kernel still stops the build. CachyOS images were never affected:
+  they replace the base's kernel.
+
 ### Changed (2026-11-03, after Fedora 45's release)
 - **The notes about the coming `:stable` are gone** from the README, the home
   page and the guide: it exists now, and `:fedora-kernel` follows it.

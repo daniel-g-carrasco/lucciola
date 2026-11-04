@@ -359,6 +359,7 @@ else
   # same akmods build the CachyOS flavour does.
   KERNEL_VERSION="$(rpm -q "$KERNEL_PKG" --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}\n' | head -n1)"
   [[ "$KERNEL_VERSION" =~ ^[0-9] ]] || { err "the base has no $KERNEL_PKG package: no Fedora kernel to keep"; exit 1; }
+  prune_stray_module_dirs
   mapfile -t _kdirs < <(find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d -printf '%f\n')
   if [[ "${#_kdirs[@]}" -ne 1 || "${_kdirs[0]}" != "$KERNEL_VERSION" ]]; then
     err "expected exactly /usr/lib/modules/$KERNEL_VERSION, found: ${_kdirs[*]:-nothing}"; exit 1
