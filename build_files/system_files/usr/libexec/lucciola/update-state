@@ -14,7 +14,7 @@ and the window never disagree. No registry call: whether a newer image is
 published is the window's question, asked when it opens.
 
 Output:
-    {"booted": "candidate.20261024", "staged": "candidate.20261101" | null,
+    {"booted": "lucciola.20261104", "staged": "lucciola.20261105" | null,
      "transaction": "" | "Upgrade", "failed": 1,
      "channels": [{"key": "system", "title": "System", "outcome": "failed",
                    "unit": "uupd.service", "user": false, "last": 1793528427,

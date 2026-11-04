@@ -481,6 +481,11 @@ check("compare url: same or missing", ls.compare_url("abc1234", "abc1234") == ""
 check("skopeo with a revision", ls.parse_skopeo("sha256:abc candidate.20261101 8375c81c5f1cb311ed554334906e5553e115bb1d") == ("candidate.20261101", "sha256:abc")
       and ls.skopeo_revision("sha256:abc candidate.20261101 8375c81c5f1cb311ed554334906e5553e115bb1d").startswith("8375c81c"))
 check("skopeo without a revision", ls.skopeo_revision("sha256:abc candidate.20261101") == "" and ls.parse_skopeo("sha256:abc candidate.20261101") == ("candidate.20261101", "sha256:abc"))
+check("version phrase: a Lucciola build says only its date, whatever the tag",
+      ls.version_phrase("lucciola.20261105") == "built on 5 November 2026"
+      and all(ls.version_phrase("lucciola.20261105", f"{ls.REPO}:{tag}") == "built on 5 November 2026"
+              for tag in ("stable", "candidate", "pr-77")))
+check("version phrase: a second build of a day", ls.version_phrase("lucciola.20261105.1") == "built on 5 November 2026")
 check("version phrase: candidate", ls.version_phrase("candidate.20261101") == "built on 1 November 2026, candidate")
 check("version phrase: stable", ls.version_phrase("stable.20261103") == "built on 3 November 2026")
 check("version phrase: second build of a day", ls.version_phrase("candidate.20261101.1") == "built on 1 November 2026, candidate")
