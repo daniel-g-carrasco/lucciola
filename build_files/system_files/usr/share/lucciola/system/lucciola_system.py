@@ -564,9 +564,12 @@ ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 def failure_excerpt(journal_text, limit=160):
     """The reason of a failed run, from the unit's journal (`-o cat`), in
     one line. uupd logs JSON: the last `module_fail` names the step and
-    carries the command's output, whose last line is the error. Plain
-    scripts (brew-upgrade, the Flatpak updaters): the last line that speaks
-    of an error, else the last non-empty line."""
+    carries the command's output, as an object with Stdout and Stderr
+    (distrobox) or as plain text (the system step, 2026-11-05: a text here
+    stopped update-state on the very night it had something to say). The
+    error is the line that says `error:`, else the last that speaks of one.
+    Plain scripts (brew-upgrade, the Flatpak updaters): the last line that
+    speaks of an error, else the last non-empty line."""
     lines = [ANSI.sub("", ln).rstrip() for ln in (journal_text or "").splitlines()]
     for line in reversed(lines):
         if '"module_fail"' not in line:
@@ -575,11 +578,16 @@ def failure_excerpt(journal_text, limit=160):
             entry = json.loads(line)
         except json.JSONDecodeError:
             continue
-        output = entry.get("output") or {}
-        step = output.get("Context") or entry.get("module") or "a step"
-        text = ANSI.sub("", (output.get("Stderr") or "") + "\n" + (output.get("Stdout") or ""))
-        tail = [ln.strip() for ln in text.splitlines() if ln.strip()]
-        errors = [ln for ln in tail if re.search(r"error|fail|cannot|could not|unable", ln, re.I)]
+        output = entry.get("output") or ""
+        if isinstance(output, dict):
+            step = output.get("Context") or entry.get("context") or entry.get("module") or "a step"
+            text = str(output.get("Stderr") or "") + "\n" + str(output.get("Stdout") or "")
+        else:
+            step = entry.get("context") or entry.get("module") or "a step"
+            text = str(output)
+        tail = [ln.strip() for ln in ANSI.sub("", text).splitlines() if ln.strip()]
+        stated = [ln for ln in tail if ln.lower().startswith("error:")]
+        errors = stated or [ln for ln in tail if re.search(r"error|fail|cannot|could not|unable", ln, re.I)]
         detail = (errors or tail or [""])[-1]
         return f"{step}: {detail}"[:limit].rstrip(": ") if detail else str(step)[:limit]
     plain = [ln.strip() for ln in lines if ln.strip() and not ln.startswith("{")]
