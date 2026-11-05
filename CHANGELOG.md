@@ -53,6 +53,12 @@ stable release is cut.
   the driver typed was lost while Bluefin's profile printed its banner (23 s).
   The driver now asks again until the shell answers.
 
+### Added (2026-11-05, a dock for power only)
+- **Ignore External Screens,** in the Keep Awake panel, or `laptop-only on [UNTIL]`.
+  External screens stay off, any that are plugged in later too, and come back when it
+  ends or at the next login. niri has no rule for this across a dock's changing
+  connector names, so one may light up for up to two seconds first.
+
 ### Changed (2026-11-05, Keep Awake)
 - **Two modes that say what they do.** Keep Running (it was Awake) keeps sleep away
   and locks as usual, on idle and with the lid. Keep Screen On (it was Screen on)

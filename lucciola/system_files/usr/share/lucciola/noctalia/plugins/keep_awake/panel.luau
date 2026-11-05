@@ -146,6 +146,21 @@ local function render()
       }),
     }),
 
+    ui.row({ gap = 8, align = "center" }, {
+      ui.column({ gap = 2, flexGrow = 1 }, {
+        ui.label({ text = noctalia.tr("panel.laptop_only"), fontSize = 13 }),
+        ui.label({ text = noctalia.tr("panel.laptop_only_detail"), fontSize = 12, color = "on_surface_variant", wrap = true }),
+      }),
+      ui.button({
+        text = noctalia.tr(s.laptopOnly and "panel.laptop_only_off" or "panel.laptop_only_on"),
+        variant = s.laptopOnly and "primary" or "outline",
+        controlSize = "sm",
+        onClick = function()
+          common.send("laptop-only", "toggle")
+        end,
+      }),
+    }),
+
     ui.label({ text = noctalia.tr("panel.quick"), fontSize = 13, fontWeight = "bold" }),
     ui.row({ gap = 8 }, {
       quickButton(noctalia.tr("panel.q_1h"), "on", "+1 hour"),

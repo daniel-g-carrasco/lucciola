@@ -1,0 +1,104 @@
+#!/usr/bin/bash
+# Lucciola: the laptop's own screen only, for a dock that is there to give power.
+#
+#   laptop-only on [UNTIL]   turn external screens off, and any that appear later
+#   laptop-only off          stop, and turn back on the ones it turned off
+#   laptop-only toggle | status [--json]
+#
+# niri has no way to ignore a monitor by rule across docks: a dock's connectors
+# get new names (DP-2, DP-9, DP-13) as it comes and goes. So a transient user unit
+# looks every two seconds and turns off whatever external output is on, and an
+# external screen may light up for that long. Windows stay on the laptop's screen.
+# UNTIL is anything `date -d` reads. The unit ends with the session, and the outputs
+# with it: at the next login every monitor counts again.
+#
+# On purpose not part of Keep Awake's modes: a film on an external screen needs
+# Keep Screen On and that screen.
+set -euo pipefail
+
+# LAPTOP_ONLY_TEST=1 runs on a separate unit; LAPTOP_ONLY_NIRI stands in for niri
+# (tests/laptop-only.test.sh).
+t="${LAPTOP_ONLY_TEST:+-test}"
+unit=lucciola-laptop-only$t.service
+NIRI="${LAPTOP_ONLY_NIRI:-/usr/bin/niri}"
+self="$(readlink -f "$0")"
+state="${XDG_STATE_HOME:-$HOME/.local/state}/lucciola"
+offfile="$state/laptop-only-off$t"
+endfile="$state/laptop-only-until$t"
+
+externals() {  # the external outputs that are on, one per line
+  "$NIRI" msg --json outputs 2>/dev/null | /usr/bin/python3 -c '
+import json, sys
+for name, output in json.load(sys.stdin).items():
+    if output.get("logical") is not None and not name.startswith(("eDP", "LVDS", "DSI")):
+        print(name)' 2>/dev/null || true
+}
+sweep() {  # one pass; every step returns 0: the watcher must outlive a failed call
+  local name
+  while IFS= read -r name; do
+    [[ -n "$name" ]] || continue
+    if "$NIRI" msg output "$name" off >/dev/null 2>&1; then
+      mkdir -p "$state"
+      grep -qxF -- "$name" "$offfile" 2>/dev/null || echo "$name" >> "$offfile"
+      echo "laptop-only: $name turned off"
+    else
+      echo "laptop-only: $name could not be turned off" >&2
+    fi
+  done < <(externals)
+}
+restore() {
+  local name
+  if [[ -f "$offfile" ]]; then
+    while IFS= read -r name; do
+      if [[ -n "$name" ]]; then "$NIRI" msg output "$name" on >/dev/null 2>&1 || true; fi
+    done < "$offfile"
+  fi
+  rm -f "$offfile" "$endfile"
+}
+watch() {  # _watch SECS
+  local stop=$(( $(date +%s) + $1 ))
+  while (( $(date +%s) < stop )); do
+    sweep
+    sleep 2
+  done
+}
+active() { systemctl --user is-active --quiet "$unit"; }
+on() {
+  local end secs
+  if [[ -n "${1:-}" ]]; then end=$(date -d "$1" +%s); else end=$(date -d "tomorrow 00:00" +%s); fi
+  secs=$(( end - $(date +%s) ))
+  (( secs > 0 )) || { echo "laptop-only: $1 has already passed" >&2; return 2; }
+  if active; then systemctl --user stop "$unit"; fi
+  systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
+  mkdir -p "$state"; echo "$end" > "$endfile"
+  local -a opts=()
+  for v in LAPTOP_ONLY_TEST LAPTOP_ONLY_NIRI; do
+    if [[ -n "${!v:-}" ]]; then opts+=(--setenv="$v=${!v}"); fi
+  done
+  systemd-run --user --quiet --collect --unit="$unit" \
+    --description="Laptop screen only until $(date -d "@$end" '+%a %d %b %H:%M')" \
+    "${opts[@]}" -p ExecStopPost="-$self _restore" "$self" _watch "$secs"
+}
+off() { if active; then systemctl --user stop "$unit"; else restore; fi; }
+status() {
+  local a=false u=0
+  if active; then a=true; u=$(cat "$endfile" 2>/dev/null || echo 0); fi
+  if [[ "${1:-}" == --json ]]; then
+    printf '{"active":%s,"until":%s,"off":%s}\n' "$a" "$u" \
+      "$(/usr/bin/python3 -c 'import json,sys; print(json.dumps(open(sys.argv[1]).read().split()) if __import__("os").path.exists(sys.argv[1]) else "[]")' "$offfile")"
+  elif [[ "$a" == true ]]; then
+    echo "on until $(date -d "@$u" '+%a %d %b %H:%M')"
+  else
+    echo "off"
+  fi
+}
+case "${1:-status}" in
+  on) shift; on "${1:-}" ;;
+  off) off ;;
+  toggle) if active; then off; else on; fi ;;
+  status) shift || true; status "${1:-}" ;;
+  _watch) watch "$2" ;;
+  _restore) restore ;;
+  _sweep) sweep ;;
+  *) echo "usage: ${0##*/} on [UNTIL] | off | toggle | status [--json]" >&2; exit 2 ;;
+esac

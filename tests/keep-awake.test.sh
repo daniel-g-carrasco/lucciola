@@ -124,6 +124,7 @@ check "mode recorded: screen" [ "$(mode_file)" = screen ]
 check "screen: the description says so" grep -q "^Keep Awake (screen on) until" "$FAKE/desc-lucciola-keep-awake-test.service"
 run status; check "status names the mode" grep -q "^on until .* (screen on)$" "$T/out"
 run status --json; check "status json: mode screen" grep -q '"mode":"screen"' "$T/out"
+check "status json: external screens in use" grep -q '"laptop_only":false' "$T/out"
 run on; check "on without the flag: back to awake, until midnight (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qxF -- '--what=sleep:handle-lid-switch' '$ARGS' && [ \"\$(cat '$STATE/keep-awake-mode-test')\" = awake ] && [ \"\$(date -d @\$(cat '$STATE/keep-awake-until-test') +%H:%M)\" = 00:00 ]"
 now=$(date +%s)
 run on "+1 hour" --screen; check "--screen after the time works too (rc $RC)" bash -c "[ '$RC' = 0 ] && [ \"\$(cat '$STATE/keep-awake-mode-test')\" = screen ] && d=\$(( \$(cat '$STATE/keep-awake-until-test') - $now )) && [ \$d -ge 3590 ] && [ \$d -le 3610 ]"

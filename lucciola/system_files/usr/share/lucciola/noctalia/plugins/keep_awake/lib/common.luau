@@ -23,6 +23,7 @@ function M.snapshot()
     sStart = noctalia.state.get("ka.sstart") or 0,
     sUntil = noctalia.state.get("ka.suntil") or 0,
     sMode = noctalia.state.get("ka.smode") or "awake",
+    laptopOnly = noctalia.state.get("ka.laptoponly") == true,
   }
 end
 
@@ -87,7 +88,7 @@ function M.send(...)
 end
 
 function M.watch(fn)
-  for _, key in { "ka.ready", "ka.active", "ka.until", "ka.mode", "ka.sstart", "ka.suntil", "ka.smode" } do
+  for _, key in { "ka.ready", "ka.active", "ka.until", "ka.mode", "ka.sstart", "ka.suntil", "ka.smode", "ka.laptoponly" } do
     noctalia.state.watch(key, fn)
   end
 end
