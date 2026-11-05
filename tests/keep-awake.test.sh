@@ -9,7 +9,8 @@
 #   - "on" again: an earlier end in the same mode changes nothing, a later
 #     one restarts the unit, the other mode restarts it with the end asked;
 #   - status (text and JSON), off, toggle, tomorrow, schedule, cancel;
-#   - the lid watcher (_hold): a closed lid locks the session and holds
+#   - the lid watcher (_hold): a closed lid locks the session (not with the
+#     screen kept on) and holds
 #     power-saver, an opened lid gives the profile back; a lid closed at a
 #     desk (another monitor on) does nothing; a lid already closed at the
 #     start; a lock that fails; no power profiles daemon; no gdbus.
@@ -150,6 +151,14 @@ t0=$(date +%s%N); run _hold 2; t1=$(date +%s%N)
 check "_hold: ends on time (rc $RC)" bash -c "[ '$RC' = 0 ] && [ $(( (t1 - t0) / 1000000 )) -ge 1900 ] && [ $(( (t1 - t0) / 1000000 )) -le 4000 ]"
 check "lid closed: the session is locked, then power-saver; opened: the profile back" [ "$(actions)" = "lock profile=power-saver profile=balanced " ]
 check "nothing left to restore" [ ! -e "$STATE/keep-awake-profile-test" ]
+
+# With the screen kept on the lid does not lock; power-saver holds all the same.
+reset; mkdir -p "$STATE"; echo screen > "$STATE/keep-awake-mode-test"; printf 'true\nfalse\n' > "$FAKE/lid-events"
+run _hold 2; check "screen on: lid closed, no lock, power-saver, then the profile back (rc $RC)" \
+  bash -c "[ '$RC' = 0 ] && [ \"$(actions)\" = 'profile=power-saver profile=balanced ' ] && grep -q 'left unlocked' '$T/out'"
+reset; mkdir -p "$STATE"; echo awake > "$STATE/keep-awake-mode-test"; printf 'true\n' > "$FAKE/lid-events"
+run _hold 1; check "awake: the lid still locks" bash -c "[ \"$(actions)\" = 'lock profile=power-saver ' ]"
+run _profile restore; rm -f "$STATE/keep-awake-mode-test"
 
 reset; echo '{"eDP-1":{"logical":null},"DP-1":{"logical":{"x":0,"y":0}}}' > "$FAKE/outputs.json"; printf 'true\n' > "$FAKE/lid-events"
 run _hold 1; check "lid closed at a desk (another monitor on): no lock, no profile change (rc $RC)" \

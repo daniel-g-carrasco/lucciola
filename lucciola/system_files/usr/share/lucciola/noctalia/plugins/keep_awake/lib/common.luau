@@ -12,8 +12,8 @@ M.GLYPH_SCHEDULED = "clock-play"
 M.GLYPH_IDLE = "zzz"
 
 -- mode is "awake" (no suspend; the screen locks on idle as usual and the lid
--- locks it at once) or "screen" (the screen stays on and the idle lock away
--- too); the scheduled start has its own.
+-- locks it at once) or "screen" (the screen stays on and it never locks, the
+-- lid included); the scheduled start has its own.
 function M.snapshot()
   return {
     ready = noctalia.state.get("ka.ready") == true,

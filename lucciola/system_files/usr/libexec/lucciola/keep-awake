@@ -14,14 +14,16 @@
 #   keep-awake cancel                  drop the scheduled start
 #   keep-awake toggle [--screen] | status [--json]
 #
-# Two modes. By default only sleep is kept away: the session still locks
+# Two modes, Keep Running and Keep Screen On in the panel and the notifications.
+# By default only sleep is kept away: the session still locks
 # after ten minutes of inactivity and the screen still turns off, as always;
 # closing the lid locks the session at once instead of suspending (unless
 # another monitor is on: at a desk a closed lid means nothing) and puts the
 # power profile on power-saver until the lid opens again, so a laptop left
-# closed in a bag runs locked and cooler. --screen also keeps the screen on
-# and the idle lock away, for a talk or a film; it ends after two hours
-# unless told otherwise, and the lid locks the session all the same.
+# closed in a bag runs locked and cooler. --screen is for a talk or a film: the
+# screen stays on and the session never locks, not even closing the lid, which
+# only keeps the power profile on power-saver. It ends after two hours unless
+# told otherwise.
 #
 # UNTIL and START are anything `date -d` reads: "tomorrow 23:59", "+3 hours",
 # "2026-10-20 18:00". "on" while already on in the same mode moves the end
@@ -101,7 +103,7 @@ on() {
   done
   if [[ "$MODE" == screen ]]; then
     what=sleep:idle:handle-lid-switch
-    why="Keep Awake (screen on) until $(when "$end"): no suspend, no idle lock; the lid locks the session"
+    why="Keep Awake (screen on) until $(when "$end"): no suspend, no lock, the lid included"
     opts+=(-p ExecStartPre="-/usr/bin/sh -c '[ -n \"\$KEEP_AWAKE_TEST\" ] || exec /usr/bin/noctalia msg caffeine-enable'"
            -p ExecStopPost="-/usr/bin/sh -c '[ -n \"\$KEEP_AWAKE_TEST\" ] || exec /usr/bin/noctalia msg caffeine-disable'")
   else
@@ -117,9 +119,9 @@ on() {
       --who="Keep Awake" --why="$why" \
       "$self" _hold "$secs"
   if [[ "$MODE" == screen ]]; then
-    notify lucciola-keep-awake "Keep Awake on until $(when "$end"), screen on" "No suspend and no idle lock for now; closing the lid still locks the session."
+    notify lucciola-keep-awake "Keep Screen On until $(when "$end")" "No suspend and no lock, not even closing the lid."
   else
-    notify lucciola-keep-awake "Keep Awake on until $(when "$end")" "No suspend; the screen locks on idle as usual, and closing the lid locks it at once."
+    notify lucciola-keep-awake "Keep Running until $(when "$end")" "No suspend; it locks as usual, on idle and closing the lid."
   fi
 }
 
@@ -188,8 +190,9 @@ status() {
 }
 
 # The lid, through UPower, while the unit holds: closing it locks the session
-# (not at a desk with another monitor on) and keeps the power profile on
-# power-saver until it opens again. Every step here returns 0: the watcher
+# (not at a desk with another monitor on, and not with the screen kept on) and
+# keeps the power profile on power-saver until it opens again. Every step here
+# returns 0: the watcher
 # must outlive a lock that fails or a daemon that is missing.
 lid_closed_now() {
   local out
@@ -206,7 +209,8 @@ sys.exit(0 if on else 1)' 2>/dev/null
 }
 lid_closed() {
   if docked; then echo "keep-awake: lid closed, another monitor is on: nothing to do"; return 0; fi
-  if "$LOCK" >/dev/null 2>&1; then echo "keep-awake: lid closed: session locked"
+  if [[ "$(cat "$modefile" 2>/dev/null || true)" == screen ]]; then echo "keep-awake: lid closed, screen on: session left unlocked"
+  elif "$LOCK" >/dev/null 2>&1; then echo "keep-awake: lid closed: session locked"
   else echo "keep-awake: lid closed, but the session could not be locked" >&2; fi
   profile hold || true
 }
