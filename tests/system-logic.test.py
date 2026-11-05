@@ -6,6 +6,8 @@ follows, what rpm-ostree's JSON says, when an update counts as available,
 how pending apps and checks are worded."""
 
 import json
+import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -606,16 +608,15 @@ check("lanes: apps, Homebrew, tweaks",
 check("lanes: nothing to run holds nothing", ls.operation_lanes([]) == frozenset() and ls.operation_lanes(["pkexec"]) == frozenset())
 
 admin_src = ADMIN_PATH.read_text()
-import re as _re
-features = _re.search(r"^FEATURES = \(([^)]*)\)", admin_src, _re.M)
-admin_features = set(_re.findall(r'"([a-z-]+)"', features.group(1))) if features else set()
+features = re.search(r"^FEATURES = \(([^)]*)\)", admin_src, re.M)
+admin_features = set(re.findall(r'"([a-z-]+)"', features.group(1))) if features else set()
 check("lanes: every optional feature of the helper is known", admin_features and admin_features == set(ls.FEATURE_LANES),
       f"admin {sorted(admin_features)} vs {sorted(ls.FEATURE_LANES)}")
 
 # What the feature helper's install and remove run, one level of its own functions deep.
 bodies, name, buf = {}, None, []
 for line in FEATURE_PATH.read_text().splitlines():
-    m = _re.match(r"^([a-z_]+)\(\) \{(.*)$", line)
+    m = re.match(r"^([a-z_]+)\(\) \{(.*)$", line)
     if name is None and m:
         if m.group(2).rstrip().endswith("}"):
             bodies[m.group(1)] = m.group(2)
@@ -630,7 +631,7 @@ for line in FEATURE_PATH.read_text().splitlines():
 def runs(fn, depth=3):
     text = bodies.get(fn, "")
     if depth:
-        for called in set(_re.findall(r"\b([a-z_]+)\b", text)) & set(bodies) - {fn}:
+        for called in set(re.findall(r"\b([a-z_]+)\b", text)) & set(bodies) - {fn}:
             text += "\n" + runs(called, depth - 1)
     return text
 
@@ -641,29 +642,28 @@ for feature in sorted(ls.FEATURE_LANES):
         held = lanes(f"{feature}-{verb}")
         if "rpm-ostree" in text and "system" not in held:
             wrong.append(f"{feature}-{verb} runs rpm-ostree")
-        if _re.search(r"flatpak (install|uninstall|update)", text) and "flatpak" not in held:
+        if re.search(r"flatpak (install|uninstall|update)", text) and "flatpak" not in held:
             wrong.append(f"{feature}-{verb} runs flatpak")
 check("lanes: a feature that runs rpm-ostree or Flatpak holds it", not wrong and len(bodies) > 20, ", ".join(wrong))
 
 # Every other verb: what the helper plans says what it holds.
-import subprocess as _sp
 VERB_ARGS = {"pin": ["1"], "unpin": ["1"], "kernel": ["fedora"], "flatpak-unblock": ["org.example.App"],
              "scheduler": ["lavd", "Auto"], "dock-rescue": ["on"]}
-verbs = _re.findall(r'^    "([a-z-]+)": act_', admin_src, _re.M)
+verbs = re.findall(r'^    "([a-z-]+)": act_', admin_src, re.M)
 wrong = []
 for verb in verbs:
     if verb.endswith("-status"):
         continue
-    res = _sp.run([sys.executable, "-I", str(ADMIN_PATH), "--check", verb, *VERB_ARGS.get(verb, [])], capture_output=True, text=True)
+    res = subprocess.run([sys.executable, "-I", str(ADMIN_PATH), "--check", verb, *VERB_ARGS.get(verb, [])], capture_output=True, text=True)
     if res.returncode != 0:
         wrong.append(f"{verb}: plan failed ({res.stderr.strip()[-80:]})")
         continue
     held = lanes(verb, *VERB_ARGS.get(verb, []))
-    if _re.search(r"rpm-ostree|ostree admin|system-update|kernel-switch", res.stdout) and "system" not in held:
+    if re.search(r"rpm-ostree|ostree admin|system-update|kernel-switch", res.stdout) and "system" not in held:
         wrong.append(f"{verb} touches the system")
-    if _re.search(r"flatpak (install|uninstall|update)|/feature (slim|naked)", res.stdout) and "flatpak" not in held:
+    if re.search(r"flatpak (install|uninstall|update)|/feature (slim|naked)", res.stdout) and "flatpak" not in held:
         wrong.append(f"{verb} touches Flatpak")
-    if _re.search(r"brew", res.stdout) and "brew" not in held:
+    if re.search(r"brew", res.stdout) and "brew" not in held:
         wrong.append(f"{verb} touches Homebrew")
 check("lanes: every verb of the helper holds what its plan touches", len(verbs) > 20 and not wrong, ", ".join(wrong))
 
