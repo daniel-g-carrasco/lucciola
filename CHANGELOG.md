@@ -53,6 +53,12 @@ stable release is cut.
   the driver typed was lost while Bluefin's profile printed its banner (23 s).
   The driver now asks again until the shell answers.
 
+### Fixed (2026-11-05, when an automatic update fails)
+- **The failure is told.** The system step of uupd logs its output as plain text,
+  and reading it stopped `update-state`: the bar's indicator and the "Automatic
+  update failed" notice stayed silent on the very night an update could not be
+  resolved. The notice now names the step and its error.
+
 ### Changed (2026-11-04, lock screen and login)
 - **The lock screen looks like the login screen.** The wallpaper stays in sight,
   with the clock above the account picture, the name and the password field. The

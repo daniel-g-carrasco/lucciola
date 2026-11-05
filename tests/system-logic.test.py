@@ -431,6 +431,12 @@ uupd_log = ('{"level":"INFO","msg":"Updating","title":"System"}\n'
             '{"level":"ERROR","msg":"Updates finished with errors!"}\n')
 check("excerpt: uupd names the step and the error", ls.failure_excerpt(uupd_log) == "Distroboxes for User: daniel: Error: could not start entrypoint.")
 brew_log = "==> Upgrading node\n  26.12.1_1 -> 26.13.0_2\nError: No developer tools installed.\nInstall a system C compiler.\n==> Upgrading oven-sh/bun/bun\nbrew upgrade reported errors — see the output above\n"
+# The system step's own line, from the journal of 2026-11-05: output as plain text.
+system_log = json.dumps({"level": "ERROR", "msg": "module_fail", "module": "system", "context": "System Update",
+                         "status": "failed", "exit_code": 1, "output": "note: automatic updates (stage) are enabled\nPulling manifest: x\nerror: Could not depsolve transaction; 1 problem detected:\n  - cannot install both libcurl-8.21.0-9 and libcurl-8.21.0-8\n  - conflicting requests\n"})
+check("excerpt: uupd's plain text output, the line that says error", ls.failure_excerpt(system_log).startswith("System Update: error: Could not depsolve transaction"))
+check("excerpt: module_fail with no output names the step", ls.failure_excerpt('{"msg": "module_fail", "module": "system", "context": "System Update"}') == "System Update")
+check("excerpt: a number as output does not stop it", ls.failure_excerpt('{"msg": "module_fail", "module": "system", "output": 3}') == "system: 3")
 check("excerpt: brew's Error line, not the summary", ls.failure_excerpt(brew_log) == "Error: No developer tools installed.")
 check("excerpt: no error word, the last line", ls.failure_excerpt("one\ntwo\n\n") == "two")
 check("excerpt: empty", ls.failure_excerpt("") == "")
