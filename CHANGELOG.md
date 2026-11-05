@@ -53,6 +53,25 @@ stable release is cut.
   the driver typed was lost while Bluefin's profile printed its banner (23 s).
   The driver now asks again until the shell answers.
 
+### Changed (2026-11-05, Lucciola System while something runs)
+- **The window stays usable during an update.** Everything waited for any running
+  operation, so downloading an update with extra packages greyed every button for
+  minutes. Now only what needs the same part of the system waits: a second change
+  to the system (extra packages, a rollback, the kernel) while the system updates,
+  app installs while apps install, Homebrew while Homebrew works. SSH, the login,
+  the TPM, GRUB, the scheduler, the dock, the printers and the phone work as usual,
+  and a banner at the top says what waits. An update the night started counts too:
+  until now its buttons stayed active and rpm-ostree refused the click. A restart
+  waits for whatever runs.
+
+### Fixed (2026-11-05, an old failure after a good update)
+- **A failed night update no longer shows once a newer version is here.** The night
+  run failed on a depsolve, the update from the window succeeded in the evening,
+  and after the restart "Automatic update failed" still arrived and the Overview
+  stayed red until the next night. When only the system step failed and a newer
+  image is booted or downloaded, the run reads "failed, a newer version has arrived
+  since": no notice, no red. A failed Distrobox or Homebrew step still counts.
+
 ### Added (2026-11-05, a dock for power only)
 - **Ignore External Screens,** in the Keep Awake panel, or `laptop-only on [UNTIL]`.
   External screens stay off, any that are plugged in later too, and come back when it

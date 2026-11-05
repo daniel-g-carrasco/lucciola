@@ -8,6 +8,8 @@ Offline and unprivileged on purpose (it runs every minute from the bar):
 `rpm-ostree status --json` for the deployments and a running transaction,
 `systemctl show` and `list-timers` of both managers for the last and next
 runs of the update channels, the journal of a failed unit for its reason.
+A night run that failed on the system step alone reads "superseded" once a
+newer image is booted or downloaded (lucciola_system.settle_system_failure).
 The decisions are the ones Lucciola System shows (lucciola_system.py:
 channel_health, failure_excerpt), so the dot on the bar, the notification
 and the window never disagree. No registry call: whether a newer image is
@@ -64,9 +66,11 @@ def collect():
             continue
         scope = ["--user"] if channel["user"] else []
         rc, out = run(["journalctl", *scope, "-u", channel["unit"], "-n", "400", "-o", "cat", "--no-pager", "-q"], timeout=20)
-        channel["reason"] = ls.failure_excerpt(out if rc == 0 else "")
+        log = out if rc == 0 else ""
+        channel["reason"] = ls.failure_excerpt(log)
         started = (units.get(channel["unit"]) or {}).get("started")
         channel["line"] = ls.health_line(channel["outcome"], channel["last"], channel["next"], started, now, channel["reason"])
+        ls.settle_system_failure(channel, log, state, now)
     return {
         "booted": state.get("booted"),
         "staged": state.get("staged"),

@@ -3,7 +3,8 @@
 # managers) and journalctl answer from files. Covered: the JSON shape, the
 # staged and booted versions, a running transaction, the three channels
 # with their outcomes, the failed one with the journal's reason and the
-# count, nothing failed, tools missing. Needs python3.
+# count, a night failure a newer image has settled, nothing failed, tools
+# missing. Needs python3.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 US="$ROOT/build_files/system_files/usr/libexec/lucciola/update-state"
@@ -101,6 +102,30 @@ printf '==> Upgrading node\nError: No developer tools installed.\nbrew upgrade r
 run --json
 check "hung tools unit counted and explained" [ "$(field 'd["channels"][2]["outcome"] + "|" + str(d["channels"][2]["user"]) + "|" + d["channels"][2]["reason"]')" = "hung|True|Error: No developer tools installed." ]
 check "failed count includes the hung one" [ "$(field 'd["failed"]')" = 1 ]
+
+# 2026-11-05: the night's run failed on the system step alone, the window's
+# update succeeded in the evening and the newer image was booted: the
+# failure is settled, neither counted nor notified. An older image is not.
+printf 'Id=margine-brew-upgrade.service\nActiveState=inactive\nResult=success\nExecMainExitTimestamp=@1793530345\n' > "$FAKE/show-user.txt"
+printf 'Id=uupd.service\nActiveState=failed\nResult=exit-code\nExecMainStartTimestamp=@1793848300\nExecMainExitTimestamp=@1793848536\n' > "$FAKE/show-system.txt"
+cat > "$FAKE/journal-system-uupd.service.txt" <<'L'
+{"level":"INFO","msg":"Hardware checks passed"}
+{"level":"ERROR","msg":"module_fail","module":"system","context":"System Update","output":"error: Could not depsolve transaction; 1 problem detected"}
+{"level":"ERROR","msg":"Updates finished with errors!"}
+{"level":"ERROR","msg":"1 update module(s) failed: System Update"}
+L
+cat > "$FAKE/status.json" <<'J'
+{"transaction": null, "deployments": [
+  {"booted": true, "version": "lucciola.20261105", "checksum": "28bf", "base-timestamp": 1793887356, "timestamp": 1793909686,
+   "base-commit-meta": {"ostree.manifest-digest": "sha256:4aff"}},
+  {"version": "candidate.20261104", "checksum": "7046", "base-timestamp": 1793771272, "timestamp": 1793778207}]}
+J
+run --json
+check "a newer image booted after a failed system step: superseded, not counted" [ "$(field 'd["channels"][0]["outcome"] + "|" + str(d["failed"])')" = "superseded|0" ]
+check "and the line says so" bash -c "[[ \"$(field 'd["channels"][0]["line"]')\" == 'The run '*' failed, a newer version has arrived since'* ]]"
+sed -i 's/"base-timestamp": 1793887356/"base-timestamp": 1793800000/' "$FAKE/status.json"
+run --json
+check "an image built before the run: still failed" [ "$(field 'd["channels"][0]["outcome"] + "|" + str(d["failed"])')" = "failed|1" ]
 
 # Tools failing (a machine without rpm-ostree, a manager that does not
 # answer): still JSON, channels never ran.
