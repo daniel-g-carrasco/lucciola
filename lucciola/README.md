@@ -60,6 +60,9 @@ This layer adds:
 - Ptyxis in the Noctalia palette: a Noctalia template writes a Ptyxis palette
   (`noctalia.palette`) and selects it once in the default profile; another
   palette picked later in Ptyxis stays;
+- Ignore External Screens, in the Keep Awake panel, over
+  `/usr/libexec/lucciola/laptop-only`: with a dock that only gives power,
+  external screens stay off until it ends;
 - Keep Awake, a Noctalia plugin over `/usr/libexec/lucciola/keep-awake`: no
   suspend, now, until a time, or from a scheduled time. In Keep Running the screen still
   locks on idle as usual; closing the lid locks the session at once instead

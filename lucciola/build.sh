@@ -223,7 +223,7 @@ if missing:
 PY
 # lucciola-keep-awake is a symlink from system_files: -x follows it, so a
 # dangling one fails here.
-for f in /usr/libexec/lucciola/{session-start,lock,bar-widths,color-calibration,keep-awake} /usr/bin/lucciola-keep-awake; do
+for f in /usr/libexec/lucciola/{session-start,lock,bar-widths,color-calibration,keep-awake,laptop-only} /usr/bin/lucciola-keep-awake; do
   [[ -x "$f" ]] || { echo "ERROR: $f missing or not executable" >&2; exit 1; }
 done
 # The Python helpers must at least parse (ast, so no __pycache__ in /usr).

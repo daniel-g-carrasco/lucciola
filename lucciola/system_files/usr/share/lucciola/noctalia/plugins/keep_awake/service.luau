@@ -46,6 +46,7 @@ local function refresh()
     noctalia.state.set("ka.sstart", s.scheduled_start or 0)
     noctalia.state.set("ka.suntil", s.scheduled_until or 0)
     noctalia.state.set("ka.smode", s.scheduled_mode or "awake")
+    noctalia.state.set("ka.laptoponly", s.laptop_only == true)
     noctalia.state.set("ka.ready", true)
   end)
 end

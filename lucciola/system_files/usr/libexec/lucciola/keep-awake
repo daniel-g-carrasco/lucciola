@@ -52,6 +52,7 @@ sched=lucciola-keep-awake-scheduled$t
 GDBUS="${KEEP_AWAKE_GDBUS:-/usr/bin/gdbus}"
 NIRI="${KEEP_AWAKE_NIRI:-/usr/bin/niri}"
 LOCK="${KEEP_AWAKE_LOCK:-/usr/libexec/lucciola/lock}"
+LAPTOP_ONLY="${KEEP_AWAKE_LAPTOP_ONLY:-/usr/libexec/lucciola/laptop-only}"
 caffeine() { [[ -n "$t" ]] || /usr/bin/noctalia msg "caffeine-$1" >/dev/null 2>&1 || true; }
 self="$(readlink -f "$0")"
 state="${XDG_STATE_HOME:-$HOME/.local/state}/lucciola"
@@ -174,8 +175,10 @@ status_json() {
     a=true; u=$(cat "$endfile" 2>/dev/null || echo 0); m=$(cat "$modefile" 2>/dev/null || echo awake)
   fi
   if systemctl --user --quiet is-active "$sched.timer" && [[ -f "$schedfile" ]]; then read -r ss su sm < "$schedfile"; fi
-  printf '{"active":%s,"until":%s,"mode":"%s","scheduled_start":%s,"scheduled_until":%s,"scheduled_mode":"%s","now":%s}\n' \
-    "$a" "${u:-0}" "${m:-awake}" "${ss:-0}" "${su:-0}" "${sm:-awake}" "$(date +%s)"
+  local lo=false
+  if systemctl --user --quiet is-active "lucciola-laptop-only$t.service"; then lo=true; fi
+  printf '{"active":%s,"until":%s,"mode":"%s","scheduled_start":%s,"scheduled_until":%s,"scheduled_mode":"%s","laptop_only":%s,"now":%s}\n' \
+    "$a" "${u:-0}" "${m:-awake}" "${ss:-0}" "${su:-0}" "${sm:-awake}" "$lo" "$(date +%s)"
 }
 
 status() {
@@ -274,6 +277,7 @@ case "${1:-status}" in
   cancel) cancel ;;
   toggle) if active; then off; else on; fi ;;
   status) status "${2:-}" ;;
+  laptop-only) shift; exec "$LAPTOP_ONLY" "$@" ;;   # the panel's one way in: its service runs this command
   _hold) hold "${2:?}" ;;
   _profile) profile "${2:?}" ;;
   *) echo "usage: ${0##*/} on [UNTIL] [--screen] | tomorrow [--screen] | schedule START [UNTIL] [--screen] | off | cancel | toggle [--screen] | status [--json]" >&2; exit 2 ;;

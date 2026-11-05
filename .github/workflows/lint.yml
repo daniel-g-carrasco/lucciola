@@ -158,6 +158,10 @@ jobs:
         run: |
           sudo apt-get install -y -qq --no-install-recommends libxml2-utils >/dev/null 2>&1 || true
           bash tests/system-logic.test.sh
+      - name: Laptop screen only, for a dock that gives power
+        # laptop-only on a fake niri: which outputs go off, which come back. See
+        # tests/laptop-only.test.sh.
+        run: bash tests/laptop-only.test.sh
       - name: Keep Awake holds sleep, and the lid locks the session
         # The two modes of /usr/libexec/lucciola/keep-awake (what the
         # inhibitor holds, the two-hour default with --screen), on again,
