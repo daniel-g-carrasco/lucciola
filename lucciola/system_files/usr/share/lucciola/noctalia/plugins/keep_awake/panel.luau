@@ -1,7 +1,7 @@
 --!nonstrict
 -- Keep Awake panel: status, the mode (awake: the screen locks on idle as
--- usual and the lid locks it at once; screen on: the idle lock stays away
--- too), quick durations, and a scheduler (start "now" or on a day and time,
+-- usual and the lid locks it at once; screen on: it never locks, the lid
+-- included), quick durations, and a scheduler (start "now" or on a day and time,
 -- end on a day and time).
 
 local common = require("./lib/common.luau")

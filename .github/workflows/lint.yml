@@ -162,7 +162,8 @@ jobs:
         # The two modes of /usr/libexec/lucciola/keep-awake (what the
         # inhibitor holds, the two-hour default with --screen), on again,
         # schedule and cancel, and the lid watcher: a closed lid locks the
-        # session and holds power-saver unless another monitor is on, an
+        # session, except with the screen kept on, and holds power-saver
+        # unless another monitor is on, an
         # opened lid gives the profile back; on fake systemd-run, gdbus and
         # niri. See tests/keep-awake.test.sh.
         run: bash tests/keep-awake.test.sh

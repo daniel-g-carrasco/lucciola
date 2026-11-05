@@ -61,11 +61,12 @@ This layer adds:
   (`noctalia.palette`) and selects it once in the default profile; another
   palette picked later in Ptyxis stays;
 - Keep Awake, a Noctalia plugin over `/usr/libexec/lucciola/keep-awake`: no
-  suspend, now, until a time, or from a scheduled time. The screen still
+  suspend, now, until a time, or from a scheduled time. In Keep Running the screen still
   locks on idle as usual; closing the lid locks the session at once instead
   of suspending (not at a desk with another monitor on) and keeps the power
-  profile on power-saver until it opens again. `--screen` also keeps the
-  screen on and the idle lock away, two hours unless told otherwise. A bar
+  profile on power-saver until it opens again. Keep Screen On (`--screen`) also keeps the
+  screen on and never locks, not even closing the lid, two hours unless told
+  otherwise. A bar
   indicator is lit while it is on (a sun with the screen kept on), a clock
   while it is scheduled, dim when off; notifications carry the bar's glyphs;
   the control-centre tile takes the place of Noctalia's caffeine; the panel

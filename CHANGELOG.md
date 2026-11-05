@@ -53,6 +53,14 @@ stable release is cut.
   the driver typed was lost while Bluefin's profile printed its banner (23 s).
   The driver now asks again until the shell answers.
 
+### Changed (2026-11-05, Keep Awake)
+- **Two modes that say what they do.** Keep Running (it was Awake) keeps sleep away
+  and locks as usual, on idle and with the lid. Keep Screen On (it was Screen on)
+  does not lock at all until it ends, two hours unless told otherwise, not even
+  closing the lid, which used to lock it too. A closed lid still puts the power
+  profile on power-saver. A laptop closed with Keep Screen On stays unlocked: the
+  panel says so.
+
 ### Fixed (2026-11-05, when an automatic update fails)
 - **The failure is told.** The system step of uupd logs its output as plain text,
   and reading it stopped `update-state`: the bar's indicator and the "Automatic
