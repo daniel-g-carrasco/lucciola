@@ -38,7 +38,7 @@ def parse_deployments(status_json):
         "booted": None, "staged": None, "rollback": None, "layered": [],
         "booted_digest": "", "staged_digest": "", "booted_ref": "", "staged_ref": "", "image": IMAGE,
         "transaction": "", "booted_revision": "", "staged_revision": "", "booted_pinned": False,
-        "booted_checksum": "", "staged_checksum": "",
+        "booted_checksum": "", "staged_checksum": "", "booted_built": None, "staged_built": None,
     }
     try:
         status = json.loads(status_json or "{}")
@@ -56,6 +56,7 @@ def parse_deployments(status_json):
             state["staged_ref"] = dep.get("container-image-reference") or ""
             state["staged_revision"] = image_revision(dep)
             state["staged_checksum"] = dep.get("checksum") or ""
+            state["staged_built"] = image_built(dep)
         elif dep.get("booted"):
             state["booted"] = version
             state["booted_digest"] = digest
@@ -63,6 +64,7 @@ def parse_deployments(status_json):
             state["booted_revision"] = image_revision(dep)
             state["booted_pinned"] = bool(dep.get("pinned"))
             state["booted_checksum"] = dep.get("checksum") or ""
+            state["booted_built"] = image_built(dep)
             state["image"] = followed_image(state["booted_ref"])
             seen_booted = True
             state["layered"] = sorted(
@@ -71,6 +73,18 @@ def parse_deployments(status_json):
         elif seen_booted and state["rollback"] is None:
             state["rollback"] = version
     return state
+
+
+def image_built(dep):
+    """When a deployment's image was built (unix time), or None. On a
+    machine with extra packages `timestamp` is when they were applied here
+    and `base-timestamp` the image's own; without them only `timestamp`
+    exists, and it is the image's."""
+    for key in ("base-timestamp", "timestamp"):
+        value = dep.get(key)
+        if isinstance(value, int) and value > 0:
+            return value
+    return None
 
 
 def update_available(state, latest, latest_digest):
@@ -548,6 +562,8 @@ def health_line(outcome, last, next_run, started, now, reason=""):
         return f"Not run yet. First run {nxt}" if nxt else "Not run yet"
     if outcome == "interrupted":
         return f"Interrupted by a restart {when_phrase(last, now)}".rstrip() + (f", next {nxt}" if nxt else "")
+    if outcome == "superseded":
+        return f"The run {when_phrase(last, now)} failed, a newer version has arrived since" + (f". Next run {nxt}" if nxt else "")
     if outcome in ("failed", "hung"):
         head = "Hung and was stopped" if outcome == "hung" else "Failed"
         text = f"{head} {when_phrase(last, now)}".rstrip()
@@ -556,6 +572,52 @@ def health_line(outcome, last, next_run, started, now, reason=""):
         return text + (f". Next try {nxt}" if nxt else "")
     text = f"Last run {when_phrase(last, now)}".rstrip() if last else "Last run unknown"
     return text + (f", next {nxt}" if nxt else "")
+
+
+# uupd closes a run with errors on one line that names the failed steps:
+# "2 update module(s) failed: System Update, Distroboxes for User: daniel".
+FAILED_STEPS = re.compile(r"\d+ update module\(s\) failed: (.+)$")
+SYSTEM_STEP = "System Update"
+
+
+def failed_steps(journal_text):
+    """The steps uupd's last run names as failed, or [] when the journal
+    does not say: a closing line counts only after the run's last
+    module_fail, so a run cut short never borrows an older run's list."""
+    last_fail, steps = -1, []
+    for index, line in enumerate((journal_text or "").splitlines()):
+        if '"module_fail"' in line:
+            last_fail, steps = index, []
+            continue
+        if "update module(s) failed" not in line:
+            continue
+        try:
+            msg = json.loads(line).get("msg") or ""
+        except (json.JSONDecodeError, AttributeError):
+            continue
+        found = FAILED_STEPS.search(msg)
+        if found and last_fail >= 0:
+            steps = [step.strip() for step in found.group(1).split(", ") if step.strip()]
+    return steps
+
+
+def settle_system_failure(channel, journal_text, state, now):
+    """A night run that failed on the system step alone stops counting once
+    a newer image is here, booted or downloaded: one built after the run is
+    newer than anything that run could fetch (2026-11-05: the run failed at
+    04:15 on a depsolve, the window's update succeeded in the evening, and
+    the failure was still notified and shown in red after the restart).
+    A failed Distrobox or Homebrew step stands: a new image does not mend
+    it. Returns True when the channel became 'superseded'."""
+    if channel.get("key") != "system" or channel.get("outcome") != "failed" or not channel.get("last"):
+        return False
+    if failed_steps(journal_text) != [SYSTEM_STEP]:
+        return False
+    if not any(built and built > channel["last"] for built in (state.get("staged_built"), state.get("booted_built"))):
+        return False
+    channel["outcome"] = "superseded"
+    channel["line"] = health_line("superseded", channel["last"], channel.get("next"), None, now)
+    return True
 
 
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
@@ -676,6 +738,88 @@ def os_release_version(text):
         m = re.search(rf"^{key}=(.*)$", text or "", re.M)
         if m:
             return m.group(1).strip().strip('"')
+    return ""
+
+
+# ── the window's operations, and which of them wait for each other ──────
+# rpm-ostree runs one transaction at a time and refuses a second; Flatpak
+# and Homebrew lock their own installation. An operation of the window
+# waits only for one that needs the same of these, or for itself: SSH, the
+# login, the scheduler, the dock, the printers, the phone keep working while
+# the system downloads (2026-11-05: one flag for the whole window greyed
+# every button for the minutes an update with extra packages takes).
+SYSTEM_VERBS = frozenset({"update", "rollback", "pin", "unpin", "kernel"})
+FLATPAK_VERBS = frozenset({"flatpak-unblock", "apps-slim", "apps-naked", "apps-restore"})
+BREW_VERBS = frozenset({"brew-remove"})
+# What each optional feature of the feature helper touches, in and out.
+FEATURE_LANES = {
+    "gaming": ("system", "flatpak"), "gaming-native": ("system", "flatpak"),
+    "ai": ("flatpak",), "sunshine": ("flatpak",),
+    "devmode": ("system",), "vscode": ("system",), "devtools": ("system",), "docker": ("system",),
+    "tailscale": ("system",), "vm": ("system",), "phone": ("system",),
+}
+# The tweaks (ujust recipes) that install or update apps.
+FLATPAK_RECIPES = frozenset({"install-spola", "lucciola-darktable-opencl"})
+# ssh-on and ssh-off, grub-lock-on and grub-lock-off...: one operation each.
+VERB_FAMILY = re.compile(r"-(on|off|enable|disable|enroll|never|wake|rescue|repair)$")
+SHARED_LANES = ("system", "flatpak", "brew")
+LANE_WORDS = {
+    "system": "changes to the system (updates, extra packages, the kernel)",
+    "flatpak": "installing and removing apps",
+    "brew": "the command-line tools",
+}
+
+
+def operation_lanes(argv):
+    """What an operation of the window holds while it runs: 'system'
+    (rpm-ostree and the boot entries), 'flatpak', 'brew', and its own name,
+    so the same operation never runs twice. Two operations wait for each
+    other only when what they hold meets."""
+    argv = [str(a) for a in (argv or [])]
+    if argv[:1] == ["pkexec"]:
+        argv = argv[1:]
+    if not argv:
+        return frozenset()
+    prog = argv[0].rsplit("/", 1)[-1]
+    sub = argv[1] if len(argv) > 1 else ""
+    if prog == "admin" and sub:
+        family = VERB_FAMILY.sub("", sub)
+        lanes = {family, *FEATURE_LANES.get(family, ())}
+        for lane, verbs in (("system", SYSTEM_VERBS), ("flatpak", FLATPAK_VERBS), ("brew", BREW_VERBS)):
+            if sub in verbs:
+                lanes.add(lane)
+        return frozenset(lanes)
+    if prog == "flatpak" and sub in ("install", "uninstall", "update"):
+        return frozenset({"flatpak"})
+    if prog == "ujust":
+        return frozenset({sub, "flatpak"} if sub in FLATPAK_RECIPES else {sub})
+    if prog == "brew-upgrade" or (prog == "devmode" and sub.startswith("brew")):
+        return frozenset({"brew"})
+    return frozenset({f"{prog} {VERB_FAMILY.sub('', sub)}".strip()})
+
+
+def waiting_for(lanes, running, background=False):
+    """The title of the operation that lanes must wait for, out of running
+    [(title, lanes)]; a system update rpm-ostree reports as running (the
+    night's, or a command's) holds 'system' too. None when free."""
+    for title, held in running:
+        if lanes & held:
+            return title
+    if background and "system" in lanes:
+        return "The system update in the background"
+    return None
+
+
+def banner_text(running, background=False):
+    """One line for the top of the window while something shared is held:
+    what waits, and that the rest does not. '' when nothing is."""
+    for title, held in running:
+        shared = [lane for lane in SHARED_LANES if lane in held]
+        if shared:
+            words = " and ".join(LANE_WORDS[lane] for lane in shared)
+            return f"{title}: {words} wait until it ends, everything else works as usual"
+    if background:
+        return f"A system update is running in the background: {LANE_WORDS['system']} wait until it ends"
     return ""
 
 

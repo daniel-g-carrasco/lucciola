@@ -1346,12 +1346,14 @@ class SystemWindow(Adw.ApplicationWindow):
         self._hero_what = "checking"
         self._following = False
         self._latest_revision = ""
-        self._phase_label = None
-        self._busy = False
+        # The operations running now, each with what it holds
+        # (ls.operation_lanes): one waits only for another that holds the same.
+        self._ops = []
         self._generation = 0
         self._last_refresh = 0.0
-        self._last_log = ""
-        self._last_log_title = ""
+        # The last operation that failed: its log keeps filling after the
+        # exit, the pipe can still hold lines, so Details reads it on click.
+        self._failed_op = None
         self._flatpak_updates = None
         self._brew_updates = None
         self._excluded = []
@@ -1446,6 +1448,8 @@ class SystemWindow(Adw.ApplicationWindow):
         content_header = Adw.HeaderBar()
         content_header.set_title_widget(self._content_title)
         content_toolbar.add_top_bar(content_header)
+        self._ops_banner = Adw.Banner()
+        content_toolbar.add_top_bar(self._ops_banner)
         self._stack = Gtk.Stack()
         self._stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
         content_toolbar.set_content(self._stack)
@@ -1512,7 +1516,7 @@ class SystemWindow(Adw.ApplicationWindow):
             self._refresh_all()
 
     def _on_timer(self):
-        if not self._busy:
+        if not self._ops:
             self._refresh_all()
         return True
 
@@ -1777,13 +1781,14 @@ class SystemWindow(Adw.ApplicationWindow):
                     brew = [x.strip() for x in out.splitlines() if x.strip()]
             excluded = ls.excluded_apps(read_file(BLOCKED))
             on_main(self._set_counts, gen, flat, brew, excluded)
-            on_main(self._set_health, gen, self._collect_health())
+            on_main(self._set_health, gen, self._collect_health(state))
 
         in_thread(worker)
 
-    def _collect_health(self):
+    def _collect_health(self, state):
         """The last runs of the update channels: unit results and timers
-        from both managers, and the journal's reason for a failed one.
+        from both managers, and the journal's reason for a failed one; state
+        (the deployments) settles a night failure a newer image overtook.
         Runs in the worker thread."""
         units, timers = {}, {}
         for scope, unit_names, timer_names in (
@@ -1808,6 +1813,7 @@ class SystemWindow(Adw.ApplicationWindow):
             channel["log"] = ls.ANSI.sub("", log)[-20000:]
             started = (units.get(channel["unit"]) or {}).get("started")
             channel["line"] = ls.health_line(channel["outcome"], channel["last"], channel["next"], started, time.time(), channel["reason"])
+            ls.settle_system_failure(channel, log, state, time.time())
         return health
 
     def _set_health(self, gen, health):
@@ -1888,7 +1894,7 @@ class SystemWindow(Adw.ApplicationWindow):
         self._set_loading(self._keep_row, False)
         self._keep_row.set_subtitle(ls.keep_phrase(state.get("booted_pinned"), state.get("rollback")))
         self._keep_button.set_label("Release" if state.get("booted_pinned") else "Keep")
-        self._keep_button.set_sensitive(not self._busy and bool(state.get("booted")))
+        self._keep_button.set_sensitive(self._may("pin", "0") and bool(state.get("booted")))
         for row, text in (
             (self._version_row, f"{booted}, {built}" if built else booted),
             (self._kernel_row, os.uname().release),
@@ -1904,10 +1910,11 @@ class SystemWindow(Adw.ApplicationWindow):
         self._set_loading(self._rollback_row, False)
         if rollback:
             self._rollback_row.set_subtitle(f"{rollback}, kept on this machine")
-            self._rollback_button.set_sensitive(not self._busy)
+            self._rollback_button.set_sensitive(self._may("rollback"))
         else:
             self._rollback_row.set_subtitle("None yet: the first update keeps one")
             self._rollback_button.set_sensitive(False)
+        self._sync_banner()
         self._update_hero()
 
     def _set_latest(self, gen, latest, latest_digest, error, revision=""):
@@ -1955,11 +1962,15 @@ class SystemWindow(Adw.ApplicationWindow):
             return f"{built[0].upper()}{built[1:]}. " if built else ""
 
         if what == "working":
+            # The window's own operation, when the page is refreshed while it
+            # runs (another operation ended meanwhile): named as such.
+            own = next((op["title"] for op in self._ops if "system" in op["lanes"]), None)
+            started = "Started from this window" if own else "The daily update or a command started it"
             self._hero_stack.set_visible_child_name("spinner")
-            self._hero_title.set_text("Updating in the Background")
+            self._hero_title.set_text(own or "Updating in the Background")
             self._hero_version.set_text("")
             self._hero_body.set_text(
-                f"{ls.transaction_phrase(self._state.get('transaction'))}. The daily update or a command started it; "
+                f"{ls.transaction_phrase(self._state.get('transaction'))}. {started}; "
                 f"this page follows it and the machine keeps working meanwhile. {booted} runs until you restart."
             )
             self._action_button.set_visible(False)
@@ -2024,7 +2035,7 @@ class SystemWindow(Adw.ApplicationWindow):
 
         def tick():
             self._following = False
-            if self._hero_what == "working" and not self._busy:
+            if self._hero_what == "working" and not self._holding("system"):
                 self._refresh_overview()
             return False
 
@@ -2118,7 +2129,7 @@ class SystemWindow(Adw.ApplicationWindow):
         self._action_button.remove_css_class("suggested-action")
         if suggested:
             self._action_button.add_css_class("suggested-action")
-        self._action_button.set_sensitive(not self._busy)
+        self._action_button.set_sensitive(self._may("update"))
         self._action_button.set_visible(True)
 
     def _on_show_layered(self, _row):
@@ -2227,6 +2238,10 @@ class SystemWindow(Adw.ApplicationWindow):
         )
 
     def _reboot(self):
+        if self._ops:
+            # A restart would cut it short.
+            self._toast(f"{self._ops[0]['title']} is still running; restart when it ends")
+            return
         self._confirm(
             "Restart Now?", "Open apps will be closed. The update is applied while restarting.",
             "Restart", lambda: subprocess.Popen(["systemctl", "reboot"]),
@@ -2389,9 +2404,9 @@ class SystemWindow(Adw.ApplicationWindow):
             "absent": "Not registered: Secure Boot must stay off until it is",
             "unsupported": "Not applicable on this machine",
         }[key])
-        self._mok_enroll_button.set_sensitive(key == "absent" and not self._busy)
+        self._mok_enroll_button.set_sensitive(key == "absent" and self._may("secureboot-enroll"))
         self._mok_enroll_button.set_visible(key == "absent")
-        self._mok_never_button.set_sensitive(key == "absent" and not self._busy)
+        self._mok_never_button.set_sensitive(key == "absent" and self._may("secureboot-never"))
         self._mok_never_button.set_visible(key == "absent")
 
     def _set_tpm(self, gen, tpm, rc, sb):
@@ -2407,11 +2422,11 @@ class SystemWindow(Adw.ApplicationWindow):
         self._tpm_row.set_subtitle(text)
         can_enable = state in ("off", "half") and sb["secure_boot"] and sb["key"] == "enrolled"
         self._tpm_enable_button.set_visible(state in ("off", "half", "unknown"))
-        self._tpm_enable_button.set_sensitive(bool(can_enable) and not self._busy)
+        self._tpm_enable_button.set_sensitive(bool(can_enable) and self._may("tpm-unlock-enable"))
         if state in ("off", "half") and not can_enable:
             self._tpm_row.set_subtitle(text + ". Secure Boot on and the key registered come first")
         self._tpm_disable_button.set_visible(state in ("on", "half"))
-        self._tpm_disable_button.set_sensitive(state in ("on", "half") and not self._busy)
+        self._tpm_disable_button.set_sensitive(state in ("on", "half") and self._may("tpm-unlock-disable"))
 
     def _set_grub(self, gen, lock, rc):
         if not self._current("startup", gen):
@@ -2426,9 +2441,9 @@ class SystemWindow(Adw.ApplicationWindow):
             None: "Could not read the lock",
         }[lock])
         self._grub_on_button.set_visible(lock in ("off", None))
-        self._grub_on_button.set_sensitive(lock == "off" and not self._busy)
+        self._grub_on_button.set_sensitive(lock == "off" and self._may("grub-lock-on"))
         self._grub_off_button.set_visible(lock == "on")
-        self._grub_off_button.set_sensitive(lock == "on" and not self._busy)
+        self._grub_off_button.set_sensitive(lock == "on" and self._may("grub-lock-off"))
 
     def _set_kernel(self, gen, kernel):
         if not self._current("startup", gen):
@@ -2448,7 +2463,7 @@ class SystemWindow(Adw.ApplicationWindow):
             self._kernel_follows_row.set_subtitle("A digest pin or another image: the kernel cannot be switched from here")
         target = "cachyos" if kernel["follows_flavour"] == "fedora" else "fedora"
         self._kernel_switch_button.set_title("Switch to the CachyOS Kernel…" if target == "cachyos" else "Switch to Fedora's Kernel…")
-        self._kernel_switch_button.set_sensitive(bool(follows) and not kernel["staged"] and not self._busy)
+        self._kernel_switch_button.set_sensitive(bool(follows) and not kernel["staged"] and self._may("kernel", target))
 
     def _on_mok_enroll(self, _row):
         self._confirm(
@@ -2618,7 +2633,7 @@ class SystemWindow(Adw.ApplicationWindow):
             self._autologin_switch.set_subtitle("Could not read the login screen's setting")
             self._autologin_switch.set_sensitive(False)
             return
-        self._autologin_switch.set_sensitive(not self._busy)
+        self._autologin_switch.set_sensitive(self._may("autologin-on"))
         self._autologin_switch.set_subtitle(
             f"{user} is logged in at startup without a password or fingerprint" if enabled
             else "The login screen asks for a fingerprint or the password at startup"
@@ -2630,7 +2645,7 @@ class SystemWindow(Adw.ApplicationWindow):
         self._ssh_guard = True
         self._ssh_switch.set_active(state == "on")
         self._ssh_guard = False
-        self._ssh_switch.set_sensitive(not self._busy)
+        self._ssh_switch.set_sensitive(self._may("ssh-on"))
         self._ssh_switch.set_subtitle(ls.ssh_phrase(state, GLib.get_user_name(), addresses))
 
     def _set_keyring(self, gen, st):
@@ -2656,9 +2671,9 @@ class SystemWindow(Adw.ApplicationWindow):
         has_cred = at in ("tpm-used", "tpm-present", "tpm-wrong", "tpm-next")
         self._keyring_tpm_button.set_title("Set the TPM Credential Again…" if at == "tpm-wrong" else "Open the Keyring at Login with the TPM…")
         self._keyring_tpm_button.set_visible(at in ("password", "tpm-wrong", None))
-        self._keyring_tpm_button.set_sensitive(not self._busy)
+        self._keyring_tpm_button.set_sensitive(self._can_run([KEYRING, "tpm"]))
         self._keyring_tpm_off_button.set_visible(has_cred)
-        self._keyring_tpm_off_button.set_sensitive(not self._busy)
+        self._keyring_tpm_off_button.set_sensitive(self._can_run([KEYRING, "tpm-off"]))
 
     def _on_fingerprint(self, _row):
         try:
@@ -2837,8 +2852,8 @@ class SystemWindow(Adw.ApplicationWindow):
             self._sched_boot_row.set_subtitle("The kernel's own scheduler (a choice is saved but the service is off)")
         else:
             self._sched_boot_row.set_subtitle("The kernel's own scheduler")
-        self._sched_off_button.set_sensitive((st["running"] or st["config_present"] or st["enabled"]) and not self._busy)
-        self._sched_choose_button.set_sensitive(not self._busy)
+        self._sched_off_button.set_sensitive((st["running"] or st["config_present"] or st["enabled"]) and self._may("scheduler-off"))
+        self._sched_choose_button.set_sensitive(self._may("scheduler"))
 
     def _on_choose_scheduler(self, _row):
         self._sched_choose_button.set_sensitive(False)
@@ -2926,13 +2941,13 @@ class SystemWindow(Adw.ApplicationWindow):
         self._dock_guard = True
         self._dock_switch.set_active(dock_on)
         self._dock_guard = False
-        self._dock_switch.set_sensitive(not self._busy)
-        self._dock_wake_button.set_sensitive(not self._busy)
+        self._dock_switch.set_sensitive(self._may("dock-rescue"))
+        self._dock_wake_button.set_sensitive(self._may("dock-wake"))
         self._set_loading(self._queues_row, False)
         self._queues_row.set_subtitle(", ".join(queues) if queues else "None")
-        self._printers_button.set_sensitive(bool(queues) and not self._busy)
+        self._printers_button.set_sensitive(bool(queues) and self._may("printers-repair"))
         self._home_group.set_visible(home_needs)
-        self._home_button.set_sensitive(not self._busy)
+        self._home_button.set_sensitive(self._can_run([HOME_RESTORE, "--apply"]))
 
     def _on_dock_toggled(self, switch, _pspec):
         if self._dock_guard:
@@ -3044,8 +3059,8 @@ class SystemWindow(Adw.ApplicationWindow):
             row.set_subtitle(f"{label}. {detail}" if detail else label)
             row._install.set_visible(st["state"] in ("absent", "partial", "unknown"))
             row._remove.set_visible(st["state"] in ("installed", "pending", "partial"))
-            row._install.set_sensitive(not self._busy)
-            row._remove.set_sensitive(not self._busy)
+            row._install.set_sensitive(self._may(f"{key}-on"))
+            row._remove.set_sensitive(self._may(f"{key}-off"))
             if st["state"] == "pending":
                 pending = True
         self._restart_banner.set_revealed(pending)
@@ -3192,6 +3207,7 @@ class SystemWindow(Adw.ApplicationWindow):
             button.set_visible(False)
             row.add_suffix(button)
         row._on, row._off = on, off
+        row._tweak_key = key
         self._set_loading(row, True)
         group.add(row)
         return row
@@ -3247,7 +3263,7 @@ class SystemWindow(Adw.ApplicationWindow):
                 row._button.set_visible(profile in ("stock", "mixed"))
             else:
                 row._button.set_visible(profile != "naked")
-            row._button.set_sensitive(not self._busy)
+            row._button.set_sensitive(self._may("apps-slim"))
         if profile == "mixed":
             self._profile_rows["stock"].set_subtitle("A trimmed set with some apps put back by hand. Restore brings the whole stock set; Bazaar removes single apps")
         self._excluded = excluded
@@ -3283,8 +3299,9 @@ class SystemWindow(Adw.ApplicationWindow):
         row.set_subtitle(subtitle)
         row._on.set_visible(not on)
         row._off.set_visible(on)
-        row._on.set_sensitive(not self._busy)
-        row._off.set_sensitive(not self._busy)
+        spec = TWEAKS[row._tweak_key]
+        row._on.set_sensitive(self._can_run(spec["argv_on"]))
+        row._off.set_sensitive(self._can_run(spec["argv_off"]))
 
     def _on_profile(self, _button, key):
         if key == "stock":
@@ -3527,7 +3544,7 @@ class SystemWindow(Adw.ApplicationWindow):
         self._phone_name_guard = True
         self._phone_name_row.set_text(name)
         self._phone_name_guard = False
-        self._phone_look_button.set_sensitive(not self._busy)
+        self._phone_look_button.set_sensitive(True)
         for row in self._phone_rows:
             self._phone_devices_group.remove(row)
         self._phone_rows = []
@@ -4036,6 +4053,39 @@ class SystemWindow(Adw.ApplicationWindow):
 
     # ═════════════ runner for long operations, privileged or not ═════════════
 
+    def _running(self):
+        return [(op["title"], op["lanes"]) for op in self._ops]
+
+    def _holding(self, lane):
+        return any(lane in op["lanes"] for op in self._ops)
+
+    def _blocked_by(self, argv):
+        """What argv would have to wait for, or None (ls.waiting_for)."""
+        return ls.waiting_for(ls.operation_lanes(argv), self._running(), bool(self._state.get("transaction")))
+
+    def _can_run(self, argv):
+        return self._blocked_by(argv) is None
+
+    def _may(self, verb, *args):
+        """Whether the helper's verb could start now: a button's sensitivity."""
+        return self._can_run(["pkexec", ADMIN, verb, *args])
+
+    def _sync_banner(self):
+        text = ls.banner_text(self._running(), bool(self._state.get("transaction")))
+        self._ops_banner.set_title(text)
+        self._ops_banner.set_revealed(bool(text))
+
+    def _sync_operations(self, refresh_page=False):
+        """An operation started or ended: the banner, the Overview's buttons
+        and, when one starts, the page in view, whose buttons follow what
+        runs (an ending one refreshes everything anyway)."""
+        self._sync_banner()
+        self._action_button.set_sensitive(self._may("update"))
+        self._rollback_button.set_sensitive(bool(self._state.get("rollback")) and self._may("rollback"))
+        self._keep_button.set_sensitive(bool(self._state.get("booted")) and self._may("pin", "0"))
+        if refresh_page and self._current_page != "overview":
+            self._refresh_page(self._current_page)
+
     def _run_operation(self, argv, title, working, done, stdin_text=None, then=None, phases=False):
         """Runs argv and shows a progress dialog: a spinner and a sentence,
         the command's output under Details. The dialog can be closed while
@@ -4043,16 +4093,16 @@ class SystemWindow(Adw.ApplicationWindow):
         when it failed. stdin_text, when given, is written to the command
         and forgotten: that is how secrets travel. then(code) runs when the
         command has ended, whatever the code: the user part that follows a
-        privileged one (Homebrew after the developer layer)."""
-        if self._busy:
-            self._toast("Another operation is still running")
+        privileged one (Homebrew after the developer layer). It waits only
+        for an operation that holds the same (ls.operation_lanes): the rest
+        of the window keeps working, and a banner says what waits."""
+        blocker = self._blocked_by(argv)
+        if blocker:
+            self._toast(f"{blocker} is still running; try again when it ends")
             return
-        self._busy = True
-        self._action_button.set_sensitive(False)
-        self._rollback_button.set_sensitive(False)
-        self._last_log = ""
-        self._last_log_title = title
-        self._phase_label = None
+        op = {"title": title, "lanes": ls.operation_lanes(argv), "log": "", "phase": None}
+        self._ops.append(op)
+        self._sync_operations(refresh_page=True)
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         for side in ("top", "bottom", "start", "end"):
@@ -4073,11 +4123,11 @@ class SystemWindow(Adw.ApplicationWindow):
             # A system update in plain words, phase by phase, read from
             # the helper's output as it arrives (ls.update_phase); the raw
             # lines stay under Details.
-            self._phase_label = Gtk.Label(label="Starting")
-            self._phase_label.add_css_class("dimmed")
-            self._phase_label.set_wrap(True)
-            self._phase_label.set_justify(Gtk.Justification.CENTER)
-            box.append(self._phase_label)
+            op["phase"] = Gtk.Label(label="Starting")
+            op["phase"].add_css_class("dimmed")
+            op["phase"].set_wrap(True)
+            op["phase"].set_justify(Gtk.Justification.CENTER)
+            box.append(op["phase"])
         buffer = Gtk.TextBuffer()
         view = Gtk.TextView(buffer=buffer, editable=False, monospace=True)
         view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
@@ -4106,7 +4156,7 @@ class SystemWindow(Adw.ApplicationWindow):
         try:
             proc = Gio.Subprocess.new(argv, flags)
         except GLib.Error as e:
-            self._finish_operation()
+            self._finish_operation(op)
             dialog.close()
             self._toast(f"Could not start: {e.message}")
             return
@@ -4119,15 +4169,15 @@ class SystemWindow(Adw.ApplicationWindow):
             pipe.close(None)
             stdin_text = None
         stream = Gio.DataInputStream.new(proc.get_stdout_pipe())
-        self._read_line(stream, buffer, view)
-        proc.wait_async(None, self._on_operation_done, (dialog, state, indicator, status, expander, done, then))
+        self._read_line(stream, buffer, view, op)
+        proc.wait_async(None, self._on_operation_done, (op, dialog, state, indicator, status, expander, done, then))
 
     def _on_operation_dialog_closed(self, state):
         state["open"] = False
         if not state["done"]:
             self._toast("Still running in the background; a message follows when it ends")
 
-    def _read_line(self, stream, buffer, view):
+    def _read_line(self, stream, buffer, view, op):
         def on_line(src, result):
             try:
                 line, _ = src.read_line_finish_utf8(result)
@@ -4135,38 +4185,39 @@ class SystemWindow(Adw.ApplicationWindow):
                 line = None
             if line is None:
                 return
-            self._last_log += line + "\n"
-            if self._phase_label is not None:
+            op["log"] += line + "\n"
+            if op["phase"] is not None:
                 phase = ls.update_phase(line)
                 if phase:
-                    self._phase_label.set_text(phase)
+                    op["phase"].set_text(phase)
             buffer.insert(buffer.get_end_iter(), line + "\n")
             view.scroll_to_mark(buffer.create_mark(None, buffer.get_end_iter(), False), 0, False, 0, 0)
-            self._read_line(src, buffer, view)
+            self._read_line(src, buffer, view, op)
 
         stream.read_line_async(GLib.PRIORITY_DEFAULT, None, on_line)
 
     def _on_operation_done(self, proc, result, payload):
-        dialog, state, indicator, status, expander, done_message, then = payload
+        op, dialog, state, indicator, status, expander, done_message, then = payload
         state["done"] = True
-        self._phase_label = None
+        op["phase"] = None
         try:
             proc.wait_finish(result)
             code = proc.get_exit_status() if proc.get_if_exited() else -1
         except GLib.Error:
             code = -1
-        self._finish_operation()
+        self._finish_operation(op)
         if code == 0:
             if state["open"]:
                 dialog.close()
             self._toast(done_message)
-        elif code in (126, 127) and not self._last_log.strip():
+        elif code in (126, 127) and not op["log"].strip():
             # pkexec: the authentication was dismissed or refused.
             if state["open"]:
                 dialog.close()
             self._toast("Not authorized, nothing was changed")
         else:
             # A failed operation is exactly when the output matters.
+            self._failed_op = op
             if state["open"]:
                 indicator.set_visible_child_name("failed")
                 status.set_text("The operation did not complete. The details below say why.")
@@ -4177,13 +4228,13 @@ class SystemWindow(Adw.ApplicationWindow):
             then(code)
         self._refresh_all()
 
-    def _finish_operation(self):
-        self._busy = False
-        self._action_button.set_sensitive(True)
-        self._rollback_button.set_sensitive(bool(self._state.get("rollback")))
+    def _finish_operation(self, op):
+        self._ops = [other for other in self._ops if other is not op]
+        self._sync_operations()
 
     def _show_last_log(self):
-        buffer = Gtk.TextBuffer(text=self._last_log or "No output was recorded.")
+        op = self._failed_op or {}
+        buffer = Gtk.TextBuffer(text=op.get("log") or "No output was recorded.")
         view = Gtk.TextView(buffer=buffer, editable=False, monospace=True)
         view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         scroller = Gtk.ScrolledWindow(child=view, vexpand=True)
@@ -4191,7 +4242,7 @@ class SystemWindow(Adw.ApplicationWindow):
         toolbar.add_top_bar(Adw.HeaderBar())
         toolbar.set_content(scroller)
         dialog = Adw.Dialog()
-        dialog.set_title(self._last_log_title or "Details")
+        dialog.set_title(op.get("title") or "Details")
         dialog.set_content_width(620)
         dialog.set_content_height(420)
         dialog.set_child(toolbar)

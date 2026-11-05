@@ -6,6 +6,8 @@ follows, what rpm-ostree's JSON says, when an update counts as available,
 how pending apps and checks are worded."""
 
 import json
+import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -525,6 +527,159 @@ check("pin index: booted after a staged one is 1", ls.pin_index(ostree_status) =
 check("pin index: booted first is 0", ls.pin_index("* default " + "a" * 64 + ".0\n  default " + "b" * 64 + ".0 (rollback)\n") == 0)
 check("pin index: not found", ls.pin_index("") is None and ls.pin_index("garbage\n") is None)
 check("keep phrase", ls.keep_phrase(True, "v0").startswith("Kept") and ls.keep_phrase(False, "v0").startswith("Not kept"))
+
+# A failed night run that a newer image has overtaken
+day = 1793800000  # 2026-11-04 16:26 UTC, any day will do
+built_status = {"deployments": [
+    {"staged": True, "version": "lucciola.20261106", "base-timestamp": day + 90000, "timestamp": day + 99000},
+    {"booted": True, "version": "lucciola.20261105", "base-timestamp": day + 40000, "timestamp": day + 60000},
+    {"version": "lucciola.20261104", "timestamp": day},
+]}
+st_built = ls.parse_deployments(json.dumps(built_status))
+check("image built: the image's own time, not when the extra packages were applied",
+      st_built["staged_built"] == day + 90000 and st_built["booted_built"] == day + 40000)
+check("image built: without extra packages the commit time is the image's",
+      ls.image_built({"timestamp": day}) == day and ls.image_built({}) is None and ls.image_built({"timestamp": "x"}) is None)
+
+def uupd(*entries):
+    return "\n".join(json.dumps(e) for e in entries)
+
+SYS_FAIL = {"msg": "module_fail", "module": "system", "context": "System Update", "output": "error: Could not depsolve transaction; 1 problem detected"}
+BOX_FAIL = {"msg": "module_fail", "module": "distrobox", "context": "Distroboxes for User: daniel", "output": {"Stdout": "", "Stderr": "error: no such container"}}
+only_system = uupd({"msg": "Hardware checks passed"}, SYS_FAIL, {"msg": "Updates finished with errors!"},
+                   {"msg": "1 update module(s) failed: System Update"}, {"msg": "Exited with failed updates."})
+both = uupd(SYS_FAIL, BOX_FAIL, {"msg": "2 update module(s) failed: System Update, Distroboxes for User: daniel"})
+check("failed steps: the closing line names them", ls.failed_steps(only_system) == ["System Update"]
+      and ls.failed_steps(both) == ["System Update", "Distroboxes for User: daniel"])
+check("failed steps: a run cut short does not borrow the last run's list",
+      ls.failed_steps(only_system + "\n" + uupd({"msg": "Hardware checks passed"}, BOX_FAIL)) == [])
+check("failed steps: nothing said, nothing known", ls.failed_steps("") == [] and ls.failed_steps("plain text\n{broken") == []
+      and ls.failed_steps(uupd({"msg": "1 update module(s) failed: System Update"})) == [])
+
+def night(outcome="failed", key="system", last=day + 20000):
+    return {"key": key, "title": "System", "outcome": outcome, "unit": "uupd.service", "user": False,
+            "last": last, "next": day + 110000, "reason": "System Update: error: Could not depsolve transaction", "line": "Failed"}
+
+ch = night()
+check("superseded: the system step failed, then a newer image was booted",
+      ls.settle_system_failure(ch, only_system, {"booted_built": day + 40000}, day + 50000) and ch["outcome"] == "superseded"
+      and ch["line"].startswith("The run ") and "a newer version has arrived since" in ch["line"] and "Next run" in ch["line"])
+check("superseded: or downloaded and waiting for the restart",
+      ls.settle_system_failure(night(), only_system, {"booted_built": day, "staged_built": day + 30000}, day + 50000))
+check("not superseded: the images here are older than the run",
+      not ls.settle_system_failure(night(), only_system, {"booted_built": day + 10000, "staged_built": None}, day + 50000))
+check("not superseded: a Distrobox step failed too, a new image does not mend it",
+      not ls.settle_system_failure(night(), both, {"booted_built": day + 40000}, day + 50000))
+check("not superseded: a run that hung, or a journal that does not say",
+      not ls.settle_system_failure(night("hung"), only_system, {"booted_built": day + 40000}, day + 50000)
+      and not ls.settle_system_failure(night(), "", {"booted_built": day + 40000}, day + 50000))
+check("not superseded: another channel, or a run that went well",
+      not ls.settle_system_failure(night(key="apps"), only_system, {"booted_built": day + 40000}, day + 50000)
+      and not ls.settle_system_failure(night("ok"), only_system, {"booted_built": day + 40000}, day + 50000))
+untouched = night()
+ls.settle_system_failure(untouched, both, {"booted_built": day + 40000}, day + 50000)
+check("not superseded: the channel is left as it was", untouched == night())
+
+# Which operations of the window wait for each other
+ADMIN_PATH = ROOT / "build_files/system_files/usr/libexec/lucciola/admin"
+FEATURE_PATH = ROOT / "build_files/system_files/usr/libexec/lucciola/feature"
+
+def lanes(*argv):
+    return ls.operation_lanes(["pkexec", "/usr/libexec/lucciola/admin", *argv])
+
+check("lanes: the update, a rollback, a kept version, the kernel hold the system",
+      all("system" in lanes(*v) for v in (["update"], ["rollback"], ["pin", "1"], ["unpin", "0"], ["kernel", "fedora"])))
+check("lanes: SSH, the login, the TPM, GRUB, the scheduler, the dock, the printers hold nothing shared",
+      all(not lanes(v) & {"system", "flatpak", "brew"} for v in
+          ("ssh-on", "autologin-off", "tpm-unlock-enable", "grub-lock-on", "secureboot-enroll", "scheduler", "scheduler-off",
+           "dock-wake", "dock-rescue", "printers-repair")))
+check("lanes: on and off of one switch are one operation",
+      lanes("ssh-on") == lanes("ssh-off") == {"ssh"} and lanes("grub-lock-on") == lanes("grub-lock-off")
+      and lanes("dock-wake") == lanes("dock-rescue") and lanes("scheduler") == lanes("scheduler-off")
+      and ls.operation_lanes(["/usr/bin/lucciola-keyring", "tpm"]) == ls.operation_lanes(["/usr/bin/lucciola-keyring", "tpm-off"]))
+check("lanes: gaming holds the system and Flatpak, the AI apps only Flatpak, Docker only the system",
+      {"system", "flatpak"} <= lanes("gaming-native-on") and lanes("ai-on") == {"ai", "flatpak"} and lanes("docker-off") == {"docker", "system"})
+check("lanes: apps, Homebrew, tweaks",
+      ls.operation_lanes(["flatpak", "update", "-y"]) == {"flatpak"} and "flatpak" in lanes("apps-slim")
+      and ls.operation_lanes(["/usr/libexec/margine/brew-upgrade"]) == {"brew"}
+      and ls.operation_lanes(["/usr/libexec/margine/devmode", "brew-install"]) == {"brew"} and "brew" in lanes("brew-remove")
+      and "flatpak" in ls.operation_lanes(["/usr/bin/ujust", "install-spola", "install"])
+      and ls.operation_lanes(["/usr/bin/ujust", "lucciola-blender-gpu", "enable"]) == {"lucciola-blender-gpu"})
+check("lanes: nothing to run holds nothing", ls.operation_lanes([]) == frozenset() and ls.operation_lanes(["pkexec"]) == frozenset())
+
+admin_src = ADMIN_PATH.read_text()
+features = re.search(r"^FEATURES = \(([^)]*)\)", admin_src, re.M)
+admin_features = set(re.findall(r'"([a-z-]+)"', features.group(1))) if features else set()
+check("lanes: every optional feature of the helper is known", admin_features and admin_features == set(ls.FEATURE_LANES),
+      f"admin {sorted(admin_features)} vs {sorted(ls.FEATURE_LANES)}")
+
+# What the feature helper's install and remove run, one level of its own functions deep.
+bodies, name, buf = {}, None, []
+for line in FEATURE_PATH.read_text().splitlines():
+    m = re.match(r"^([a-z_]+)\(\) \{(.*)$", line)
+    if name is None and m:
+        if m.group(2).rstrip().endswith("}"):
+            bodies[m.group(1)] = m.group(2)
+        else:
+            name, buf = m.group(1), [m.group(2)]
+    elif name is not None:
+        if line == "}":
+            bodies[name], name = "\n".join(buf), None
+        else:
+            buf.append(line)
+
+def runs(fn, depth=3):
+    text = bodies.get(fn, "")
+    if depth:
+        for called in set(re.findall(r"\b([a-z_]+)\b", text)) & set(bodies) - {fn}:
+            text += "\n" + runs(called, depth - 1)
+    return text
+
+wrong = []
+for feature in sorted(ls.FEATURE_LANES):
+    for side, verb in (("install", "on"), ("remove", "off")):
+        text = runs(f"{feature.replace('-', '_')}_{side}")
+        held = lanes(f"{feature}-{verb}")
+        if "rpm-ostree" in text and "system" not in held:
+            wrong.append(f"{feature}-{verb} runs rpm-ostree")
+        if re.search(r"flatpak (install|uninstall|update)", text) and "flatpak" not in held:
+            wrong.append(f"{feature}-{verb} runs flatpak")
+check("lanes: a feature that runs rpm-ostree or Flatpak holds it", not wrong and len(bodies) > 20, ", ".join(wrong))
+
+# Every other verb: what the helper plans says what it holds.
+VERB_ARGS = {"pin": ["1"], "unpin": ["1"], "kernel": ["fedora"], "flatpak-unblock": ["org.example.App"],
+             "scheduler": ["lavd", "Auto"], "dock-rescue": ["on"]}
+verbs = re.findall(r'^    "([a-z-]+)": act_', admin_src, re.M)
+wrong = []
+for verb in verbs:
+    if verb.endswith("-status"):
+        continue
+    res = subprocess.run([sys.executable, "-I", str(ADMIN_PATH), "--check", verb, *VERB_ARGS.get(verb, [])], capture_output=True, text=True)
+    if res.returncode != 0:
+        wrong.append(f"{verb}: plan failed ({res.stderr.strip()[-80:]})")
+        continue
+    held = lanes(verb, *VERB_ARGS.get(verb, []))
+    if re.search(r"rpm-ostree|ostree admin|system-update|kernel-switch", res.stdout) and "system" not in held:
+        wrong.append(f"{verb} touches the system")
+    if re.search(r"flatpak (install|uninstall|update)|/feature (slim|naked)", res.stdout) and "flatpak" not in held:
+        wrong.append(f"{verb} touches Flatpak")
+    if re.search(r"brew", res.stdout) and "brew" not in held:
+        wrong.append(f"{verb} touches Homebrew")
+check("lanes: every verb of the helper holds what its plan touches", len(verbs) > 20 and not wrong, ", ".join(wrong))
+
+running = [("Downloading Update", lanes("update")), ("Turning Remote Login On", lanes("ssh-on"))]
+check("waiting: a layer waits for the update, SSH and the scheduler do not",
+      ls.waiting_for(lanes("docker-on"), running) == "Downloading Update"
+      and ls.waiting_for(lanes("scheduler"), running) is None and ls.waiting_for(ls.operation_lanes(["flatpak", "update"]), running) is None)
+check("waiting: the same switch waits for itself", ls.waiting_for(lanes("ssh-off"), running) == "Turning Remote Login On")
+check("waiting: the night's update holds the system too",
+      ls.waiting_for(lanes("vm-on"), [], background=True) == "The system update in the background"
+      and ls.waiting_for(lanes("ssh-on"), [], background=True) is None)
+check("banner: says what waits and that the rest works",
+      ls.banner_text(running) == "Downloading Update: changes to the system (updates, extra packages, the kernel) wait until it ends, everything else works as usual"
+      and ls.banner_text([("Turning Remote Login On", lanes("ssh-on"))]) == ""
+      and ls.banner_text([], background=True).startswith("A system update is running in the background")
+      and ls.banner_text([]) == "")
 
 print("system-logic: all checks passed" if fails == 0 else f"system-logic: {fails} failed")
 sys.exit(1 if fails else 0)
