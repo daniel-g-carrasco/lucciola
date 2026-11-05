@@ -53,6 +53,20 @@ stable release is cut.
   the driver typed was lost while Bluefin's profile printed its banner (23 s).
   The driver now asks again until the shell answers.
 
+### Changed (2026-11-04, lock screen and login)
+- **The lock screen looks like the login screen.** The wallpaper stays in sight,
+  with the clock above the account picture, the name and the password field. The
+  session actions moved to four icons at the bottom right, where the login has
+  its own. Weather shows under the clock once a location is set, and the player
+  only while something plays. The confirm button is gone: Enter confirms.
+- **One line under the field on both screens:** the fingerprint prompt, centred,
+  on the lock screen only if the account has a fingerprint enrolled. The "Type your
+  password" hint is gone; errors and Caps Lock still appear.
+- **The two forms match.** The login's field has the lock screen's outline, the
+  field alone is centred on both (the eye and the arrow stay outside it), and the
+  space between the name and the field is the same. The lock screen's field is
+  transparent.
+
 ### Fixed (2026-11-04, the login screen)
 - **The login form no longer moves when the fingerprint prompt appears.** The
   panel is centred and grew with its contents, so the message pushed everything

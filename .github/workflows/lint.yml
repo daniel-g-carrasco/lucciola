@@ -187,6 +187,10 @@ jobs:
         # a locked screen, one per failed automatic run, nothing when all is
         # well. See tests/update-notify.test.sh.
         run: bash tests/update-notify.test.sh
+      - name: The lock screen arranged like the login, on every monitor
+        # bar-widths on a fake niri and fprintd: what it writes for Noctalia, and
+        # the saved settings it may and may not touch. See tests/lock-look.test.sh.
+        run: bash tests/lock-look.test.sh
       - name: The login notice waits for the notification daemon
         # margine-notify and margine-upgrade-notify on a fake gdbus that refuses
         # as the bus does until the daemon is up. See tests/login-notice.test.sh.

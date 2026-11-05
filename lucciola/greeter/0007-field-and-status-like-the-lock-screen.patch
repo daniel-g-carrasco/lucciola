@@ -1,0 +1,76 @@
+Lucciola: the login form looks like the lock screen's
+
+The field's outline while it has the focus uses the secondary colour instead of
+the primary, which greeter.toml keeps in the background's colour so that only
+text shows (it also rings the account picture and fills the selected menu row).
+Noctalia's lock screen draws its field the same way: sand around the field,
+twice the width of the resting border.
+
+The field alone is centred, like the picture and the name above it, with the
+arrow outside it, and the status line is centred under the form: the arrow no
+longer pushes the field to the left of everything else.
+
+37 more pixels between the name and the field, the room the lock screen needs
+there for its messages, so the two forms have one shape.
+
+Applied by lucciola/greeter/noctalia-greeter.spec to the v1.6.0 tag, after 0006.
+A look of Lucciola's, not proposed upstream.
+
+diff --git a/src/greeter/greeter_surface.cpp b/src/greeter/greeter_surface.cpp
+index e7add21..5f5ac77 100644
+--- a/src/greeter/greeter_surface.cpp
++++ b/src/greeter/greeter_surface.cpp
+@@ -1189,7 +1189,9 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
+ 
+   const float headerTopPadding = Style::spaceSm();
+   const float headerGlyphBlock = headerGlyphSize + Style::spaceMd();
+-  const float headerToContentGap = Style::spaceLg();
++  // Room between the name and the field, as on the lock screen, where a message
++  // may appear there.
++  const float headerToContentGap = Style::spaceLg() + Style::scaled(37.0f);
+   const float headerBlockHeight = headerTopPadding + headerGlyphBlock + subtitleGap + headerToContentGap;
+ 
+   const float sessionRowH = rowHeight;
+@@ -1385,11 +1387,13 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
+     }
+ 
+     m_passwordField->setSize(inputWidth, 0.0f);
+-    m_passwordField->setPosition((contentLeft), (contentTop));
++    // The field alone is centred, like the name above it; the arrow stays outside.
++    const float fieldLeft = contentLeft + std::round((contentWidth - inputWidth) * 0.5f);
++    m_passwordField->setPosition(fieldLeft, (contentTop));
+     m_passwordField->layout(*renderer);
+ 
+     m_loginButton->setSize(buttonWidth, Style::controlHeight());
+-    m_loginButton->setPosition((contentLeft + inputWidth + gap), (contentTop));
++    m_loginButton->setPosition((fieldLeft + inputWidth + gap), (contentTop));
+     m_loginButton->layout(*renderer);
+     if (Glyph* loginGlyph = m_loginButton->glyph()) {
+       (void)loginGlyph->measure(*renderer);
+@@ -1410,7 +1414,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
+   if (hasStatus) {
+     const float statusY = contentTop + contentBlockHeight + statusGap;
+     m_statusLabel->setVisible(true);
+-    m_statusLabel->setPosition((contentLeft), (statusY));
++    m_statusLabel->setPosition(contentLeft + std::round((contentWidth - m_statusLabel->width()) * 0.5f), statusY);
+   } else {
+     m_statusLabel->setVisible(false);
+   }
+diff --git a/src/ui/controls/input.cpp b/src/ui/controls/input.cpp
+index 6fc4644..eadd773 100644
+--- a/src/ui/controls/input.cpp
++++ b/src/ui/controls/input.cpp
+@@ -556,11 +556,11 @@ void Input::applyVisualState() {
+ 
+   Color fill = focused ? colorForRole(ColorRole::Surface) : colorForRole(ColorRole::SurfaceVariant);
+   Color border = m_invalid ? colorForRole(ColorRole::Error)
+-      : focused            ? colorForRole(ColorRole::Primary)
++      : focused            ? colorForRole(ColorRole::Secondary)
+       : hovered            ? colorForRole(ColorRole::Hover)
+                            : colorForRole(ColorRole::Outline);
+   Radii radius(Style::scaledRadiusMd());
+-  float borderWidth = Style::borderWidth();
++  float borderWidth = focused ? Style::borderWidth() * 2.0f : Style::borderWidth();
+ 
+   if (m_embeddedStyle) {
+     fill = colorForRole(ColorRole::SurfaceVariant);
