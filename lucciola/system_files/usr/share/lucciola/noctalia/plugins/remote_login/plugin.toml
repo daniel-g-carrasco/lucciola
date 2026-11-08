@@ -1,0 +1,52 @@
+# Remote Login for Lucciola: SSH into this computer only from your own
+# WireGuard tunnels and the devices you choose. The work is done by
+# /usr/libexec/lucciola/remote-login (status, no root) and the privileged
+# helper (/usr/libexec/lucciola/admin ssh-on, ssh-off, through pkexec: the
+# authentication dialog is the confirmation); this plugin is its face:
+#
+#   service   -> polls `remote-login status --json`, runs the commands the
+#                other entries send through noctalia.state
+#   indicator -> bar glyph, shown only while remote login is on, so it is
+#                never left open unnoticed
+#   tile      -> control-centre toggle (right click opens the panel)
+#   panel     -> who may come in, how to reach this computer, and a way to
+#                Lucciola System's Login page to add or remove devices
+id = "lucciola/remote_login"
+name = "Remote Login"
+version = "1.0.0"
+plugin_api = 24
+author = "lucciola"
+license = "MIT"
+icon = "terminal-2"
+description = "SSH into this computer only from your WireGuard tunnels and the devices you choose; on and off from the bar."
+tags = ["ssh", "remote", "wireguard", "firewall"]
+dependencies = ["systemd"]
+
+[[setting]]
+key = "command"
+type = "string"
+label_key = "settings.command.label"
+description_key = "settings.command.description"
+default = "/usr/libexec/lucciola/remote-login"
+advanced = true
+
+[[service]]
+id = "service"
+entry = "service.luau"
+
+[[widget]]
+id = "indicator"
+entry = "indicator.luau"
+
+[[shortcut]]
+id = "tile"
+entry = "tile.luau"
+
+[[panel]]
+id = "panel"
+entry = "panel.luau"
+width = 400
+height = 450
+placement = "attached"
+position = "auto"
+open_near_click = true

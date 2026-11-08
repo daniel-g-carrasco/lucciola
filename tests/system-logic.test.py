@@ -134,17 +134,25 @@ check("pcrs rule", ls.pcrs_ok("7") and ls.pcrs_ok("7+14") and not ls.pcrs_ok("7;
 check("autologin enabled", ls.parse_autologin('autologin: ENABLED for user "daniel" (login screen: GDM)') == (True, "daniel"))
 check("autologin disabled", ls.parse_autologin("autologin: disabled\nlucciola-autologin: note: …") == (False, None))
 check("autologin unknown", ls.parse_autologin("") == (None, None))
-check("ssh: on", ls.ssh_state("active\n", "yes\n") == "on")
-check("ssh: off", ls.ssh_state("inactive\n", "no\n") == "off" and ls.ssh_state("", "") == "off")
-check("ssh: running behind a closed firewall", ls.ssh_state("active\n", "no\n") == "blocked")
-check("ssh: firewall open, nothing answers", ls.ssh_state("inactive\n", "yes\n") == "open")
-check("ssh: a stopped firewall blocks nothing", ls.ssh_state("active\n", "not running\n") == "on" and ls.ssh_state("failed\n", "not running\n") == "off")
-check("ssh: addresses without loopback, containers and VMs", ls.ip_addresses("lo UNKNOWN 127.0.0.1/8\nwlp1s0 UP 192.168.2.80/24\npodman0 UP 10.88.0.1/16\nvirbr0 UP 192.168.122.1/24\ntailscale0 UNKNOWN 100.64.0.2/32\n") == ["192.168.2.80", "100.64.0.2"])
-check("ssh: no addresses", ls.ip_addresses("") == [] and ls.ip_addresses(None) == [])
-check("ssh phrase: on names how to reach it", ls.ssh_phrase("on", "daniel", ["192.168.2.80"]) == "On. From another computer: daniel@192.168.2.80")
-check("ssh phrase: on with no network", "not on a network" in ls.ssh_phrase("on", "daniel", []))
-check("ssh phrase: half states say what the switch does", "Turn this on" in ls.ssh_phrase("blocked", "d", []) and "Turn this on" in ls.ssh_phrase("open", "d", []))
-check("ssh phrase: off", ls.ssh_phrase("off", "d", []).startswith("Off."))
+rl = {"state": "on", "tunnels": [{"name": "wg-home", "active": True, "own": True}, {"name": "Proton", "active": False, "own": False}],
+      "devices": [{"address": "192.168.2.85", "name": "Windows PC"}], "addresses": [{"interface": "wg-home", "address": "10.66.66.2"}], "user": "daniel"}
+check("remote login: the helper's JSON keeps every key", ls.remote_login_status(json.dumps({"state": "off"}))["devices"] == []
+      and ls.remote_login_status("not json")["state"] == "unknown" and ls.remote_login_status("[]")["state"] == "unknown")
+check("remote login phrase: on names the tunnels, the devices and how to reach it",
+      ls.remote_login_phrase(rl) == "On, for wg-home and 1 device. From there: daniel@10.66.66.2")
+check("remote login phrase: a full-route VPN is not one of your tunnels", ls.own_tunnels(rl) == ["wg-home"])
+check("remote login phrase: on with nobody allowed says so", "nobody yet" in ls.remote_login_phrase({"state": "on"}))
+check("remote login phrase: the old open state and the blocked one say how to fix them",
+      "every network" in ls.remote_login_phrase({"state": "everyone"}) and "off and on" in ls.remote_login_phrase({"state": "blocked"}))
+check("remote login phrase: off and unknown", ls.remote_login_phrase({"state": "off"}).startswith("Off.") and ls.remote_login_phrase({}).startswith("Could not"))
+check("tunnels phrase", ls.tunnels_phrase(rl) == "wg-home" and ls.tunnels_phrase({"tunnels": []}).startswith("None yet")
+      and ls.tunnels_phrase({"tunnels": [{"name": "wg", "own": True, "active": False}]}) == "wg (not connected)")
+check("device check: addresses and narrow networks pass",
+      ls.ssh_device_problem("192.168.2.85", "Windows PC (home)") == "" and ls.ssh_device_problem("192.168.3.0/24", "Lab") == ""
+      and ls.ssh_device_problem("fd00::5", "Phone") == "")
+check("device check: the wrong things are named",
+      ls.ssh_device_problem("nope", "x").startswith("Type") and "too wide" in ls.ssh_device_problem("10.0.0.0/8", "x")
+      and "too wide" in ls.ssh_device_problem("0.0.0.0/0", "x") and "name" in ls.ssh_device_problem("1.2.3.4", "a;b"))
 
 kr = "== lucciola-keyring status ==\n  login keyring: unlocked [OK]\n  unlock at login: TPM credential, used at this login [OK]\n"
 check("keyring: unlocked, tpm used", ls.parse_keyring_status(kr) == {"unlocked": True, "at_login": "tpm-used"})
@@ -594,7 +602,8 @@ check("lanes: SSH, the login, the TPM, GRUB, the scheduler, the dock, the printe
           ("ssh-on", "autologin-off", "tpm-unlock-enable", "grub-lock-on", "secureboot-enroll", "scheduler", "scheduler-off",
            "dock-wake", "dock-rescue", "printers-repair")))
 check("lanes: on and off of one switch are one operation",
-      lanes("ssh-on") == lanes("ssh-off") == {"ssh"} and lanes("grub-lock-on") == lanes("grub-lock-off")
+      lanes("ssh-on") == lanes("ssh-off") == lanes("ssh-allow", "1.2.3.4", "PC") == lanes("ssh-forget", "1.2.3.4") == {"ssh"}
+      and lanes("grub-lock-on") == lanes("grub-lock-off")
       and lanes("dock-wake") == lanes("dock-rescue") and lanes("scheduler") == lanes("scheduler-off")
       and ls.operation_lanes(["/usr/bin/lucciola-keyring", "tpm"]) == ls.operation_lanes(["/usr/bin/lucciola-keyring", "tpm-off"]))
 check("lanes: gaming holds the system and Flatpak, the AI apps only Flatpak, Docker only the system",
@@ -648,7 +657,7 @@ check("lanes: a feature that runs rpm-ostree or Flatpak holds it", not wrong and
 
 # Every other verb: what the helper plans says what it holds.
 VERB_ARGS = {"pin": ["1"], "unpin": ["1"], "kernel": ["fedora"], "flatpak-unblock": ["org.example.App"],
-             "scheduler": ["lavd", "Auto"], "dock-rescue": ["on"]}
+             "scheduler": ["lavd", "Auto"], "dock-rescue": ["on"], "ssh-allow": ["192.168.2.85", "PC"], "ssh-forget": ["192.168.2.85"]}
 verbs = re.findall(r'^    "([a-z-]+)": act_', admin_src, re.M)
 wrong = []
 for verb in verbs:

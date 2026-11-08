@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lucciola: your own WireGuard tunnels while Remote Login is on.
+     /usr/libexec/lucciola/remote-login moves every wireguard profile that does
+     not route everything into this zone and allows SSH here; nothing else
+     comes in from a tunnel then. Off: no service, and the profiles go back to
+     the default zone. -->
+<zone>
+  <short>Lucciola tunnels</short>
+  <description>Your own WireGuard tunnels (home, office), while Remote Login is on: SSH only.</description>
+</zone>

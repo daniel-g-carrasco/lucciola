@@ -1,0 +1,38 @@
+{
+  "who.one_device": "1 dispositivo",
+  "who.devices": "{n} dispositivi",
+  "who.and": " e ",
+  "who.nobody": "Ancora nessuno: aggiungi un dispositivo o configura un tunnel",
+
+  "tooltip.title": "Accesso remoto",
+  "tooltip.on": "acceso",
+  "tooltip.who": "Da",
+  "tooltip.everyone": "acceso per ogni rete: apri il pannello per limitarlo",
+
+  "tile.label": "Accesso remoto",
+
+  "panel.title": "Accesso remoto",
+  "panel.on": "Acceso",
+  "panel.on_detail": "Possono entrare via SSH: {who}. Nessun altro lo raggiunge",
+  "panel.everyone": "Aperto a ogni rete",
+  "panel.everyone_detail": "Acceso alla vecchia maniera: chiunque sulla stessa rete può provare. Spegnilo e riaccendilo per limitarlo ai tuoi tunnel e dispositivi",
+  "panel.blocked": "Attivo, ma chiuso",
+  "panel.blocked_detail": "SSH gira ma nessuno può raggiungerlo. Spegnilo e riaccendilo",
+  "panel.off": "Spento",
+  "panel.off_detail": "Nessuno può entrare in questo computer da un altro",
+  "panel.unknown": "Sconosciuto",
+  "panel.unknown_detail": "Non riesco a leggere lo stato dell'accesso remoto",
+  "panel.turn_on": "Accendi",
+  "panel.turn_off": "Spegni",
+  "panel.who": "Chi può entrare",
+  "panel.not_connected": "non connesso",
+  "panel.none": "Ancora nessun tunnel e nessun dispositivo",
+  "panel.more": "e altri {n} in Lucciola System",
+  "panel.reach": "Da lì",
+  "panel.manage": "Gestisci i dispositivi…",
+
+  "error.title": "Accesso remoto",
+
+  "settings.command.label": "Comando",
+  "settings.command.description": "Percorso del comando remote-login che il plugin legge."
+}

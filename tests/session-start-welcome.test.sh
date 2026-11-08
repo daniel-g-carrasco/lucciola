@@ -79,7 +79,7 @@ check "plugin: no saved list, nothing written, only the marker" bash -c "[ ! -e 
 fresh
 saved_with 'enabled = [ "lucciola/keep_awake", "daniel-g-carrasco/spola" ]'
 run
-check "plugin: a saved list gets it" line_is 'enabled = [ "lucciola/keep_awake", "daniel-g-carrasco/spola", "lucciola/updates" ]'
+check "plugin: a saved list gets each new plugin" line_is 'enabled = [ "lucciola/keep_awake", "daniel-g-carrasco/spola", "lucciola/updates", "lucciola/remote_login" ]'
 check "plugin: other sections untouched" others_kept
 check "plugin: marked as offered" marked
 check "plugin: Noctalia still starts" shell_ran
@@ -89,7 +89,7 @@ check "plugin: switched off afterwards, it stays off" line_is 'enabled = [ "lucc
 fresh
 saved_with 'enabled = [ "lucciola/updates", "lucciola/keep_awake" ]'
 run
-check "plugin: already there, not added twice" line_is 'enabled = [ "lucciola/updates", "lucciola/keep_awake" ]'
+check "plugin: already there, not added twice" line_is 'enabled = [ "lucciola/updates", "lucciola/keep_awake", "lucciola/remote_login" ]'
 fresh
 saved_with 'enabled = [ ]'
 run

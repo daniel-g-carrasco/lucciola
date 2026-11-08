@@ -1,0 +1,355 @@
+#!/usr/bin/python3
+"""lucciola remote-login: SSH into this computer, only from your own tunnels
+and the devices you choose.
+
+    remote-login status [--json]       who can log in now (no root)
+    remote-login on | off              start or stop it (root)
+    remote-login allow ADDRESS NAME    add a device, by address or network (root)
+    remote-login forget ADDRESS        remove a device (root)
+
+On means sshd running, and the firewall letting SSH through only from:
+  - your WireGuard tunnels: every NetworkManager wireguard profile that does
+    not route everything (no 0.0.0.0/0 or ::/0 among its peers, so a home or
+    office tunnel, not a commercial VPN) is put in the firewalld zone
+    lucciola-tunnel, which then allows SSH and nothing else;
+  - the devices listed in /etc/lucciola/remote-login/devices ("ADDRESS NAME"
+    per line), each a rich rule in the default zone that accepts SSH from that
+    address alone.
+Nobody else on the network can even see the port: the old switch opened SSH
+to the whole network, a café's Wi-Fi included (2026-11-08).
+
+Rich rules for SSH found in the default zone the first time the list is
+needed (added by hand before this existed) become devices called "Added by
+hand", so turning it on or off never drops an access somebody set up. The
+window (Lucciola System, Login) and the bar plugin (lucciola/remote_login)
+read `status --json` and run the changes through
+/usr/libexec/lucciola/admin ssh-on, ssh-off, ssh-allow, ssh-forget.
+"""
+
+import getpass
+import ipaddress
+import json
+import os
+import re
+import subprocess
+import sys
+
+DEVICES = os.environ.get("REMOTE_LOGIN_DEVICES", "/etc/lucciola/remote-login/devices")
+ZONE = "lucciola-tunnel"
+ADOPTED_NAME = "Added by hand"
+NAME = re.compile(r"^[\w .,'()&+-]{1,40}$")
+SSH_RULE = re.compile(r'^rule family="ipv[46]" source address="([^"]+)" service name="ssh" accept$')
+SKIP_INTERFACES = ("lo", "podman", "docker", "veth", "virbr", "br-", "vnet")
+
+
+def run(argv, check=False):
+    try:
+        res = subprocess.run(argv, text=True, capture_output=True, timeout=30, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        if check:
+            raise SystemExit(f"remote-login: {argv[0]}: {exc}") from None
+        return 1, "", str(exc)
+    if check and res.returncode != 0:
+        raise SystemExit(f"remote-login: {' '.join(argv)}: {res.stderr.strip() or res.stdout.strip()}")
+    return res.returncode, res.stdout, res.stderr
+
+
+def say(text):
+    print(text, flush=True)
+
+
+# ── the device list ──────────────────────────────────────────────────────
+
+def normalize(address):
+    """A device address as firewalld wants it, or None: one IP, or a network
+    no wider than /16 (IPv4) or /48 (IPv6), so a typo cannot open SSH to the
+    whole internet."""
+    try:
+        net = ipaddress.ip_network(address.strip(), strict=False)
+    except ValueError:
+        return None
+    limit = 16 if net.version == 4 else 48
+    if net.prefixlen < limit:
+        return None
+    if net.num_addresses == 1:
+        return str(net.network_address)
+    return str(net)
+
+
+def family(address):
+    return "ipv6" if ":" in address else "ipv4"
+
+
+def rule(address):
+    return f'rule family="{family(address)}" source address="{address}" service name="ssh" accept'
+
+
+def read_devices():
+    """[(address, name)] in file order; None when the file does not exist."""
+    try:
+        with open(DEVICES, encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+    except FileNotFoundError:
+        return None
+    out = []
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        address, _, name = line.partition(" ")
+        address = normalize(address)
+        if address and address not in (a for a, _ in out):
+            out.append((address, name.strip() or address))
+    return out
+
+
+def write_devices(devices):
+    os.makedirs(os.path.dirname(DEVICES), exist_ok=True)
+    tmp = DEVICES + ".new"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write("# Devices allowed to log in over SSH while Remote Login is on, besides\n"
+                 "# your WireGuard tunnels: ADDRESS NAME, one per line. Lucciola System\n"
+                 "# (Login) and /usr/libexec/lucciola/remote-login edit this file.\n")
+        for address, name in devices:
+            fh.write(f"{address} {name}\n")
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, DEVICES)
+
+
+def ssh_rules(permanent):
+    """Addresses of the SSH rich rules in the default zone."""
+    argv = ["firewall-cmd", "--list-rich-rules"] + (["--permanent"] if permanent else [])
+    rc, out, _ = run(argv)
+    found = []
+    for line in out.splitlines() if rc == 0 else []:
+        m = SSH_RULE.match(line.strip())
+        if m:
+            found.append(m.group(1))
+    return found
+
+
+def devices_adopting():
+    """The device list, created on first use from the SSH rules already in
+    the firewall, so nothing set up by hand is lost."""
+    devices = read_devices()
+    if devices is None:
+        devices = []
+        for address in ssh_rules(permanent=True):
+            address = normalize(address)
+            if address and address not in (a for a, _ in devices):
+                devices.append((address, ADOPTED_NAME))
+        write_devices(devices)
+        if devices:
+            say(f"kept {len(devices)} address(es) already allowed by hand: {', '.join(a for a, _ in devices)}")
+    return devices
+
+
+# ── tunnels ──────────────────────────────────────────────────────────────
+
+def split_terse(line):
+    """nmcli -t fields: ':' separates, '\\:' is a colon inside a field."""
+    fields, cur, i = [], "", 0
+    while i < len(line):
+        if line[i] == "\\" and i + 1 < len(line):
+            cur += line[i + 1]
+            i += 2
+            continue
+        if line[i] == ":":
+            fields.append(cur)
+            cur = ""
+        else:
+            cur += line[i]
+        i += 1
+    fields.append(cur)
+    return fields
+
+
+def peers_route_everything(peers_text):
+    """`nmcli -g wireguard.peers` -> True when a peer takes all traffic."""
+    for m in re.finditer(r"allowed-ips=([^ ]*)", peers_text or ""):
+        for net in m.group(1).replace("\\", "").split(";"):
+            if net.strip() in ("0.0.0.0/0", "::/0"):
+                return True
+    return False
+
+
+def tunnels():
+    """WireGuard profiles: [{uuid, name, device, zone, own}]; own = a tunnel
+    to a private network (not one that routes everything)."""
+    rc, out, _ = run(["nmcli", "-t", "-f", "UUID,TYPE,NAME,DEVICE", "connection", "show"])
+    found = []
+    for line in out.splitlines() if rc == 0 else []:
+        f = split_terse(line)
+        if len(f) < 4 or f[1] != "wireguard":
+            continue
+        uuid, name, device = f[0], f[2], f[3]
+        _, peers, _ = run(["nmcli", "-g", "wireguard.peers", "connection", "show", uuid])
+        _, zone, _ = run(["nmcli", "-g", "connection.zone", "connection", "show", uuid])
+        found.append({"uuid": uuid, "name": name, "device": device, "zone": zone.strip(),
+                      "own": not peers_route_everything(peers)})
+    return found
+
+
+# ── status ───────────────────────────────────────────────────────────────
+
+def addresses():
+    rc, out, _ = run(["ip", "-4", "-br", "addr", "show", "up"])
+    found = []
+    for line in out.splitlines() if rc == 0 else []:
+        words = line.split()
+        if len(words) >= 3 and not words[0].startswith(SKIP_INTERFACES):
+            found.append({"interface": words[0], "address": words[2].split("/")[0]})
+    return found
+
+
+def status():
+    _, active, _ = run(["systemctl", "is-active", "sshd.service"])
+    running = active.strip() == "active"
+    rc, zone_ssh, _ = run(["firewall-cmd", f"--zone={ZONE}", "--query-service=ssh"])
+    tunnel_open = rc == 0 and zone_ssh.strip() == "yes"
+    _, all_ssh, _ = run(["firewall-cmd", "--query-service=ssh"])
+    open_to_all = all_ssh.strip() in ("yes", "not running")
+    devices = read_devices() or []
+    live = set(ssh_rules(permanent=False))
+    tun = [{"name": t["name"], "active": bool(t["device"]), "own": t["own"],
+            "covered": t["zone"] == ZONE} for t in tunnels()]
+    if not running:
+        state = "off"
+    elif open_to_all:
+        state = "everyone"
+    elif tunnel_open or live:
+        state = "on"
+    else:
+        state = "blocked"
+    return {
+        "state": state,
+        "sshd": running,
+        "tunnel_zone": tunnel_open,
+        "open_to_all": open_to_all,
+        "tunnels": tun,
+        "devices": [{"address": a, "name": n, "live": a in live} for a, n in devices],
+        "addresses": addresses(),
+        "user": os.environ.get("USER") or getpass.getuser(),
+    }
+
+
+def print_status(st):
+    words = {"on": "ON: your tunnels and the devices below", "off": "off",
+             "everyone": "ON for EVERYONE on the network (opened the old way; turn it off and on again)",
+             "blocked": "SSH runs, but nobody may reach it"}
+    say(f"Remote login: {words[st['state']]}")
+    own = [t for t in st["tunnels"] if t["own"]]
+    say("Tunnels: " + (", ".join(f"{t['name']}{'' if t['active'] else ' (not connected)'}" for t in own) or "none"))
+    say("Devices: " + (", ".join(f"{d['name']} ({d['address']})" for d in st["devices"]) or "none"))
+    if st["state"] == "on":
+        for a in st["addresses"]:
+            say(f"  ssh {st['user']}@{a['address']}   ({a['interface']})")
+
+
+# ── changes (root) ───────────────────────────────────────────────────────
+
+def need_root(what):
+    if os.geteuid() != 0 and not os.environ.get("REMOTE_LOGIN_TEST"):
+        raise SystemExit(f"remote-login {what}: run it as root (Lucciola System or sudo)")
+
+
+def firewall(*args):
+    """The same change permanently and in the running firewall."""
+    run(["firewall-cmd", "--permanent", *args])
+    run(["firewall-cmd", *args])
+
+
+def turn_on():
+    need_root("on")
+    devices = devices_adopting()
+    run(["systemctl", "enable", "--now", "sshd.service"], check=True)
+    firewall(f"--zone={ZONE}", "--add-service=ssh")
+    firewall("--remove-service=ssh")   # the old switch opened it to everyone
+    wanted = {a for a, _ in devices}
+    for address in set(ssh_rules(permanent=True)) - wanted:
+        firewall(f"--remove-rich-rule={rule(address)}")
+    for address in wanted:
+        firewall(f"--add-rich-rule={rule(address)}")
+    own = []
+    for t in tunnels():
+        if not t["own"]:
+            continue
+        own.append(t["name"])
+        if t["zone"] != ZONE:
+            run(["nmcli", "connection", "modify", t["uuid"], "connection.zone", ZONE])
+        if t["device"]:
+            run(["firewall-cmd", f"--zone={ZONE}", f"--change-interface={t['device']}"])
+    say("Remote login is on, for: " + ", ".join(own + [n for _, n in devices] or ["nobody yet: add a tunnel or a device"]))
+
+
+def turn_off():
+    need_root("off")
+    devices_adopting()   # keep hand-made rules in the list before closing them
+    run(["systemctl", "disable", "--now", "sshd.service"])
+    firewall(f"--zone={ZONE}", "--remove-service=ssh")
+    firewall("--remove-service=ssh")
+    for address in set(ssh_rules(permanent=True)) | set(ssh_rules(permanent=False)):
+        firewall(f"--remove-rich-rule={rule(address)}")
+    for t in tunnels():
+        if t["zone"] == ZONE:
+            run(["nmcli", "connection", "modify", t["uuid"], "connection.zone", ""])
+            if t["device"]:
+                run(["firewall-cmd", f"--zone={ZONE}", f"--remove-interface={t['device']}"])
+    say("Remote login is off. Connections already open last until they end")
+
+
+def allow(address, name):
+    need_root("allow")
+    norm = normalize(address)
+    if not norm:
+        raise SystemExit(f"remote-login: '{address}' is not an address or a network of /16 (IPv6 /48) or narrower")
+    name = " ".join(name.split())
+    if not NAME.match(name):
+        raise SystemExit("remote-login: the name takes letters, digits, spaces and . , ' ( ) & + - (at most 40)")
+    devices = [(a, n) for a, n in devices_adopting() if a != norm] + [(norm, name)]
+    write_devices(devices)
+    _, active, _ = run(["systemctl", "is-active", "sshd.service"])
+    if active.strip() == "active":
+        firewall(f"--add-rich-rule={rule(norm)}")
+    say(f"{name} ({norm}) may log in while Remote Login is on")
+
+
+def forget(address):
+    need_root("forget")
+    norm = normalize(address) or address
+    devices = devices_adopting()
+    kept = [(a, n) for a, n in devices if a != norm]
+    if len(kept) == len(devices):
+        raise SystemExit(f"remote-login: {address} is not in the list")
+    write_devices(kept)
+    firewall(f"--remove-rich-rule={rule(norm)}")
+    say(f"{norm} may no longer log in")
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        return 0 if argv else 2
+    verb, args = argv[0], argv[1:]
+    if verb == "status" and args in ([], ["--json"]):
+        st = status()
+        if args:
+            print(json.dumps(st, ensure_ascii=False))
+        else:
+            print_status(st)
+        return 0
+    if verb in ("on", "off") and not args:
+        turn_on() if verb == "on" else turn_off()
+        return 0
+    if verb == "allow" and len(args) >= 2:
+        allow(args[0], " ".join(args[1:]))
+        return 0
+    if verb == "forget" and len(args) == 1:
+        forget(args[0])
+        return 0
+    print("usage: remote-login status [--json] | on | off | allow ADDRESS NAME | forget ADDRESS", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

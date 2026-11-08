@@ -65,6 +65,7 @@ BREW_UPGRADE = "/usr/libexec/margine/brew-upgrade"
 REPORT = "/usr/libexec/margine/system-report"
 GUIDE_OPEN = "/usr/libexec/margine/guide-open"
 KEYRING = "/usr/bin/lucciola-keyring"
+REMOTE_LOGIN = "/usr/libexec/lucciola/remote-login"
 AUTOLOGIN = "/usr/bin/lucciola-autologin"
 MOK_ENROLL = "/usr/libexec/margine/mok-enroll"
 BLOCKED = "/var/lib/margine/update-watchdog/blocked"
@@ -2596,11 +2597,23 @@ class SystemWindow(Adw.ApplicationWindow):
         self._autologin_switch.connect("notify::active", self._on_autologin_toggled)
         auto.add(self._autologin_switch)
 
-        remote = Adw.PreferencesGroup(title="Remote Login", description="Log in to this computer from another one, over SSH.")
+        remote = Adw.PreferencesGroup(
+            title="Remote Login",
+            description="Log in to this computer over SSH, only from your WireGuard tunnels and the devices below. "
+                        "Anyone else on the network cannot even see it. The bar has the same switch.")
         page.add(remote)
         self._ssh_switch = Adw.SwitchRow(title="Allow Remote Login", subtitle="Checking…")
+        self._ssh_switch.set_subtitle_lines(4)
         self._ssh_switch.connect("notify::active", self._on_ssh_toggled)
         remote.add(self._ssh_switch)
+        self._ssh_tunnels_row = info_row(remote, "Your Tunnels", "network-vpn-symbolic", "Checking…")
+        self._ssh_tunnels_row.set_subtitle_lines(3)
+        self._ssh_devices = Adw.PreferencesGroup(
+            title="Devices",
+            description="Computers that may log in by their address, also without a tunnel: a PC at home, for one.")
+        page.add(self._ssh_devices)
+        self._ssh_device_rows = []
+        self._ssh_add_row = button_row(self._ssh_devices, "Add a Device…", "list-add-symbolic", self._on_ssh_add)
         return page
 
     def _refresh_login(self):
@@ -2614,10 +2627,8 @@ class SystemWindow(Adw.ApplicationWindow):
             _, out, err = run([AUTOLOGIN, "status"])
             enabled, user = ls.parse_autologin(out + err)
             on_main(self._set_autologin, gen, enabled, user)
-            _, active, _ = run(["systemctl", "is-active", "sshd.service"])
-            _, firewall, _ = run(["firewall-cmd", "--query-service=ssh"])
-            _, addresses, _ = run(["ip", "-4", "-br", "addr", "show", "up"])
-            on_main(self._set_ssh, gen, ls.ssh_state(active, firewall), ls.ip_addresses(addresses))
+            _, out, _ = run([REMOTE_LOGIN, "status", "--json"])
+            on_main(self._set_ssh, gen, ls.remote_login_status(out))
             _, out, err = run([KEYRING, "status"], timeout=30)
             on_main(self._set_keyring, gen, ls.parse_keyring_status(out + err))
 
@@ -2639,14 +2650,32 @@ class SystemWindow(Adw.ApplicationWindow):
             else "The login screen asks for a fingerprint or the password at startup"
         )
 
-    def _set_ssh(self, gen, state, addresses):
+    def _set_ssh(self, gen, st):
         if not self._current("login", gen):
             return
+        self._ssh_status = st
         self._ssh_guard = True
-        self._ssh_switch.set_active(state == "on")
+        self._ssh_switch.set_active(st["state"] in ("on", "everyone"))
         self._ssh_guard = False
-        self._ssh_switch.set_sensitive(self._may("ssh-on"))
-        self._ssh_switch.set_subtitle(ls.ssh_phrase(state, GLib.get_user_name(), addresses))
+        self._ssh_switch.set_sensitive(st["state"] != "unknown" and self._may("ssh-on"))
+        self._ssh_switch.set_subtitle(ls.remote_login_phrase(st))
+        self._ssh_tunnels_row.set_subtitle(ls.tunnels_phrase(st))
+        for row in self._ssh_device_rows:
+            self._ssh_devices.remove(row)
+        self._ssh_device_rows = []
+        for device in st["devices"]:
+            row = Adw.ActionRow(title=device.get("name") or device["address"], subtitle=device["address"])
+            row.add_prefix(icon("computer-symbolic"))
+            remove = Gtk.Button(icon_name="user-trash-symbolic", valign=Gtk.Align.CENTER)
+            remove.add_css_class("flat")
+            remove.set_tooltip_text("Remove")
+            remove.update_property([Gtk.AccessibleProperty.LABEL], [f"Remove {row.get_title()}"])
+            remove.set_sensitive(self._may("ssh-forget", device["address"]))
+            remove.connect("clicked", self._on_ssh_forget, device)
+            row.add_suffix(remove)
+            self._ssh_devices.add(row)
+            self._ssh_device_rows.append(row)
+        self._ssh_add_row.set_sensitive(st["state"] != "unknown" and self._may("ssh-allow", "0.0.0.0", "x"))
 
     def _set_keyring(self, gen, st):
         if not self._current("login", gen):
@@ -2745,19 +2774,57 @@ class SystemWindow(Adw.ApplicationWindow):
         switch.set_active(not wanted)
         self._ssh_guard = False
         if wanted:
+            st = getattr(self, "_ssh_status", ls.REMOTE_LOGIN_EMPTY)
+            who = ls.own_tunnels(st) + [d.get("name") or d["address"] for d in st["devices"]]
             self._confirm(
                 "Allow Remote Login?",
-                "Anyone who can reach this computer on the network can try to log in, with an account's password or a key "
-                "listed in its .ssh folder. It stays on after a restart, until you turn it off.",
+                "These can log in, with an account's password or a key listed in its .ssh folder: "
+                + (", ".join(who) if who else "nobody yet, until you add a device or set up a tunnel")
+                + ". Nobody else can reach it. It stays on after a restart, until you turn it off.",
                 "Allow",
                 lambda: self._run_operation(["pkexec", ADMIN, "ssh-on"], title="Turning Remote Login On",
-                                            working="Opening the firewall and starting SSH.", done="Remote login is on"),
-                destructive=True,
+                                            working="Starting SSH for your tunnels and devices.", done="Remote login is on"),
             )
         else:
             self._run_operation(["pkexec", ADMIN, "ssh-off"], title="Turning Remote Login Off",
-                                working="Stopping SSH and closing the firewall.",
+                                working="Stopping SSH and closing it to every tunnel and device.",
                                 done="Remote login is off. Connections already open last until they end")
+
+    def _on_ssh_add(self, _row):
+        group = Adw.PreferencesGroup()
+        address = Adw.EntryRow(title="Address or Network")
+        name = Adw.EntryRow(title="Name")
+        group.add(address)
+        group.add(name)
+
+        def add():
+            addr = address.get_text().strip()
+            label = " ".join(name.get_text().split()) or addr
+            problem = ls.ssh_device_problem(addr, label)
+            if problem:
+                self._toast(problem)
+                return
+            self._run_operation(["pkexec", ADMIN, "ssh-allow", addr, label], title="Adding a Device",
+                                working=f"Letting {label} log in.", done=f"{label} may log in while Remote Login is on")
+
+        self._confirm(
+            "Add a Device",
+            "Its address on the network, like 192.168.1.20, or a small network like 192.168.1.0/24. "
+            "It may log in whenever Remote Login is on.",
+            "Add", add, extra=group,
+        )
+        address.grab_focus()
+
+    def _on_ssh_forget(self, _button, device):
+        label = device.get("name") or device["address"]
+        self._confirm(
+            f"Remove {label}?",
+            f"{device['address']} will no longer be able to log in. Connections already open last until they end.",
+            "Remove",
+            lambda: self._run_operation(["pkexec", ADMIN, "ssh-forget", device["address"]], title="Removing a Device",
+                                        working=f"Closing remote login to {label}.", done=f"{label} may no longer log in"),
+            destructive=True,
+        )
 
     # ═══════════════════════════ Hardware ═══════════════════════════
 

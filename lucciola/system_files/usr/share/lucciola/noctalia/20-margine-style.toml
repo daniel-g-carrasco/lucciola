@@ -54,12 +54,14 @@ start = ["workspaces", "active_window"]
 center = ["clock"]
 # No control-centre button: Mod+N opens that panel, and the notifications
 # button sits next to where it was (2026-10-11).
-end = ["tray", "privacy", "network", "bluetooth", "updates", "keep-awake", "volume", "battery", "notifications"]
+end = ["tray", "privacy", "network", "bluetooth", "remote-login", "updates", "keep-awake", "volume", "battery", "notifications"]
 
 # keep-awake is Lucciola's Keep Awake plugin indicator (27-keep-awake.toml):
 # shown only while Keep Awake is on or scheduled. updates is the Updates
 # plugin indicator (29-updates.toml): shown only while a new version waits
 # for a restart, rpm-ostreed works, or an automatic update failed.
+# remote-login is the Remote Login plugin indicator (30-remote-login.toml):
+# shown only while SSH is open to your tunnels and devices.
 
 [widget.workspaces]
 style = "minimal"

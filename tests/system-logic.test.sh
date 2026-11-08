@@ -42,10 +42,11 @@ plan grub-lock-on;                check "grub-lock-on: password on stdin twice, 
 plan grub-lock-off;               check "grub-lock-off (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/margine/grub-lock off' '$T/out'"
 plan autologin-on;                check "autologin-on names the invoking user (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx \"/usr/bin/lucciola-autologin on $(id -un)\" '$T/out'"
 plan autologin-off;               check "autologin-off (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/bin/lucciola-autologin off' '$T/out'"
-plan ssh-on;                      check "ssh-on: firewall kept and live, then the service (rc $RC)" \
-  bash -c "[ '$RC' = 0 ] && grep -qx 'firewall-cmd --permanent --add-service=ssh' '$T/out' && grep -qx 'firewall-cmd --add-service=ssh' '$T/out' && grep -qx 'systemctl enable --now sshd.service' '$T/out'"
-plan ssh-off;                     check "ssh-off: the service, then the firewall (rc $RC)" \
-  bash -c "[ '$RC' = 0 ] && grep -qx 'systemctl disable --now sshd.service' '$T/out' && grep -qx 'firewall-cmd --permanent --remove-service=ssh' '$T/out' && grep -qx 'firewall-cmd --remove-service=ssh' '$T/out'"
+plan ssh-on;                      check "ssh-on: remote-login, tunnels and chosen devices only (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/lucciola/remote-login on' '$T/out'"
+plan ssh-off;                     check "ssh-off: remote-login off (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/lucciola/remote-login off' '$T/out'"
+plan ssh-allow 192.168.2.85 "Windows PC (home)"; check "ssh-allow: address and name as two arguments (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/lucciola/remote-login allow 192.168.2.85 Windows PC (home)' '$T/out'"
+plan ssh-allow fd00::/64 Lab;     check "ssh-allow takes an IPv6 network (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/lucciola/remote-login allow fd00::/64 Lab' '$T/out'"
+plan ssh-forget 192.168.2.85;     check "ssh-forget (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/lucciola/remote-login forget 192.168.2.85' '$T/out'"
 plan secureboot-enroll;           check "secureboot-enroll: switch file away, enroll, timeout (rc $RC)" \
   bash -c "[ '$RC' = 0 ] && grep -qx 'rm -f /etc/margine/secureboot-enroll' '$T/out' && grep -qx '/usr/libexec/margine/mok-enroll enroll' '$T/out' && grep -qx 'mokutil --timeout -1' '$T/out'"
 plan secureboot-never;            check "secureboot-never: writes off, revokes (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -q \"write '/etc/margine/secureboot-enroll': 'off\" '$T/out' && grep -qx 'mokutil --revoke-import' '$T/out'"
@@ -70,7 +71,7 @@ for bad in "ai-on amd" "ai-on nvidia" "gaming-on now" "dock-rescue maybe" "apps-
            "update now" "rollback --force" "reboot" "--check" "kernel" "kernel foo" "kernel fedora now" \
            "pin" "pin 12" "pin x" "pin -1" "unpin" "unpin 1 2" "pin '1; rm -rf /'" \
            "tpm-unlock-enable '7;8'" "tpm-unlock-enable 7 8" "tpm-unlock-enable ../x" "grub-lock-on pw" "grub-lock-off x" \
-           "autologin-on bob" "autologin-off x" "ssh-on x" "ssh-off x" "secureboot-enroll x" "scheduler" "scheduler lavd Turbo" "scheduler 'x;y' Auto" "scheduler LAVD" "scheduler-off x"; do
+           "autologin-on bob" "autologin-off x" "ssh-on x" "ssh-off x" "ssh-allow" "ssh-allow 1.2.3.4" "ssh-allow 'a;b' x" "ssh-allow 1.2.3.4 'x;reboot'" "ssh-allow -h x" "ssh-forget" "ssh-forget 'a b'" "ssh-forget ../x" "secureboot-enroll x" "scheduler" "scheduler lavd Turbo" "scheduler 'x;y' Auto" "scheduler LAVD" "scheduler-off x"; do
   eval "python3 -I '$ADMIN' --check $bad" > "$T/out" 2>&1 && RC=0 || RC=$?
   check "admin refuses: $bad (rc $RC)" [ "$RC" != 0 ]
 done

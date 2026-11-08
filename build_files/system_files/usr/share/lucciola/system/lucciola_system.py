@@ -761,7 +761,7 @@ FEATURE_LANES = {
 # The tweaks (ujust recipes) that install or update apps.
 FLATPAK_RECIPES = frozenset({"install-spola", "lucciola-darktable-opencl"})
 # ssh-on and ssh-off, grub-lock-on and grub-lock-off...: one operation each.
-VERB_FAMILY = re.compile(r"-(on|off|enable|disable|enroll|never|wake|rescue|repair)$")
+VERB_FAMILY = re.compile(r"-(on|off|enable|disable|enroll|never|wake|rescue|repair|allow|forget)$")
 SHARED_LANES = ("system", "flatpak", "brew")
 LANE_WORDS = {
     "system": "changes to the system (updates, extra packages, the kernel)",
@@ -889,43 +889,71 @@ def parse_autologin(text):
     return None, None
 
 
-# Interfaces that are not a way in from another computer: containers, VMs.
-SSH_SKIP_INTERFACES = ("lo", "podman", "docker", "veth", "virbr", "br-", "vnet")
+# ── remote login (SSH): /usr/libexec/lucciola/remote-login status --json ──
+REMOTE_LOGIN_EMPTY = {"state": "unknown", "sshd": False, "tunnel_zone": False, "open_to_all": False,
+                      "tunnels": [], "devices": [], "addresses": [], "user": ""}
 
 
-def ip_addresses(ip_brief):
-    """`ip -4 -br addr show up` -> the addresses another computer can use."""
-    found = []
-    for line in (ip_brief or "").splitlines():
-        words = line.split()
-        if len(words) >= 3 and not words[0].startswith(SSH_SKIP_INTERFACES):
-            found.append(words[2].split("/")[0])
-    return found
+def remote_login_status(json_text):
+    """The helper's JSON, with every key present; state 'unknown' when it
+    did not answer."""
+    try:
+        data = json.loads(json_text or "")
+    except json.JSONDecodeError:
+        data = None
+    if not isinstance(data, dict):
+        return dict(REMOTE_LOGIN_EMPTY)
+    return {**REMOTE_LOGIN_EMPTY, **data}
 
 
-def ssh_state(active, firewall):
-    """`systemctl is-active sshd.service` and `firewall-cmd --query-service=ssh`
-    -> on, off, or a half state: blocked (running behind a closed firewall),
-    open (the firewall lets it through, nothing answers). A firewall that is
-    not running blocks nothing."""
-    running = (active or "").strip() == "active"
-    passes = (firewall or "").strip() in ("yes", "not running")
-    if running:
-        return "on" if passes else "blocked"
-    return "open" if (firewall or "").strip() == "yes" else "off"
+def own_tunnels(st):
+    """Names of the tunnels remote login covers (not those routing everything)."""
+    return [t.get("name", "") for t in st.get("tunnels") or [] if t.get("own")]
 
 
-def ssh_phrase(state, user, addresses):
-    """The switch's subtitle."""
+def remote_login_phrase(st):
+    """The switch's subtitle: who can come in, and how."""
+    state = st.get("state")
     if state == "on":
-        if addresses:
-            return "On. From another computer: " + " or ".join(f"{user}@{a}" for a in addresses)
-        return "On, but this computer is not on a network right now"
+        who = own_tunnels(st)
+        n = len(st.get("devices") or [])
+        if n:
+            who.append(f"{n} device" + ("" if n == 1 else "s"))
+        reach = [a["address"] for a in st.get("addresses") or []]
+        text = "On, for " + (" and ".join(who) if who else "nobody yet: add a device or set up a tunnel")
+        if reach:
+            text += ". From there: " + " or ".join(f"{st.get('user') or 'you'}@{a}" for a in reach)
+        return text
+    if state == "everyone":
+        return "On for every network this computer joins, as the old switch did. Turn it off and on to limit it to your tunnels and devices"
     if state == "blocked":
-        return "SSH is running, but the firewall keeps other computers out. Turn this on to let them in"
-    if state == "open":
-        return "The firewall is open, but SSH is not running. Turn this on to start it"
-    return "Off. Nobody can log in to this computer from another one"
+        return "SSH is running, but nobody may reach it. Turn this off and on to let your tunnels and devices in"
+    if state == "off":
+        return "Off. Nobody can log in to this computer from another one"
+    return "Could not read the state of remote login"
+
+
+def tunnels_phrase(st):
+    tun = [t for t in st.get("tunnels") or [] if t.get("own")]
+    if not tun:
+        return "None yet. A WireGuard connection to your home or office, set up in the network settings, appears here"
+    return ", ".join(t["name"] + ("" if t.get("active") else " (not connected)") for t in tun)
+
+
+def ssh_device_problem(address, name):
+    """What is wrong with a device the user typed, or '' (remote-login has
+    the last word): an IP, or a network no wider than /16 (IPv6 /48), and a
+    plain name."""
+    import ipaddress
+    try:
+        net = ipaddress.ip_network((address or "").strip(), strict=False)
+    except ValueError:
+        return "Type an address like 192.168.1.20, or a network like 192.168.1.0/24"
+    if net.prefixlen < (16 if net.version == 4 else 48):
+        return "That network is too wide: at most /16 (IPv6 /48)"
+    if not re.fullmatch(r"[\w .,'()&+-]{1,40}", " ".join((name or "").split())):
+        return "Give it a name of letters, digits and spaces, at most 40"
+    return ""
 
 
 def parse_keyring_status(text):
