@@ -13,9 +13,10 @@ location = "/usr/share/lucciola/noctalia/plugins"
 enabled = true
 
 # The one list of enabled Lucciola plugins (a second fragment setting it
-# would replace this one): Keep Awake, and Updates (29-updates.toml).
+# would replace this one): Keep Awake, Updates (29-updates.toml) and Remote
+# Login (30-remote-login.toml).
 [plugins]
-enabled = ["lucciola/keep_awake", "lucciola/updates"]
+enabled = ["lucciola/keep_awake", "lucciola/updates", "lucciola/remote_login"]
 
 [widget.keep-awake]
 type = "lucciola/keep_awake:indicator"
@@ -26,6 +27,8 @@ type = "wifi"
 type = "bluetooth"
 [[control_center.shortcuts]]
 type = "lucciola/keep_awake:tile"
+[[control_center.shortcuts]]
+type = "lucciola/remote_login:tile"
 [[control_center.shortcuts]]
 type = "nightlight"
 [[control_center.shortcuts]]

@@ -1,0 +1,38 @@
+{
+  "who.one_device": "1 device",
+  "who.devices": "{n} devices",
+  "who.and": " and ",
+  "who.nobody": "Nobody yet: add a device or set up a tunnel",
+
+  "tooltip.title": "Remote Login",
+  "tooltip.on": "on",
+  "tooltip.who": "From",
+  "tooltip.everyone": "on for every network: open the panel to limit it",
+
+  "tile.label": "Remote Login",
+
+  "panel.title": "Remote Login",
+  "panel.on": "On",
+  "panel.on_detail": "{who} can log in over SSH. Nobody else can reach it",
+  "panel.everyone": "Open to every network",
+  "panel.everyone_detail": "Turned on the old way: anyone on the same network can try. Turn it off and on to limit it to your tunnels and devices",
+  "panel.blocked": "Running, but closed",
+  "panel.blocked_detail": "SSH runs but nobody may reach it. Turn it off and on",
+  "panel.off": "Off",
+  "panel.off_detail": "Nobody can log in to this computer from another one",
+  "panel.unknown": "Unknown",
+  "panel.unknown_detail": "The state of remote login could not be read",
+  "panel.turn_on": "Turn on",
+  "panel.turn_off": "Turn off",
+  "panel.who": "Who can log in",
+  "panel.not_connected": "not connected",
+  "panel.none": "No tunnel and no device yet",
+  "panel.more": "and {n} more in Lucciola System",
+  "panel.reach": "From there",
+  "panel.manage": "Manage Devices…",
+
+  "error.title": "Remote Login",
+
+  "settings.command.label": "Command",
+  "settings.command.description": "Path of the remote-login command the plugin reads."
+}

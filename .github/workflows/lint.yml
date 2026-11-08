@@ -171,6 +171,12 @@ jobs:
         # opened lid gives the profile back; on fake systemd-run, gdbus and
         # niri. See tests/keep-awake.test.sh.
         run: bash tests/keep-awake.test.sh
+      - name: Remote login lets in only your tunnels and chosen devices
+        # remote-login on stateful fakes of firewall-cmd, nmcli and systemctl:
+        # SSH in lucciola-tunnel for private WireGuard profiles only, device
+        # rules by address, hand-made rules adopted, everything closed by off.
+        # See tests/remote-login.test.sh.
+        run: bash tests/remote-login.test.sh
       - name: Apps take the Noctalia palette, Flatpak ones included
         # lucciola-flatpak-theme-access asks Flatpak for read-only access to
         # the GTK folders and kdeglobals and for Qt's KDE theme, nothing more;

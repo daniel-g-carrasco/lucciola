@@ -53,6 +53,21 @@ stable release is cut.
   the driver typed was lost while Bluefin's profile printed its banner (23 s).
   The driver now asks again until the shell answers.
 
+### Changed (2026-11-08, Remote Login)
+- **Remote Login lets in only your tunnels and the devices you choose.** The switch
+  used to open SSH to the whole network the laptop was on, a café's Wi-Fi included.
+  Now, when it is on, SSH answers only through your own WireGuard tunnels (every
+  NetworkManager WireGuard connection that does not route all traffic, so a home or
+  office tunnel and not a commercial VPN) and from the devices listed in Lucciola
+  System, Login, by address or small network. Anyone else cannot even see the port.
+  SSH rules added by hand before become devices called "Added by hand", so nothing
+  set up earlier is lost. If it was turned on the old way, Lucciola System and the
+  panel say so: off and on again limits it.
+- **A Remote Login switch in the bar.** A glyph appears only while it is on, so it is
+  never left open unnoticed; its panel says who may come in and how to reach the
+  computer, and the control centre has a tile next to Keep Awake's. The system asks
+  for the password or the fingerprint at every change.
+
 ### Changed (2026-11-05, Lucciola System while something runs)
 - **The window stays usable during an update.** Everything waited for any running
   operation, so downloading an update with extra packages greyed every button for

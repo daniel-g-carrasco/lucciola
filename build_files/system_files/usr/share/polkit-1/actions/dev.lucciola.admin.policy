@@ -162,8 +162,8 @@
   </action>
 
   <action id="dev.lucciola.admin.ssh-on">
-    <description>Allow logging in to this computer from another one (SSH)</description>
-    <message>Authentication is required to start SSH and open the firewall for it.</message>
+    <description>Allow logging in to this computer from your tunnels and chosen devices (SSH)</description>
+    <message>Authentication is required to start SSH and let your tunnels and chosen devices reach it.</message>
     <defaults>
       <allow_any>auth_admin</allow_any>
       <allow_inactive>auth_admin</allow_inactive>
@@ -175,7 +175,7 @@
 
   <action id="dev.lucciola.admin.ssh-off">
     <description>Stop logging in to this computer from another one (SSH)</description>
-    <message>Authentication is required to stop SSH and close the firewall for it.</message>
+    <message>Authentication is required to stop SSH and close it to every tunnel and device.</message>
     <defaults>
       <allow_any>auth_admin</allow_any>
       <allow_inactive>auth_admin</allow_inactive>
@@ -183,6 +183,30 @@
     </defaults>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
     <annotate key="org.freedesktop.policykit.exec.argv1">ssh-off</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.ssh-allow">
+    <description>Let a device log in to this computer over SSH</description>
+    <message>Authentication is required to let a device log in to this computer over SSH.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">ssh-allow</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.ssh-forget">
+    <description>Stop a device from logging in to this computer over SSH</description>
+    <message>Authentication is required to stop a device from logging in over SSH.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">ssh-forget</annotate>
   </action>
 
   <action id="dev.lucciola.admin.autologin-on">

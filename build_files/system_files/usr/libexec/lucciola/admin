@@ -35,6 +35,7 @@ GRUB_LOCK = "/usr/libexec/margine/grub-lock"
 AUTOLOGIN = "/usr/bin/lucciola-autologin"
 MOK_ENROLL = "/usr/libexec/margine/mok-enroll"
 SCHEDULER_APPLY = "/usr/libexec/margine/scheduler-apply"
+REMOTE_LOGIN = "/usr/libexec/lucciola/remote-login"
 SB_SWITCH = "/etc/margine/secureboot-enroll"
 BLOCKED = "/var/lib/margine/update-watchdog/blocked"
 STRIKES_DIR = "/var/lib/margine/update-watchdog"
@@ -52,6 +53,10 @@ APP_ID = re.compile(r"^[A-Za-z][A-Za-z0-9._-]{2,254}$")
 PIN_INDEX = re.compile(r"^[0-9]$")
 PCRS = re.compile(r"^[0-9]{1,2}(\+[0-9]{1,2})*$")
 SCHED_NAME = re.compile(r"^[a-z0-9]{2,32}$")
+# A device for remote login: an IP or a network (remote-login checks the
+# width), and a name a person reads; nothing a shell would care about.
+SSH_ADDRESS = re.compile(r"^[0-9A-Fa-f:.]{2,45}(/[0-9]{1,3})?$")
+SSH_NAME = re.compile(r"^[\w .,'()&+-]{1,40}$")
 # scx_loader's config takes the PascalCase mode, scxctl the lowercase one:
 # one argument here, so the two never disagree.
 SCHED_MODES = {"Auto": "auto", "Gaming": "gaming", "LowLatency": "lowlatency", "PowerSave": "powersave", "Server": "server"}
@@ -208,22 +213,27 @@ def act_autologin_off(args):
 
 
 def act_ssh_on(args):
+    """SSH from your WireGuard tunnels and the chosen devices only
+    (remote-login, 2026-11-08); it used to open SSH to the whole network."""
     no_args("ssh-on", args)
-    return [
-        Step(["firewall-cmd", "--permanent", "--add-service=ssh"]),
-        Step(["firewall-cmd", "--add-service=ssh"]),
-        Step(["systemctl", "enable", "--now", "sshd.service"]),
-    ]
+    return [Step([REMOTE_LOGIN, "on"])]
 
 
 def act_ssh_off(args):
     no_args("ssh-off", args)
-    # The firewall steps may fail (firewalld stopped): SSH is off all the same.
-    return [
-        Step(["systemctl", "disable", "--now", "sshd.service"]),
-        Step(["firewall-cmd", "--permanent", "--remove-service=ssh"], optional=True),
-        Step(["firewall-cmd", "--remove-service=ssh"], optional=True),
-    ]
+    return [Step([REMOTE_LOGIN, "off"])]
+
+
+def act_ssh_allow(args):
+    if len(args) != 2 or not SSH_ADDRESS.match(args[0]) or not SSH_NAME.match(args[1]):
+        raise SystemExit("ssh-allow takes two arguments: an address or network, and a name (letters, digits, spaces, at most 40)")
+    return [Step([REMOTE_LOGIN, "allow", args[0], args[1]])]
+
+
+def act_ssh_forget(args):
+    if len(args) != 1 or not SSH_ADDRESS.match(args[0]):
+        raise SystemExit("ssh-forget takes one argument: the address to remove")
+    return [Step([REMOTE_LOGIN, "forget", args[0]])]
 
 
 def act_secureboot_enroll(args):
@@ -332,6 +342,8 @@ ACTIONS = {
     "autologin-off": act_autologin_off,
     "ssh-on": act_ssh_on,
     "ssh-off": act_ssh_off,
+    "ssh-allow": act_ssh_allow,
+    "ssh-forget": act_ssh_forget,
     "secureboot-enroll": act_secureboot_enroll,
     "secureboot-never": act_secureboot_never,
     "scheduler": act_scheduler,

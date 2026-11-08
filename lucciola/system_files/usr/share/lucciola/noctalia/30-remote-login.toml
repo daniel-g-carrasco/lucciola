@@ -1,0 +1,8 @@
+# Remote Login (plugins/remote_login): SSH into this computer only from your
+# own WireGuard tunnels and the devices you choose
+# (/usr/libexec/lucciola/remote-login). A bar glyph only while it is on, a
+# control-centre tile next to Keep Awake's (27-keep-awake.toml, where the
+# enabled list and the shortcuts live), and a panel. "remote-login" sits in
+# the bar's end list in 20-margine-style.toml.
+[widget.remote-login]
+type = "lucciola/remote_login:indicator"
