@@ -11,7 +11,7 @@
 
 Name:           noctalia-greeter
 Version:        %{greeter_version}
-Release:        8%{?dist}
+Release:        9%{?dist}
 Summary:        Login greeter for greetd with the look of Noctalia Shell
 License:        MIT AND (Apache-2.0 OR MIT)
 URL:            https://github.com/noctalia-dev/noctalia-greeter
@@ -42,6 +42,8 @@ Patch4:         0005-password-follows-the-conversation.patch
 Patch5:         0006-keep-the-login-panel-still.patch
 # The field's outline and the centred status line, as on the lock screen.
 Patch6:         0007-field-and-status-like-the-lock-screen.patch
+# The brightness keys at the login screen, through logind.
+Patch7:         0008-brightness-keys-on-the-login-screen.patch
 
 # The pkg-config names come from meson.build of the tag.
 BuildRequires:  gcc
@@ -118,6 +120,9 @@ install -m 0644 %{SOURCE1} %{buildroot}%{_datadir}/noctalia-greeter/assets/nocta
 %{_datadir}/polkit-1/actions/org.noctalia.greeter.apply-appearance.policy
 
 %changelog
+* Mon Nov 09 2026 Daniel Grasso Carrasco <code@danielgrasso.com> - %{greeter_version}-9
+- The brightness keys work on the login screen, through logind (0008).
+
 * Wed Nov 04 2026 Daniel Grasso Carrasco <code@danielgrasso.com> - %{greeter_version}-8
 - The field's outline and the centred status line, as on the lock screen (0007).
 

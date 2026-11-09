@@ -53,6 +53,16 @@ stable release is cut.
   the driver typed was lost while Bluefin's profile printed its banner (23 s).
   The driver now asks again until the shell answers.
 
+### Fixed (2026-11-09, login and lock screens)
+- **The brightness keys work on the login screen.** The login screen runs in its
+  own small compositor, which handled only the keys that switch console. It now
+  steps the screen's brightness by 5% (never below 1%) through logind, the way the
+  desktop session does it without root.
+- **The player on the lock screen is readable.** It scales its content with its
+  height, and its 420 by 96 box left small type between two empty bands. It is
+  now 320 by 150, so the cover, the title and the controls fill it, and it sits a
+  little lower, clear of the fingerprint line. A long title ends with an ellipsis.
+
 ### Changed (2026-11-08, Remote Login)
 - **Remote Login lets in only your tunnels and the devices you choose.** The switch
   used to open SSH to the whole network the laptop was on, a café's Wi-Fi included.

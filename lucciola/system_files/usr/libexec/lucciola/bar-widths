@@ -169,7 +169,10 @@ def render_lock(outs, user, picture, weather, fingerprint):
              {"image_path": picture, "opacity": 1.0, "background": False}),
             (f"lucciola-name-{key}", "label", cx, field - 88, 0, 0,
              {"title": user, "color": "primary", **quiet}),
-            (f"lucciola-media-{key}", "media_player", cx, field + 134, 420, 96,
+            # The player scales its content with the box's height: 420x96 left
+            # small type in a band of empty sides (2026-11-09); 320x150 fills it,
+            # below the fingerprint line with a gap.
+            (f"lucciola-media-{key}", "media_player", cx, field + 160, 320, 150,
              {"hide_when_no_media": True, "background": True, "background_color": "surface",
               "background_opacity": 0.75, "shadow": False}),
         ]
