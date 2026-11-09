@@ -1,0 +1,147 @@
+Lucciola: the brightness keys work on the login screen
+
+The greeter's own compositor handled only the VT switch keys, so the
+screen's brightness could not be changed at the login screen. The
+brightness keys now step the panel's backlight by 5% (never below 1%),
+through logind's SetBrightness on the greeter's session, as a desktop
+session does it without root, with systemd's busctl: no new library and
+no shell. The backlight is the one the kernel prefers (firmware, then
+platform, then raw).
+
+diff --git a/src/compositor/noctalia_compositor.c b/src/compositor/noctalia_compositor.c
+index aae835d..aaf2294 100644
+--- a/src/compositor/noctalia_compositor.c
++++ b/src/compositor/noctalia_compositor.c
+@@ -7,6 +7,7 @@
+ #include <ctype.h>
+ #include <libinput.h>
+ #include <limits.h>
++#include <dirent.h>
+ #include <signal.h>
+ #include <stdarg.h>
+ #include <stdbool.h>
+@@ -2063,6 +2064,105 @@ static void handle_keyboard_modifiers(struct wl_listener* listener, void* data)
+   wlr_seat_keyboard_notify_modifiers(server->seat, &keyboard->wlr_keyboard->modifiers);
+ }
+ 
++// Lucciola: the brightness keys work on the login screen too. The new value
++// goes through logind (SetBrightness on the greeter's own session), the way
++// a desktop session changes it without root, with systemd's busctl: no new
++// library, no shell. Steps of 5%, never below 1% so the screen stays lit.
++static long read_backlight_value(const char* device, const char* file) {
++  char path[512];
++  snprintf(path, sizeof(path), "/sys/class/backlight/%s/%s", device, file);
++  FILE* fp = fopen(path, "r");
++  if (fp == NULL) {
++    return -1;
++  }
++  long value = -1;
++  if (fscanf(fp, "%ld", &value) != 1) {
++    value = -1;
++  }
++  fclose(fp);
++  return value;
++}
++
++static int backlight_rank(const char* device) {
++  char path[512];
++  char type[32] = "";
++  snprintf(path, sizeof(path), "/sys/class/backlight/%s/type", device);
++  FILE* fp = fopen(path, "r");
++  if (fp != NULL) {
++    if (fscanf(fp, "%31s", type) != 1) {
++      type[0] = '\0';
++    }
++    fclose(fp);
++  }
++  // The kernel's own order of preference for the panel's backlight.
++  if (strcmp(type, "firmware") == 0) {
++    return 3;
++  }
++  if (strcmp(type, "platform") == 0) {
++    return 2;
++  }
++  if (strcmp(type, "raw") == 0) {
++    return 1;
++  }
++  return 0;
++}
++
++static void step_backlight(int direction) {
++  DIR* dir = opendir("/sys/class/backlight");
++  if (dir == NULL) {
++    return;
++  }
++  char device[256] = "";
++  int best = -1;
++  struct dirent* entry;
++  while ((entry = readdir(dir)) != NULL) {
++    if (entry->d_name[0] == '.') {
++      continue;
++    }
++    int rank = backlight_rank(entry->d_name);
++    if (rank > best) {
++      best = rank;
++      snprintf(device, sizeof(device), "%s", entry->d_name);
++    }
++  }
++  closedir(dir);
++  if (device[0] == '\0') {
++    return;
++  }
++  long current = read_backlight_value(device, "brightness");
++  long max = read_backlight_value(device, "max_brightness");
++  if (current < 0 || max <= 0) {
++    return;
++  }
++  long step = max / 20 > 0 ? max / 20 : 1;
++  long floor = max / 100 > 0 ? max / 100 : 1;
++  long next = current + direction * step;
++  if (next < floor) {
++    next = floor;
++  }
++  if (next > max) {
++    next = max;
++  }
++  if (next == current) {
++    return;
++  }
++  char value[32];
++  snprintf(value, sizeof(value), "%ld", next);
++  // A grandchild runs busctl, so the compositor never waits on it.
++  pid_t child = fork();
++  if (child == 0) {
++    if (fork() == 0) {
++      execl("/usr/bin/busctl", "busctl", "call", "org.freedesktop.login1", "/org/freedesktop/login1/session/auto",
++            "org.freedesktop.login1.Session", "SetBrightness", "ssu", "backlight", device, value, (char*)NULL);
++      _exit(127);
++    }
++    _exit(0);
++  }
++  if (child > 0) {
++    waitpid(child, NULL, 0);
++  }
++}
++
+ static void handle_keyboard_key(struct wl_listener* listener, void* data) {
+   struct greeter_keyboard* keyboard = wl_container_of(listener, keyboard, key);
+   struct greeter_server* server = keyboard->server;
+@@ -2072,6 +2172,18 @@ static void handle_keyboard_key(struct wl_listener* listener, void* data) {
+     return;
+   }
+ 
++  if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
++    const xkb_keysym_t* syms;
++    int nsyms = xkb_state_key_get_syms(keyboard->wlr_keyboard->xkb_state, event->keycode + 8, &syms);
++    for (int i = 0; i < nsyms; i++) {
++      if (syms[i] == (xkb_keysym_t)XKB_KEY_XF86MonBrightnessUp || syms[i] == (xkb_keysym_t)XKB_KEY_XF86MonBrightnessDown) {
++        step_backlight(syms[i] == (xkb_keysym_t)XKB_KEY_XF86MonBrightnessUp ? 1 : -1);
++        note_activity(server);
++        return;
++      }
++    }
++  }
++
+   if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED && server->session != NULL) {
+     const xkb_keysym_t* syms;
+     int nsyms = xkb_state_key_get_syms(keyboard->wlr_keyboard->xkb_state, event->keycode + 8, &syms);

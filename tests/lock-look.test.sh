@@ -74,6 +74,7 @@ check "no location: no weather" q '"lucciola-weather-edp_1" not in w'
 fresh; : > "$FAKE/enrolled"; : > "$T/pictures/$ME"
 printf '[location]\nauto_locate = true\n' > "$SAVED"; run
 check "a fingerprint: the line under the field" q 'w["lucciola-fingerprint-edp_1"]["cy"] == 571.0 and "fingerprint reader" in w["lucciola-fingerprint-edp_1"]["settings"]["format"] and "{" not in w["lucciola-fingerprint-edp_1"]["settings"]["format"]'
+check "the player: big enough to read, clear of the fingerprint line" q 'w["lucciola-media-edp_1"]["box_width"] == 320.0 and w["lucciola-media-edp_1"]["box_height"] == 150.0 and w["lucciola-media-edp_1"]["cy"] - 75 >= w["lucciola-fingerprint-edp_1"]["cy"] + 9 + 16'
 check "a location: weather under the clock" q 'w["lucciola-weather-edp_1"]["cy"] == w["lucciola-clock-edp_1"]["cy"] + 82'
 check "an account picture: that one" q 'w["lucciola-picture-edp_1"]["settings"]["image_path"] == "'"$T/pictures/$ME"'"'
 
