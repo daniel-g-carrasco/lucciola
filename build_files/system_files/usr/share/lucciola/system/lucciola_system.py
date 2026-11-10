@@ -761,7 +761,7 @@ FEATURE_LANES = {
 # The tweaks (ujust recipes) that install or update apps.
 FLATPAK_RECIPES = frozenset({"install-spola", "lucciola-darktable-opencl"})
 # ssh-on and ssh-off, grub-lock-on and grub-lock-off...: one operation each.
-VERB_FAMILY = re.compile(r"-(on|off|enable|disable|enroll|never|wake|rescue|repair|allow|forget)$")
+VERB_FAMILY = re.compile(r"-(on|off|enable|disable|no-pin|pin|enroll|never|wake|rescue|repair|allow|forget)$")
 SHARED_LANES = ("system", "flatpak", "brew")
 LANE_WORDS = {
     "system": "changes to the system (updates, extra packages, the kernel)",
@@ -832,7 +832,7 @@ def parse_tpm_status(text):
     """`lucciola-tpm-unlock status` (as root) -> what the page needs. Each
     line is '  <label padded to 26> <value>'; the glyphs are the helper's:
     ✓ good, ✗ bad, — absent. error is set when there is no LUKS root."""
-    st = {"device": None, "token": None, "wired": None, "fallback": None, "luks": "", "error": ""}
+    st = {"device": None, "token": None, "pin": None, "wired": None, "fallback": None, "luks": "", "error": ""}
     if "Could not auto-detect a LUKS device" in (text or "") or "LUKS root detection failed" in (text or ""):
         st["error"] = "no encrypted disk behind the system"
         return st
@@ -846,6 +846,8 @@ def parse_tpm_status(text):
             st["device"] = good
         elif label == "TPM2 token":
             st["token"] = good
+        elif label == "PIN at startup":
+            st["pin"] = good
         elif label == "Boot path (crypttab)":
             st["wired"] = good
         elif label == "Fallback keyslot":
@@ -862,6 +864,8 @@ def tpm_summary(st):
         return "unencrypted", "The disk is not encrypted, or its encryption is not the one Lucciola sets up"
     if st.get("device") is False:
         return "no-tpm", "This machine has no TPM 2.0 chip; the passphrase is typed at every startup"
+    if st.get("token") and st.get("wired") and st.get("pin"):
+        return "on", "The TPM unlocks the disk at startup once its PIN is typed"
     if st.get("token") and st.get("wired"):
         return "on", "The TPM unlocks the disk at startup; only the login is asked"
     if st.get("token") and st.get("wired") is False:
@@ -869,6 +873,23 @@ def tpm_summary(st):
     if st.get("token") is False:
         return "off", "The disk passphrase is typed at every startup"
     return "unknown", "Could not read how the disk is unlocked"
+
+
+TPM_PIN_MIN = 6
+
+
+def tpm_pin_problem(pin, again):
+    """Why this PIN cannot be sent, as a sentence, or '' when it can. The
+    helper checks the length again: this is for the dialog's button."""
+    if not pin:
+        return "Choose a PIN"
+    if len(pin) < TPM_PIN_MIN:
+        return f"At least {TPM_PIN_MIN} characters"
+    if "\n" in pin or "\r" in pin:
+        return "The PIN must be one line"
+    if pin != again:
+        return "The two PINs differ"
+    return ""
 
 
 def parse_grub_lock(text):

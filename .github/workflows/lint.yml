@@ -403,6 +403,32 @@ jobs:
           rpm -q flatpak ostree python3
           bash tests/flatpak-preinstall-keep.test.sh
 
+  tpm-unlock-real:
+    # lucciola-tpm-unlock with the real systemd-cryptenroll and cryptsetup,
+    # against a software TPM and a LUKS2 header in a file: after `pin` the
+    # TPM gives the disk key with the PIN and refuses without it or with a
+    # wrong one, `enable` keeps the PIN, `no-pin` takes it away, and the
+    # passphrase opens the disk throughout. Fedora, as in the image (the
+    # same systemd), and a job of its own so the static gate stays fast.
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    container:
+      image: registry.fedoraproject.org/fedora:45@sha256:e0f7c9b6ed4f631ac8d0261f7543c3646d148be46a94d60b9465b73c7d4e1500
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: The TPM gives the disk key only with the PIN
+        env:
+          TPM_REAL_REQUIRED: "1"
+        run: |
+          set -euo pipefail
+          for i in 1 2 3; do
+            dnf -y -q install swtpm swtpm-tools cryptsetup systemd-udev tpm2-tss jq util-linux && break
+            echo "dnf attempt $i failed, retrying in 30 s"; sleep 30
+          done
+          rpm -q swtpm swtpm-tools cryptsetup systemd-udev tpm2-tss jq
+          bash tests/tpm-unlock-real.test.sh
+
   build-inputs-need-vm-test:
     # A pull request that changes what the image is built from (the
     # Containerfile, build_files, lucciola, the build workflow, the
@@ -457,6 +483,14 @@ jobs:
         # lint.yml, build.yml and Renovate agree with it. See
         # tests/vm-test-gate.test.sh.
         run: bash tests/vm-test-gate.test.sh
+
+      - name: TPM unlock with a PIN, on fakes
+        # lucciola-tpm-unlock pin / no-pin / enable (register decision D1):
+        # the PIN in NEWPIN and never an argument, a short or absent PIN
+        # stops before anything changes, `enable` never drops a PIN, the
+        # result is read back. See tests/tpm-unlock.test.sh; the real
+        # systemd-cryptenroll is the tpm-unlock-real job below.
+        run: bash tests/tpm-unlock.test.sh
 
       - name: The claims-register lint (fixtures)
         # A verified claim naming only words, a dangling path, an orphan

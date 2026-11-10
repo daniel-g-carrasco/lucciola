@@ -5,10 +5,15 @@ tests/system-logic.test.sh with python3 -I and no GTK: which image a machine
 follows, what rpm-ostree's JSON says, when an update counts as available,
 how pending apps and checks are worded."""
 
+import importlib.machinery
+import importlib.util
+import io
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -123,6 +128,18 @@ st = ls.parse_tpm_status("Could not auto-detect a LUKS device backing root\nLUKS
 check("tpm status: no LUKS root", st["error"] and ls.tpm_summary(st)[0] == "unencrypted")
 check("tpm status: no chip", ls.tpm_summary(ls.parse_tpm_status("  TPM2 device                ✗ not found / not 2.0\n"))[0] == "no-tpm")
 check("tpm status: unknown on empty", ls.tpm_summary(ls.parse_tpm_status(""))[0] == "unknown")
+tpm_no_pin = tpm_root.replace("  Boot path", "  PIN at startup             — not asked  (the disk unlocks unattended)\n  Boot path")
+tpm_pin = tpm_root.replace("  Boot path", "  PIN at startup             ✓ asked  (the TPM releases the key only with it)\n  Boot path")
+check("tpm status: an older helper says nothing about the PIN", ls.parse_tpm_status(tpm_root)["pin"] is None)
+check("tpm status: no PIN asked", ls.parse_tpm_status(tpm_no_pin)["pin"] is False and ls.tpm_summary(ls.parse_tpm_status(tpm_no_pin)) == ls.tpm_summary(ls.parse_tpm_status(tpm_root)))
+st = ls.parse_tpm_status(tpm_pin)
+check("tpm status: PIN asked", st["pin"] is True and st["token"] and st["wired"])
+check("tpm summary: on, and the sentence names the PIN", ls.tpm_summary(st)[0] == "on" and "PIN" in ls.tpm_summary(st)[1] and "PIN" not in ls.tpm_summary(ls.parse_tpm_status(tpm_no_pin))[1])
+check("tpm pin: empty", ls.tpm_pin_problem("", "") == "Choose a PIN")
+check("tpm pin: five characters are too few", "At least 6" in ls.tpm_pin_problem("12345", "12345"))
+check("tpm pin: the two differ", ls.tpm_pin_problem("123456", "123457") == "The two PINs differ")
+check("tpm pin: one line only", ls.tpm_pin_problem("123\n456", "123\n456") == "The PIN must be one line")
+check("tpm pin: six characters, twice the same, can go", ls.tpm_pin_problem("c0ffee", "c0ffee") == "" and ls.tpm_pin_problem("àèìòùé", "àèìòùé") == "")
 
 check("grub lock: ON", ls.parse_grub_lock("GRUB menu lock: ON (user: root).\nmore\n") == "on")
 check("grub lock: off", ls.parse_grub_lock("GRUB menu lock: off. The boot menu can be edited by anyone.") == "off")
@@ -604,6 +621,8 @@ check("lanes: SSH, the login, the TPM, GRUB, the scheduler, the dock, the printe
 check("lanes: on and off of one switch are one operation",
       lanes("ssh-on") == lanes("ssh-off") == lanes("ssh-allow", "1.2.3.4", "PC") == lanes("ssh-forget", "1.2.3.4") == {"ssh"}
       and lanes("grub-lock-on") == lanes("grub-lock-off")
+      and lanes("tpm-unlock-enable") == lanes("tpm-unlock-disable") == lanes("tpm-unlock-pin") == lanes("tpm-unlock-no-pin") == {"tpm-unlock"}
+      and lanes("pin", "1") != lanes("tpm-unlock-pin")
       and lanes("dock-wake") == lanes("dock-rescue") and lanes("scheduler") == lanes("scheduler-off")
       and ls.operation_lanes(["/usr/bin/lucciola-keyring", "tpm"]) == ls.operation_lanes(["/usr/bin/lucciola-keyring", "tpm-off"]))
 check("lanes: gaming holds the system and Flatpak, the AI apps only Flatpak, Docker only the system",
@@ -689,6 +708,61 @@ check("banner: says what waits and that the rest works",
       and ls.banner_text([("Turning Remote Login On", lanes("ssh-on"))]) == ""
       and ls.banner_text([], background=True).startswith("A system update is running in the background")
       and ls.banner_text([]) == "")
+
+# ── the privileged helper hands the passphrase and the PIN in files ───
+# run_step for real, on a stand-in for lucciola-tpm-unlock that copies what
+# it was given: both secrets arrive whole, in files only their owner reads,
+# under a directory only its owner enters, never in the arguments, and the
+# files are gone when the step ends, also when it fails.
+_admin_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "build_files", "system_files", "usr", "libexec", "lucciola", "admin")
+_loader = importlib.machinery.SourceFileLoader("lucciola_admin", _admin_path)
+_spec = importlib.util.spec_from_loader("lucciola_admin", _loader)
+admin = importlib.util.module_from_spec(_spec)
+sys.dont_write_bytecode = True
+_loader.exec_module(admin)
+
+with tempfile.TemporaryDirectory() as tmp:
+    admin.SECRET_DIR = os.path.join(tmp, "run")
+    seen = os.path.join(tmp, "seen")
+    fake = os.path.join(tmp, "fake-tpm-unlock")
+    with open(fake, "w", encoding="utf-8") as fh:
+        fh.write("#!/bin/sh\n"
+                 'm() { [ -n "$1" ] && stat -c %a "$1"; }\n'
+                 f'{{ echo "argv: $*"; printf "pw=[%s]\\n" "$(cat "$LUCCIOLA_UNLOCK_KEY_FILE")";\n'
+                 '  printf "pin=[%s]\\n" "$([ -n "${LUCCIOLA_TPM_PIN_FILE:-}" ] && cat "$LUCCIOLA_TPM_PIN_FILE")";\n'
+                 '  echo "modes: $(m "$LUCCIOLA_UNLOCK_KEY_FILE") $(m "${LUCCIOLA_TPM_PIN_FILE:-}") $(m "$(dirname "$LUCCIOLA_UNLOCK_KEY_FILE")")";\n'
+                 f'  echo "confirm=$CONFIRM"; }} > {seen}\n'
+                 'exit "${FAKE_RC:-0}"\n')
+    os.chmod(fake, 0o755)
+    step = admin.Step([fake, "pin", "7"], env={"CONFIRM": "yes"}, stdin="secret-and-pin-files")
+    rc = admin.run_step(step, "the disk passphrase", "c0ffee42")
+    got = open(seen, encoding="utf-8").read()
+    check("admin pin step: runs and reports the helper's exit code", rc == 0, got)
+    check("admin pin step: the passphrase arrives whole, no newline added", "pw=[the disk passphrase]\n" in got, got)
+    check("admin pin step: the PIN arrives whole", "pin=[c0ffee42]\n" in got, got)
+    check("admin pin step: both files 600, their directory 700", "modes: 600 600 700\n" in got, got)
+    check("admin pin step: neither secret is an argument", "argv: pin 7\n" in got, got)
+    check("admin pin step: the files are gone afterwards", os.listdir(admin.SECRET_DIR) == [], str(os.listdir(admin.SECRET_DIR)))
+    step = admin.Step([fake, "pin", "7"], env={"CONFIRM": "yes", "FAKE_RC": "3"}, stdin="secret-and-pin-files")
+    check("admin pin step: a failing helper's code comes back, and the files are gone all the same",
+          admin.run_step(step, "p", "123456") == 3 and os.listdir(admin.SECRET_DIR) == [])
+    step = admin.Step([fake, "no-pin", "7"], env={"CONFIRM": "yes"}, stdin="secret-file")
+    os.remove(seen)
+    admin.run_step(step, "the disk passphrase")
+    got = open(seen, encoding="utf-8").read()
+    check("admin no-pin step: the passphrase file, and no PIN file at all", "pw=[the disk passphrase]\n" in got and "pin=[]\n" in got, got)
+
+_stdin = sys.stdin
+sys.stdin = io.StringIO("the disk passphrase\nc0ffee42\n")
+check("admin reads two lines: the passphrase, then the PIN", (admin.read_secret(), admin.read_secret("PIN")) == ("the disk passphrase", "c0ffee42"))
+sys.stdin = io.StringIO("the disk passphrase\n")
+admin.read_secret()
+try:
+    admin.read_secret("PIN")
+    check("admin refuses a missing PIN line", False)
+except SystemExit as e:
+    check("admin refuses a missing PIN line, naming it", "no PIN was given" in str(e), str(e))
+sys.stdin = _stdin
 
 print("system-logic: all checks passed" if fails == 0 else f"system-logic: {fails} failed")
 sys.exit(1 if fails else 0)

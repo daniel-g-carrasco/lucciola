@@ -1,0 +1,11 @@
+# The passphrase and the PIN that Lucciola System hands over live in files
+# only root reads, for the length of one step: they are removed when it ends.
+name = "tpm-pin-file-left-behind"
+file = "build_files/system_files/usr/libexec/lucciola/admin"
+old = '''        for path in secret_paths:
+            try:
+                os.remove(path)'''
+new = '''        for path in secret_paths[:0]:
+            try:
+                os.remove(path)'''
+must_fail = "bash tests/system-logic.test.sh"

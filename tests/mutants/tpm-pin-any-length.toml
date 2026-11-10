@@ -1,0 +1,6 @@
+# A PIN shorter than six characters is refused before anything changes.
+name = "tpm-pin-any-length"
+file = "build_files/system_files/usr/bin/lucciola-tpm-unlock"
+old = '''PIN_MIN=6'''
+new = '''PIN_MIN=1'''
+must_fail = "bash tests/tpm-unlock.test.sh"

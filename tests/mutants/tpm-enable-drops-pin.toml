@@ -1,0 +1,8 @@
+# `enable` on an enrollment that asks a PIN keeps asking one. Re-running
+# `enable` is the remedy after a Secure Boot or kernel change: if it enrolled
+# without the PIN, the owner who chose one would lose it without being told.
+name = "tpm-enable-drops-pin"
+file = "build_files/system_files/usr/bin/lucciola-tpm-unlock"
+old = '''    *)      if has_tpm2_pin; then with_pin=1; fi ;;'''
+new = '''    *)      : ;;'''
+must_fail = "bash tests/tpm-unlock.test.sh"

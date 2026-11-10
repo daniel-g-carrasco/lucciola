@@ -14,8 +14,18 @@
 #                  keyslots/tokens exist? is there a human fallback slot? a
 #                  tpm2 token? is the boot path wired? Mutates nothing.
 #   enable [PCRS]  enroll TPM2 auto-unlock (PCRS default '7') AND wire it into
-#                  /etc/crypttab so the initrd actually tries it at boot.
+#                  /etc/crypttab so the initrd actually tries it at boot. An
+#                  enrollment that asks a PIN keeps asking one.
+#   pin [PCRS]     the same, with a PIN: the TPM releases the key only when
+#                  the PIN is typed at startup (--tpm2-with-pin). An option,
+#                  never the default (register decision D1, 2026-11-10).
+#   no-pin [PCRS]  the same, without a PIN: back to unattended unlock.
 #   disable        remove ONLY the tpm2 enrollment + its crypttab option.
+#
+# What the PIN is for: without it, whoever holds the laptop can replace the
+# initramfs on /boot (it is neither signed nor measured into PCR 7), start
+# the machine and have the TPM hand the disk key to their own code. With it
+# the TPM gives nothing without the PIN, and counts wrong attempts itself.
 #
 # Detection is fully automatic and refuses on ambiguity — it never guesses a
 # device, and never accepts a LUKS volume that is NOT proven to back the
@@ -24,7 +34,15 @@
 set -euo pipefail
 
 PCRS_DEFAULT="7"
-CRYPTTAB="/etc/crypttab"
+# A PIN shorter than this is refused. The TPM slows guessing down (its own
+# lock-out after a few wrong attempts), so six characters go a long way.
+PIN_MIN=6
+# LUCCIOLA_TPM_UNLOCK_TEST_ROOT: a directory standing in for / (the TPM's
+# sysfs and device nodes, crypttab, GRUB's user.cfg), for
+# tests/tpm-unlock.test.sh. Unset on a real machine: sudo and Lucciola
+# System's helper both start from a clean environment.
+TEST_ROOT="${LUCCIOLA_TPM_UNLOCK_TEST_ROOT:-}"
+CRYPTTAB="${TEST_ROOT}/etc/crypttab"
 
 # ── colours (only when writing to a TTY) ──────────────────────────────────
 if [ -t 1 ]; then
@@ -53,15 +71,16 @@ require_root() {
 # resource-manager node /dev/tpmrm0, which only exists for TPM 2.0. We never
 # accept /dev/tpm0 alone, which a 1.2 chip also provides.
 have_tpm2() {
-  [ -e /sys/class/tpm/tpm0 ] || return 1
+  local sys="${TEST_ROOT}/sys/class/tpm/tpm0"
+  [ -e "$sys" ] || return 1
   local maj=""
-  if [ -r /sys/class/tpm/tpm0/tpm_version_major ]; then
-    maj="$(cat /sys/class/tpm/tpm0/tpm_version_major 2>/dev/null || true)"
+  if [ -r "$sys/tpm_version_major" ]; then
+    maj="$(cat "$sys/tpm_version_major" 2>/dev/null || true)"
   fi
   case "$maj" in
     2) return 0 ;;             # kernel says TPM 2.0 — definitive
     1) return 1 ;;             # kernel says TPM 1.2 — definitively not usable
-    *) [ -e /dev/tpmrm0 ] ;;   # unknown: trust the TPM2-only RM node
+    *) [ -e "${TEST_ROOT}/dev/tpmrm0" ] ;;   # unknown: trust the TPM2-only RM node
   esac
 }
 
@@ -345,6 +364,50 @@ has_tpm2_token() {
       >/dev/null 2>&1
 }
 
+# True if the systemd-tpm2 token on $LUKS_DEV asks a PIN ("tpm2-pin": true in
+# its LUKS2 token, written by systemd-cryptenroll --tpm2-with-pin=yes).
+has_tpm2_pin() {
+  local json
+  json="$(_luks_json)"
+  [ -n "$json" ] || return 1
+  printf '%s' "$json" \
+    | jq -e '.tokens // {} | to_entries
+             | map(select(.value.type=="systemd-tpm2" and .value["tpm2-pin"]==true))
+             | length > 0' \
+      >/dev/null 2>&1
+}
+
+# ── the PIN ───────────────────────────────────────────────────────────────
+# Read the new PIN into NEW_PIN, before anything is changed. Lucciola System
+# hands it in a root-only file (LUCCIOLA_TPM_PIN_FILE, never an argument); at
+# a terminal it is typed twice. Without either there is nobody to ask:
+# systemd-cryptenroll would wait for an answer forever (tried on systemd 262),
+# so this stops instead. The PIN then reaches systemd-cryptenroll in $NEWPIN,
+# the variable it reads, in the environment of that one command.
+NEW_PIN=""
+read_new_pin() {
+  local a b
+  if [ -n "${LUCCIOLA_TPM_PIN_FILE:-}" ]; then
+    NEW_PIN="$(cat "$LUCCIOLA_TPM_PIN_FILE" 2>/dev/null)" \
+      || die "Could not read the PIN file. Nothing changed."
+  elif [ -t 0 ]; then
+    info "Choose the PIN asked at every startup: at least ${PIN_MIN} characters. Digits and"
+    info "plain letters are safest: the startup screen may use another keyboard layout."
+    read -rsp "New PIN: " a || die "Aborted. Nothing changed."; printf '\n'
+    read -rsp "Again:   " b || die "Aborted. Nothing changed."; printf '\n'
+    [ "$a" = "$b" ] || die "The two PINs differ. Nothing changed."
+    NEW_PIN="$a"
+  else
+    die "A PIN is needed and there is no terminal to ask it on. Run this from a \
+terminal (ujust lucciola-tpm-unlock pin) or from Lucciola System. Nothing changed."
+  fi
+  case "$NEW_PIN" in
+    *$'\n'*) die "The PIN must be one line. Nothing changed." ;;
+  esac
+  [ "${#NEW_PIN}" -ge "$PIN_MIN" ] \
+    || die "The PIN must be at least ${PIN_MIN} characters. Nothing changed."
+}
+
 # ── crypttab wiring ───────────────────────────────────────────────────────
 # A LUKS2 tpm2 token is ONLY consulted at boot if the matching /etc/crypttab
 # line carries the `tpm2-device=auto` option (crypttab(5)). Without it the
@@ -455,7 +518,7 @@ boot_path_wired() {
 # the kernel command line: with an open menu, `e` + init=/bin/bash boots to
 # a root shell and the TPM still releases the disk key (2026-10-04).
 grub_locked() {
-  grep -q '^GRUB2_PASSWORD=grub\.pbkdf2\.' /boot/grub2/user.cfg 2>/dev/null
+  grep -q '^GRUB2_PASSWORD=grub\.pbkdf2\.' "${TEST_ROOT}/boot/grub2/user.cfg" 2>/dev/null
 }
 
 cmd_status() {
@@ -491,6 +554,13 @@ cmd_status() {
 
   if has_tpm2_token; then
     printf '  %-26s %s✓ enrolled%s\n' "TPM2 token" "$c_grn" "$c_reset"
+    if has_tpm2_pin; then
+      printf '  %-26s %s✓ asked%s  %s(the TPM releases the key only with it)%s\n' \
+        "PIN at startup" "$c_grn" "$c_reset" "$c_dim" "$c_reset"
+    else
+      printf '  %-26s %s— not asked%s  %s(the disk unlocks unattended)%s\n' \
+        "PIN at startup" "$c_dim" "$c_reset" "$c_dim" "$c_reset"
+    fi
   else
     printf '  %-26s %s— not enrolled%s\n' "TPM2 token" "$c_dim" "$c_reset"
   fi
@@ -522,8 +592,16 @@ cmd_status() {
   fi
 
   if has_tpm2_token && boot_path_wired; then
-    printf '  %sAuto-unlock is enrolled AND wired.%s Run %sujust lucciola-tpm-unlock disable%s to remove it.\n\n' \
+    printf '  %sAuto-unlock is enrolled AND wired.%s Run %sujust lucciola-tpm-unlock disable%s to remove it.\n' \
       "$c_grn" "$c_reset" "$c_ember" "$c_reset"
+    if has_tpm2_pin; then
+      printf '  A PIN is asked at startup; %sujust lucciola-tpm-unlock no-pin%s goes back to unattended unlock.\n\n' \
+        "$c_ember" "$c_reset"
+    else
+      printf '  No PIN is asked: whoever holds the laptop and can start other media can get the\n'
+      printf '  key out of the TPM. %sujust lucciola-tpm-unlock pin%s adds a PIN at startup.\n\n' \
+        "$c_ember" "$c_reset"
+    fi
   elif has_tpm2_token; then
     printf '  %sToken enrolled but the boot path is NOT wired%s — the initrd will still\n' "$c_ylw" "$c_reset"
     printf '  prompt for the passphrase. Run %sujust lucciola-tpm-unlock enable%s to wire it.\n\n' "$c_ember" "$c_reset"
@@ -556,8 +634,11 @@ print_survivors() {
 }
 
 # ── enable ────────────────────────────────────────────────────────────────
+# $2 is the PIN mode: keep (an enrollment that asks a PIN keeps asking one,
+# anything else stays without), pin, no-pin.
 cmd_enable() {
-  local pcrs="$1" uuid bak wired
+  local pcrs="$1" mode="${2:-keep}" uuid bak wired with_pin=0
+  local -a pin_opt=()
 
   have_tpm2 || die "No usable TPM 2.0 device (need /sys/class/tpm/tpm0 with \
 tpm_version_major=2, or the TPM2-only /dev/tpmrm0 node). Cannot enroll — the \
@@ -583,11 +664,36 @@ LUKS passphrase remains your only unlock and nothing changed."
   [ -n "$uuid" ] || die "Could not read the LUKS UUID of $LUKS_DEV — refusing \
 to wire crypttab blind. Nothing changed."
 
+  # With or without a PIN. `enable` on an enrollment that asks one must not
+  # drop it quietly: re-running `enable` is the documented remedy after a
+  # Secure Boot or kernel change, and the owner who chose a PIN chose it for
+  # those days too. The TPM cannot give the old PIN back, so it is typed again.
+  case "$mode" in
+    pin)    with_pin=1 ;;
+    no-pin) with_pin=0 ;;
+    *)      if has_tpm2_pin; then with_pin=1; fi ;;
+  esac
+  if [ "$with_pin" -eq 1 ]; then
+    if [ "$mode" != pin ]; then
+      info "This disk asks a PIN at startup, and keeps asking one: type it again, or a new one."
+      info "${c_dim}(ujust lucciola-tpm-unlock no-pin goes back to unattended unlock.)${c_reset}"
+    fi
+    read_new_pin
+    pin_opt=(--tpm2-with-pin=yes)
+  else
+    pin_opt=(--tpm2-with-pin=no)
+  fi
+
   printf '\n'
   info "${c_bold}About to enable TPM2 auto-unlock:${c_reset}"
   info "  Device  : ${LUKS_DEV}  (UUID=${uuid})"
   info "  Action  : enroll a TPM2 key (PCRs ${pcrs}) AND add tpm2-device=auto"
   info "            to its ${CRYPTTAB} line so the initrd tries it at boot."
+  if [ "$with_pin" -eq 1 ]; then
+    info "  PIN     : asked at every startup; the TPM releases the key only with it."
+  else
+    info "  PIN     : none; the disk unlocks unattended."
+  fi
   info "  Safety  : your existing passphrase/recovery keyslot is kept untouched."
   if has_tpm2_token; then
     info "  Note    : a TPM2 token already exists — only the tpm2 slot is"
@@ -621,20 +727,32 @@ to wire crypttab blind. Nothing changed."
   if [ -n "${LUCCIOLA_UNLOCK_KEY_FILE:-}" ]; then
     unlock=(--unlock-key-file="$LUCCIOLA_UNLOCK_KEY_FILE")
   fi
+  # The PIN travels in $NEWPIN, set for this one command by the shell itself:
+  # an argument (of systemd-cryptenroll, or of an `env` in front of it) would
+  # be readable in /proc by anyone. NEWPIN is set only with a PIN: an empty
+  # one would be taken as the PIN.
+  enroll() {
+    if [ "$with_pin" -eq 1 ]; then
+      NEWPIN="$NEW_PIN" systemd-cryptenroll "$@"
+    else
+      systemd-cryptenroll "$@"
+    fi
+  }
   if has_tpm2_token; then
     info "A tpm2 slot already exists — re-enrolling it atomically (passphrase/recovery slots untouched)…"
-    if ! systemd-cryptenroll "${unlock[@]}" --wipe-slot=tpm2 \
-           --tpm2-device=auto --tpm2-pcrs="$pcrs" "$LUKS_DEV"; then
+    if ! enroll "${unlock[@]}" --wipe-slot=tpm2 \
+           --tpm2-device=auto --tpm2-pcrs="$pcrs" "${pin_opt[@]}" "$LUKS_DEV"; then
       err "Re-enroll failed. systemd applies the wipe and enroll as ONE"
       err "operation, so your PREVIOUS tpm2 enrollment is left intact and"
       die "your LUKS passphrase still unlocks the disk. Nothing was lost."
     fi
   else
-    if ! systemd-cryptenroll "${unlock[@]}" --tpm2-device=auto --tpm2-pcrs="$pcrs" "$LUKS_DEV"; then
+    if ! enroll "${unlock[@]}" --tpm2-device=auto --tpm2-pcrs="$pcrs" "${pin_opt[@]}" "$LUKS_DEV"; then
       err "systemd-cryptenroll failed. No tpm2 enrollment was added."
       die "Your LUKS passphrase is unaffected and still unlocks the disk."
     fi
   fi
+  NEW_PIN=""
 
   # POST-VERIFY (token): a tpm2 token must now exist AND a human fallback
   # must STILL exist. If the fallback vanished, shout — never let the user
@@ -658,6 +776,17 @@ to wire crypttab blind. Nothing changed."
     die "Enrollment reported success but no systemd-tpm2 token is present. \
 Nothing was changed for your passphrase or ${CRYPTTAB}; investigate before \
 relying on auto-unlock."
+  fi
+  # POST-VERIFY (PIN): the token must say what was asked for. A PIN that was
+  # asked for and is not there is a protection the owner believes in and
+  # does not have, so it is said in red, not assumed.
+  if [ "$with_pin" -eq 1 ] && ! has_tpm2_pin; then
+    die "The TPM key was enrolled, but WITHOUT a PIN: the token does not ask \
+one. The disk unlocks unattended. Run 'pin' again, and report this."
+  fi
+  if [ "$with_pin" -eq 0 ] && has_tpm2_pin; then
+    die "The TPM key was enrolled, but it still asks a PIN. Run 'no-pin' \
+again, and report this. Your passphrase works meanwhile."
   fi
 
   # Wire the boot path: append tpm2-device=auto to the UUID's crypttab line,
@@ -709,6 +838,14 @@ relying on auto-unlock."
   info "    ${c_ylw}does not engage, boot stops at the passphrase prompt — unreachable${c_reset}"
   info "    ${c_ylw}over SSH (the network is not up in the initramfs).${c_reset}"
   info "  • Your LUKS passphrase ALWAYS remains valid as the fallback — keep it."
+  if [ "$with_pin" -eq 1 ]; then
+    info "  • ${c_bold}The PIN is asked at every startup${c_reset}, where the passphrase used to be."
+    info "    Enter on an empty PIN asks for the passphrase instead. The PIN is not"
+    info "    stored anywhere: if you forget it, unlock with the passphrase and run"
+    info "    'pin' again. After a few wrong PINs in a row the TPM refuses every PIN"
+    info "    for a while, the right one included (its own protection against"
+    info "    guessing): the startup then asks for the passphrase."
+  fi
   info "  • PCR 7 binds to the Secure Boot policy state. The image ships a"
   info "    MOK-signed CachyOS kernel, so a MOK / Secure Boot change can"
   info "    invalidate PCR 7 — just re-run 'enable' afterwards (the passphrase"
@@ -792,7 +929,15 @@ main() {
       ;;
     enable)
       require_root
-      cmd_enable "$pcrs"
+      cmd_enable "$pcrs" keep
+      ;;
+    pin)
+      require_root
+      cmd_enable "$pcrs" pin
+      ;;
+    no-pin)
+      require_root
+      cmd_enable "$pcrs" no-pin
       ;;
     disable)
       require_root
@@ -800,7 +945,7 @@ main() {
       ;;
     -h|--help|help)
       cat <<EOF
-Usage: lucciola-tpm-unlock [status|enable [PCRS]|disable]
+Usage: lucciola-tpm-unlock [status|enable [PCRS]|pin [PCRS]|no-pin [PCRS]|disable]
 
   status         (default) read-only report: TPM2 present, detected LUKS
                  device backing root, keyslots/tokens by type, whether a
@@ -811,14 +956,23 @@ Usage: lucciola-tpm-unlock [status|enable [PCRS]|disable]
                  exists, the device is detected AND proven to back root, and a
                  human fallback keyslot (passphrase/recovery — NOT a fido2/
                  pkcs11 hardware key) survives. Idempotent (atomic re-enroll).
+                 An enrollment that asks a PIN keeps asking one.
+  pin [PCRS]     the same, with a PIN (at least ${PIN_MIN} characters) asked at every
+                 startup: the TPM releases the key only with it. Protects the
+                 disk from someone who has the laptop in hand; the passphrase
+                 stays as the fallback.
+  no-pin [PCRS]  the same, without a PIN: the disk unlocks unattended again.
   disable        remove ONLY the tpm2 slot and its crypttab option; the
                  fallback keyslot is kept.
 
-Env: CONFIRM=yes  skip the interactive 'yes' confirmation (enable/disable).
+Env: CONFIRM=yes  skip the interactive 'yes' confirmation.
+     LUCCIOLA_UNLOCK_KEY_FILE, LUCCIOLA_TPM_PIN_FILE  root-only files with the
+                  disk passphrase and the new PIN, for Lucciola System, which
+                  has no terminal to ask them on.
 EOF
       ;;
     *)
-      die "Unknown action '$action'. Try: status | enable [PCRS] | disable"
+      die "Unknown action '$action'. Try: status | enable [PCRS] | pin [PCRS] | no-pin [PCRS] | disable"
       ;;
   esac
 }

@@ -15,10 +15,10 @@ each operation: this file only validates, sets the non-interactive switches
 the helpers offer (CONFIRM=yes, a key file, two lines on stdin) and runs
 fixed argument vectors, never a shell.
 
-Secrets (a disk passphrase, a boot-menu password) never travel as
-arguments, which any process can read in /proc: the window writes them on
-this program's standard input, one line, and they reach the helper as a
-root-only file in /run or on its own stdin.
+Secrets (a disk passphrase, a boot-menu password, the TPM's PIN) never
+travel as arguments, which any process can read in /proc: the window writes
+them on this program's standard input, one line each, and they reach the
+helper as root-only files in /run or on its own stdin.
 """
 
 import os
@@ -70,8 +70,9 @@ ENV = {
 
 class Step:
     """One fixed command. env adds to the reset environment; stdin is
-    "password-twice" or "secret-file" when the step takes the secret the
-    caller sent; optional steps may fail without ending the verb."""
+    "password-twice", "secret-file" or "secret-and-pin-files" when the step
+    takes what the caller sent (the last one two lines: the disk passphrase,
+    then the new PIN); optional steps may fail without ending the verb."""
 
     def __init__(self, argv, env=None, stdin=None, optional=False):
         self.argv = argv
@@ -80,11 +81,13 @@ class Step:
         self.optional = optional
 
     def describe(self):
-        parts = [f"{k}={v}" for k, v in self.env.items() if k != "LUCCIOLA_UNLOCK_KEY_FILE"]
+        parts = [f"{k}={v}" for k, v in self.env.items() if k not in ("LUCCIOLA_UNLOCK_KEY_FILE", "LUCCIOLA_TPM_PIN_FILE")]
         if self.stdin == "password-twice":
             parts.append("(password on stdin, twice)")
         if self.stdin == "secret-file":
             parts.append("(passphrase in a root-only file)")
+        if self.stdin == "secret-and-pin-files":
+            parts.append("(passphrase and PIN in root-only files)")
         return " ".join(parts + self.argv)
 
 
@@ -176,10 +179,26 @@ def act_tpm_unlock_status(args):
 
 
 def act_tpm_unlock_enable(args):
-    if len(args) > 1 or (args and not PCRS.match(args[0])):
-        raise SystemExit("tpm-unlock-enable takes at most one argument: the PCRs, like 7 or 7+14")
-    pcrs = args[0] if args else "7"
+    pcrs = tpm_pcrs("tpm-unlock-enable", args)
     return [Step([TPM_UNLOCK, "enable", pcrs], env={"CONFIRM": "yes"}, stdin="secret-file")]
+
+
+def tpm_pcrs(verb, args):
+    if len(args) > 1 or (args and not PCRS.match(args[0])):
+        raise SystemExit(f"{verb} takes at most one argument: the PCRs, like 7 or 7+14")
+    return args[0] if args else "7"
+
+
+def act_tpm_unlock_pin(args):
+    """With a PIN asked at startup. Two lines on stdin: the disk passphrase
+    (it unlocks a keyslot for the enrollment), then the new PIN."""
+    pcrs = tpm_pcrs("tpm-unlock-pin", args)
+    return [Step([TPM_UNLOCK, "pin", pcrs], env={"CONFIRM": "yes"}, stdin="secret-and-pin-files")]
+
+
+def act_tpm_unlock_no_pin(args):
+    pcrs = tpm_pcrs("tpm-unlock-no-pin", args)
+    return [Step([TPM_UNLOCK, "no-pin", pcrs], env={"CONFIRM": "yes"}, stdin="secret-file")]
 
 
 def act_tpm_unlock_disable(args):
@@ -334,6 +353,8 @@ ACTIONS = {
     "kernel": act_kernel,
     "tpm-unlock-status": act_tpm_unlock_status,
     "tpm-unlock-enable": act_tpm_unlock_enable,
+    "tpm-unlock-pin": act_tpm_unlock_pin,
+    "tpm-unlock-no-pin": act_tpm_unlock_no_pin,
     "tpm-unlock-disable": act_tpm_unlock_disable,
     "grub-lock-status": act_grub_lock_status,
     "grub-lock-on": act_grub_lock_on,
@@ -367,14 +388,25 @@ def plan(verb, args):
     return ACTIONS[verb](args)
 
 
-def read_secret():
+def read_secret(what="secret"):
     """One line from our own stdin, which pkexec passes through; an empty
     line is a refusal, so the window must check before sending."""
     line = sys.stdin.readline()
     secret = line.rstrip("\r\n")
     if not secret:
-        raise SystemExit("no secret was given on stdin")
+        raise SystemExit(f"no {what} was given on stdin")
     return secret
+
+
+def secret_file(prefix, text):
+    """text in a file only root reads, under /run; no newline: the file IS
+    the secret. The caller removes it."""
+    os.makedirs(SECRET_DIR, mode=0o700, exist_ok=True)
+    os.chmod(SECRET_DIR, 0o700)
+    fd, path = tempfile.mkstemp(prefix=prefix, dir=SECRET_DIR)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    return path
 
 
 def unblock_record(app):
@@ -395,27 +427,26 @@ def unblock_record(app):
     print(f"{app} is back in unattended updates", flush=True)
 
 
-def run_step(step, secret):
+def run_step(step, secret, pin=None):
     env = dict(ENV, **step.env)
     stdin_text = None
-    secret_path = None
+    secret_paths = []
     try:
         if step.stdin == "password-twice":
             stdin_text = f"{secret}\n{secret}\n"
-        elif step.stdin == "secret-file":
-            os.makedirs(SECRET_DIR, mode=0o700, exist_ok=True)
-            os.chmod(SECRET_DIR, 0o700)
-            fd, secret_path = tempfile.mkstemp(prefix="unlock.", dir=SECRET_DIR)
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                fh.write(secret)   # no newline: the file IS the passphrase
-            env["LUCCIOLA_UNLOCK_KEY_FILE"] = secret_path
+        elif step.stdin in ("secret-file", "secret-and-pin-files"):
+            secret_paths.append(secret_file("unlock.", secret))
+            env["LUCCIOLA_UNLOCK_KEY_FILE"] = secret_paths[-1]
+            if step.stdin == "secret-and-pin-files":
+                secret_paths.append(secret_file("pin.", pin))
+                env["LUCCIOLA_TPM_PIN_FILE"] = secret_paths[-1]
         print("+ " + " ".join(step.argv), flush=True)
         res = subprocess.run(step.argv, env=env, input=stdin_text, text=True, check=False)
         return res.returncode
     finally:
-        if secret_path:
+        for path in secret_paths:
             try:
-                os.remove(secret_path)
+                os.remove(path)
             except FileNotFoundError:
                 pass
 
@@ -435,9 +466,11 @@ def main(argv):
         return 0
     if os.geteuid() != 0:
         raise SystemExit("this must run as root (pkexec from the app, sudo from a recipe)")
-    secret = None
+    secret = pin = None
     if any(isinstance(s, Step) and s.stdin for s in steps):
         secret = read_secret()
+    if any(isinstance(s, Step) and s.stdin == "secret-and-pin-files" for s in steps):
+        pin = read_secret("PIN")
     for step in steps:
         if isinstance(step, UnblockRecord):
             unblock_record(step.app)
@@ -446,7 +479,7 @@ def main(argv):
             with open(step.path, "w", encoding="utf-8") as fh:
                 fh.write(step.text)
             continue
-        rc = run_step(step, secret)
+        rc = run_step(step, secret, pin)
         if rc != 0 and not step.optional:
             if verb == "flatpak-unblock" and step.argv[:2] == ["flatpak", "update"]:
                 # Keep it out of unattended updates if the update itself failed.
