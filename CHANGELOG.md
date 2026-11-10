@@ -7,6 +7,14 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (2026-11-10, the upstream review)
+- **The monthly upstream check watches the base.** `ublue-os/main`, what every
+  image is built on since October, was not on its list; the archived rechunk
+  leaves it. It counts from the last review in the table and nothing else (in
+  November it counted from the day of the base switch, named in a table cell),
+  and up to 100 commits per project instead of 30. The review itself is in
+  `docs/upstream-inspirations.md`.
+
 ### Changed (2026-11-04, the version's name)
 - **The version is now called `lucciola.YYYYMMDD`.** It was `candidate.YYYYMMDD`
   on every image, `:stable` too, because a promotion copies the same image to
