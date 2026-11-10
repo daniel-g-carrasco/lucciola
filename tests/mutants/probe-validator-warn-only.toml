@@ -1,0 +1,8 @@
+# The in-image validator is gating in the smoke boot (register item E1): a
+# validator that fails must stop the promotion, not leave a WARN in a log
+# nobody reads on a green run.
+name = "probe-validator-warn-only"
+file = ".github/smoke/security-probe.sh"
+old = '''    res validator FAIL "${why:-exit code $rc and no FAIL line in its log}"'''
+new = '''    res validator WARN "${why:-exit code $rc and no FAIL line in its log}"'''
+must_fail = "bash tests/security-probe.test.sh"

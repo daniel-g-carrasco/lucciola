@@ -1,0 +1,8 @@
+# A decision that was taken leaves the monthly security review: the decisions
+# table has no Status column, so "done" is read from Due as well. Without it
+# D4 and D5 were listed as pending a month after they were taken.
+name = "report-decision-done-ignored"
+file = ".github/scripts/security-review-report.py"
+old = '''                if "done" not in (r.get("Status", "open").strip().lower(), r.get("Due", "").strip().lower())]'''
+new = '''                if r.get("Status", "open").strip().lower() != "done"]'''
+must_fail = "bash tests/security-review-report.test.sh"
