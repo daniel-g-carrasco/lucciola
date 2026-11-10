@@ -1,0 +1,8 @@
+# A failed lucciola-* unit fails the smoke boot like a margine-* one. Until
+# 2026-11-10 the rule named only margine-* and mok-enroll*, written before
+# Lucciola had units of its own, and a failed lucciola-* unit was a WARN.
+name = "probe-lucciola-units-not-ours"
+file = ".github/smoke/security-probe.sh"
+old = '''    margine-*|lucciola-*|mok-enroll*) return 0 ;;'''
+new = '''    margine-*|mok-enroll*) return 0 ;;'''
+must_fail = "bash tests/security-probe.test.sh"

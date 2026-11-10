@@ -49,8 +49,8 @@ monthly review lists it until then.
 
 | ID | Question | Options | Due |
 |---|---|---|---|
-| D1 | TPM unlock against an attacker with the laptop in hand | TPM + PIN (`--tpm2-with-pin`), passphrase only, or a signed UKI with a PCR 11 policy (ADR-0007) | 2026-10-31 |
-| D2 | Default firewall zone | keep `FedoraWorkstation` (high ports open, Fedora default) or ship a stricter Lucciola zone | 2026-10-31 |
+| D1 | TPM unlock against an attacker with the laptop in hand | decided 2026-11-10: TPM + PIN (`--tpm2-with-pin`) as an option the owner turns on, never the default; unlocking without a PIN stays as it is, with its limitation (C11). Item E7 | done |
+| D2 | Default firewall zone | decided 2026-11-10: a stricter Lucciola zone, but only after a written design: what listens above port 1024 today, what each feature needs, what an owner sees when something is refused. Item E8 | done |
 | D3 | LLMNR (systemd-resolved, port 5355 on all interfaces) | keep the Fedora default or turn it off | 2026-11-30 |
 | D4 | `tailscaled` is enabled by default (inherited from Bluefin) and opens a UDP port on all interfaces | decided 2026-10-10: not shipped; `ujust lucciola-tailscale` layers and enables it on request | done |
 | D5 | GSConnect (KDE Connect protocol) listens on port 1716 TCP/UDP on every interface by default, paired phone or not, and the default firewall zone lets the LAN reach it | moot since 2026-10-18: GSConnect left the image with the other GNOME Shell extensions (the Lucciola layer had removed it at build time since 2026-10-11) | done |
@@ -59,12 +59,14 @@ monthly review lists it until then.
 
 | ID | Item | Due | Status |
 |---|---|---|---|
-| E1 | Make the in-image validator gating in smoke-boot once its first runs there are clean | 2026-10-31 | open |
+| E1 | Make the in-image validator gating in smoke-boot once its first runs there are clean | done 2026-11-10, after six clean smoke boots in a row (2026-11-08 to 2026-11-10): a validator that fails, times out or is missing fails the security probe, and a failed `lucciola-*` unit fails it like a `margine-*` one (`.github/smoke/security-probe.sh`, `tests/security-probe.test.sh`, two mutants) | done |
 | E2 | Make SELinux denials gating in smoke-boot (C14), after a reviewed baseline | 2026-11-30 | open |
 | E3 | Boot the smoke VM enforcing: label the injected test files instead of `enforcing=0` | 2026-11-30 | open |
 | E4 | Periodic double build to keep C13 verified | 2026-11-30 | open |
 | E5 | CI install with LUKS and TPM unlock, to verify C10 and C11 end to end (needs an installer image, which Lucciola does not have yet) | 2026-12-31 | open |
 | E6 | Attack-surface review of the setuid/capability set the base ships (`.github/security-baseline/privileged.txt`): e.g. `ksu`, `fusermount-glusterfs`, `vmware-user-suid-wrapper`, `suexec` serve few desktops; drop what Lucciola does not need | 2026-11-30 | open |
+| E7 | TPM + PIN as an option (decision D1): `lucciola-tpm-unlock` enrols with a PIN on request, Lucciola System offers it, the default stays without; tried on a VM with a software TPM | 2026-12-15 | open |
+| E8 | A stricter default firewall zone (decision D2): the design note first, then the zone, with a test that every feature that needs a port asks for it | 2026-12-15 | open |
 
 ## Review findings (2026-10-20)
 
