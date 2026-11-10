@@ -53,6 +53,13 @@ stable release is cut.
   the driver typed was lost while Bluefin's profile printed its banner (23 s).
   The driver now asks again until the shell answers.
 
+### Fixed (2026-11-10, Remote Login's list before the first change)
+- **SSH access set up by hand shows in the device list straight away.** Until the
+  switch was turned off or on once, Lucciola System and the bar's panel said
+  "Devices: none" while those rules were letting devices in; they now show as
+  "Added by hand" from the start, and the list file is still written only by a
+  change.
+
 ### Fixed (2026-11-09, login and lock screens)
 - **The brightness keys work on the login screen.** The login screen runs in its
   own small compositor, which handled only the keys that switch console. It now

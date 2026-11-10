@@ -209,7 +209,11 @@ def status():
     tunnel_open = rc == 0 and zone_ssh.strip() == "yes"
     _, all_ssh, _ = run(["firewall-cmd", "--query-service=ssh"])
     open_to_all = all_ssh.strip() in ("yes", "not running")
-    devices = read_devices() or []
+    devices = read_devices()
+    if devices is None:
+        # Before the first on or off nothing is written yet: the rules added by
+        # hand are already who may come in, so they show as such.
+        devices = [(a, ADOPTED_NAME) for a in dict.fromkeys(filter(None, map(normalize, ssh_rules(permanent=True))))]
     live = set(ssh_rules(permanent=False))
     tun = [{"name": t["name"], "active": bool(t["device"]), "own": t["own"],
             "covered": t["zone"] == ZONE} for t in tunnels()]

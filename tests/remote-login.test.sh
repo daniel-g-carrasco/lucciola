@@ -107,7 +107,9 @@ nm() { python3 -I -c 'import json,sys; d={c["uuid"]: c for c in json.load(open(s
 
 run status --json
 check "status from off (rc $RC)" [ "$RC" = 0 ]
-check "off, sshd stopped, no device file yet" [ "$(js 'd["state"] + str(d["sshd"]) + str(len(d["devices"]))')" = "offFalse0" ]
+check "off, sshd stopped" [ "$(js 'd["state"] + str(d["sshd"])')" = "offFalse" ]
+check "rules added by hand show as devices before the first change" [ "$(js '[(x["address"], x["name"]) for x in d["devices"]]')" = "[('192.168.2.85', 'Added by hand'), ('10.66.66.7', 'Added by hand')]" ]
+check "and status writes nothing" [ ! -e "$T/etc/devices" ]
 check "tunnels: the home one is ours, the full-route VPN is not" [ "$(js '[(t["name"], t["own"], t["active"]) for t in d["tunnels"]]')" = "[('wg-home', True, True), ('Proton: IT#1', False, False)]" ]
 check "addresses skip loopback and containers" [ "$(js '[a["address"] for a in d["addresses"]]')" = "['192.168.2.80', '10.66.66.2']" ]
 
