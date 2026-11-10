@@ -53,6 +53,30 @@ stable release is cut.
   the driver typed was lost while Bluefin's profile printed its banner (23 s).
   The driver now asks again until the shell answers.
 
+### Changed (2026-11-10, the lock screen)
+- **What is playing is now one quiet strip.** Noctalia's own player widget has a
+  single arrangement (a large cover, the controls in a corner) that sat badly in
+  the lock screen's column, whatever its size. Lucciola now draws its own: a strip
+  as wide as the password field, with the same corners and the same dark fill,
+  holding a small cover, the title, the artist and the three controls. Long titles
+  end with an ellipsis, a player without a cover gets a glyph, and nothing shows
+  when nothing plays. It asks the players only while the lock screen is on.
+- **The wallpaper sits behind a soft blur and a darker veil,** so the clock, the
+  field and the strip read at once.
+- **The password field has a dark fill,** half see-through, where it was only an
+  outline.
+
+### Fixed (2026-11-10, lock screen changes that never showed)
+- **An update's lock screen arrangement reaches the screen.** Noctalia keeps its
+  own copy of the lock screen's widgets in its saved settings, written by itself
+  as soon as it starts, and saved settings win over the config files: on a laptop
+  the player of 5 November stayed through two updates. Before Noctalia starts,
+  Lucciola now removes the saved copies of the widgets it places, when they say
+  what Lucciola generated; a widget moved or changed by hand in Noctalia's editor
+  differs from that and stays, like any widget added by the user. The first time
+  there is nothing to compare with, and the saved copies of Lucciola's widgets go
+  once (a copy of the settings stays next to the file).
+
 ### Fixed (2026-11-10, Remote Login's list before the first change)
 - **SSH access set up by hand shows in the device list straight away.** Until the
   switch was turned off or on once, Lucciola System and the bar's panel said

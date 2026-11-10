@@ -1,0 +1,31 @@
+# Now Playing for Lucciola's lock screen: one quiet strip, as wide as the
+# password field, with the cover, the title, the artist and three controls.
+# Noctalia's own media_player widget has one fixed arrangement (a large
+# cover, the controls in a corner) that sat badly in the lock screen's
+# column. /usr/libexec/lucciola/bar-widths places this widget under the
+# fingerprint line; /usr/libexec/lucciola/now-playing reads the players
+# (MPRIS, through busctl) and sends play, pause, next and previous.
+#
+#   strip -> the widget: it asks the helper every three seconds, only while
+#            it is on screen, and shows nothing when nothing plays
+id = "lucciola/now_playing"
+name = "Now Playing"
+version = "1.0.0"
+plugin_api = 24
+author = "lucciola"
+license = "MIT"
+icon = "music"
+description = "What is playing, as one quiet strip on the lock screen."
+tags = ["media", "music", "lock"]
+
+[[setting]]
+key = "command"
+type = "string"
+label_key = "settings.command.label"
+description_key = "settings.command.description"
+default = "/usr/libexec/lucciola/now-playing"
+advanced = true
+
+[[desktop_widget]]
+id = "strip"
+entry = "strip.luau"

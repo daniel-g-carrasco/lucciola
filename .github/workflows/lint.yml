@@ -177,6 +177,11 @@ jobs:
         # rules by address, hand-made rules adopted, everything closed by off.
         # See tests/remote-login.test.sh.
         run: bash tests/remote-login.test.sh
+      - name: The lock screen's Now Playing helper
+        # now-playing on a fake busctl: which player is picked, what is said
+        # about it, covers only from local files, the three verbs. See
+        # tests/now-playing.test.sh.
+        run: bash tests/now-playing.test.sh
       - name: Apps take the Noctalia palette, Flatpak ones included
         # lucciola-flatpak-theme-access asks Flatpak for read-only access to
         # the GTK folders and kdeglobals and for Qt's KDE theme, nothing more;
