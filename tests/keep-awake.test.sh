@@ -109,7 +109,9 @@ run status --json; check "status json: active, awake" grep -q '"active":true,"un
 run status; check "status: on until ..." grep -q "^on until " "$T/out"
 check "status: no screen tag in awake mode" bash -c "! grep -q 'screen on' '$T/out'"
 cp "$ARGS" "$T/args1"
-run on "+10 minutes"; check "on again with an earlier end: nothing changes (rc $RC)" bash -c "[ '$RC' = 0 ] && cmp -s '$ARGS' '$T/args1' && [ -z \"\$(grep '^stop ' '$FAKE/log')\" ]"
+# One second before the end in place, not "+10 minutes": run within ten
+# minutes of midnight, that was later than midnight (lint, 2026-11-09 23:50 UTC).
+run on "@$(( $(until_file) - 1 ))"; check "on again with an earlier end: nothing changes (rc $RC)" bash -c "[ '$RC' = 0 ] && cmp -s '$ARGS' '$T/args1' && [ -z \"\$(grep '^stop ' '$FAKE/log')\" ]"
 run on "tomorrow 23:59"; check "on again with a later end: the unit restarts (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -q '^stop lucciola-keep-awake-test.service' '$FAKE/log'"
 
 # --screen: idle too, caffeine, two hours by default; a mode switch takes the end asked for.
