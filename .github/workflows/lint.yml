@@ -458,6 +458,18 @@ jobs:
         # tests/vm-test-gate.test.sh.
         run: bash tests/vm-test-gate.test.sh
 
+      - name: The security probe's gating verdicts
+        # The in-image validator is gating in the smoke boot (register item
+        # E1): a failure, a timeout or a missing validator fails the probe,
+        # and a failed lucciola-* unit fails it like a margine-* one. See
+        # tests/security-probe.test.sh.
+        run: bash tests/security-probe.test.sh
+
+      - name: The monthly security review lists what is still open
+        # Done items and taken decisions leave the report, late ones are
+        # overdue and counted. See tests/security-review-report.test.sh.
+        run: bash tests/security-review-report.test.sh
+
       - name: The claims-register lint (fixtures)
         # A verified claim naming only words, a dangling path, an orphan
         # test: each caught on a throwaway tree. See tests/check-claims.test.sh.

@@ -7,6 +7,14 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (2026-11-10, the smoke boot)
+- **An image that fails Lucciola's own validator is not promoted.** The
+  validator users run with `ujust lucciola-doctor` also runs in the boot test
+  before `:stable`; until now its failure was a warning in a log. It is a
+  failure of the test since six boots in a row came out clean. A failed
+  `lucciola-*` unit stops the promotion too: the rule named only `margine-*`.
+- The monthly security review no longer lists decisions already taken.
+
 ### Changed (2026-11-04, the version's name)
 - **The version is now called `lucciola.YYYYMMDD`.** It was `candidate.YYYYMMDD`
   on every image, `:stable` too, because a promotion copies the same image to
