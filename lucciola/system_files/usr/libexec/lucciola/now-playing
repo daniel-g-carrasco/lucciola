@@ -1,0 +1,112 @@
+#!/usr/bin/python3
+"""lucciola now-playing: what is playing, for the lock screen's own widget.
+
+    now-playing status              one line of JSON
+    now-playing toggle|next|previous [PLAYER]
+
+status looks at the MPRIS players on the session bus (through busctl, no
+library to load: the lock screen asks every few seconds) and picks one: the
+first that is playing, else the first that is paused with a title.
+
+    {"active": true, "player": "org.mpris.MediaPlayer2.x", "status": "Playing",
+     "title": "...", "artist": "...", "art": "/path/to/cover.jpg" | ""}
+    {"active": false}
+
+art is given only when the player points to a local file that exists (a
+browser's http cover is left out; the widget shows a glyph then). The verbs
+act on PLAYER, or on the player status would pick.
+"""
+
+import json
+import os
+import subprocess
+import sys
+import urllib.parse
+
+PREFIX = "org.mpris.MediaPlayer2."
+PATH = "/org/mpris/MediaPlayer2"
+IFACE = "org.mpris.MediaPlayer2.Player"
+METHODS = {"toggle": "PlayPause", "next": "Next", "previous": "Previous"}
+
+
+def busctl(*args):
+    try:
+        res = subprocess.run(["busctl", "--user", *args], text=True, capture_output=True, timeout=5, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return 1, ""
+    return res.returncode, res.stdout
+
+
+def players():
+    rc, out = busctl("list", "--no-legend")
+    names = []
+    for line in out.splitlines() if rc == 0 else []:
+        name = line.split()[0] if line.split() else ""
+        if name.startswith(PREFIX):
+            names.append(name)
+    return names
+
+
+def plain(value):
+    """busctl's {"type": ..., "data": ...} -> the data, lists joined."""
+    data = value.get("data") if isinstance(value, dict) else None
+    if isinstance(data, list):
+        return ", ".join(str(x) for x in data if x)
+    return "" if data is None else str(data)
+
+
+def art_path(url):
+    if not url.startswith("file://"):
+        return ""
+    path = urllib.parse.unquote(urllib.parse.urlparse(url).path)
+    return path if os.path.isfile(path) else ""
+
+
+def read(name):
+    """One player's state, or None when it does not answer."""
+    rc, out = busctl("--json=short", "get-property", name, PATH, IFACE, "PlaybackStatus", "Metadata")
+    lines = [ln for ln in out.splitlines() if ln.strip()]
+    if rc != 0 or len(lines) < 2:
+        return None
+    try:
+        status, meta = json.loads(lines[0]).get("data"), json.loads(lines[1]).get("data") or {}
+    except (json.JSONDecodeError, AttributeError):
+        return None
+    if not isinstance(meta, dict):
+        meta = {}
+    return {
+        "active": True, "player": name, "status": status if status in ("Playing", "Paused") else "Stopped",
+        "title": plain(meta.get("xesam:title")), "artist": plain(meta.get("xesam:artist")),
+        "art": art_path(plain(meta.get("mpris:artUrl"))),
+    }
+
+
+def pick(states):
+    """The first playing, else the first paused with a title."""
+    for wanted in ("Playing", "Paused"):
+        for st in states:
+            if st and st["status"] == wanted and (wanted == "Playing" or st["title"]):
+                return st
+    return None
+
+
+def status():
+    return pick([read(name) for name in players()]) or {"active": False}
+
+
+def main(argv):
+    if argv == ["status"]:
+        print(json.dumps(status(), ensure_ascii=False))
+        return 0
+    if argv and argv[0] in METHODS and len(argv) <= 2:
+        name = argv[1] if len(argv) == 2 else status().get("player")
+        if not name or not name.startswith(PREFIX):
+            return 1
+        rc, _ = busctl("call", name, PATH, IFACE, METHODS[argv[0]])
+        return 0 if rc == 0 else 1
+    print("usage: now-playing status | toggle|next|previous [PLAYER]", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

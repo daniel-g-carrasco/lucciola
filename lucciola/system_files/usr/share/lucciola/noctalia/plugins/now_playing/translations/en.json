@@ -1,0 +1,4 @@
+{
+  "settings.command.label": "Command",
+  "settings.command.description": "Path of the now-playing command the widget reads."
+}

@@ -64,6 +64,10 @@ DEFAULT_PICTURE = "/usr/share/lucciola/avatar/lucciola.png"
 STATE = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"))
 SAVED_SETTINGS = os.path.join(os.environ.get("NOCTALIA_STATE_HOME") or os.path.join(STATE, "noctalia"), "settings.toml")
 LOCK_RETIRED = os.path.join(STATE, "lucciola", "noctalia-saved-lock-widgets-retired")
+# What this script generated for the lock screen, the last few times, per
+# widget: how a copy that Noctalia saved is told from someone's own edit.
+LOCK_GENERATED = os.path.join(STATE, "lucciola", "lock-generated.json")
+LOCK_GENERATED_KEPT = 5
 # What pam_fprintd says on the login screen. Noctalia writes its own messages
 # above the field only, so this one is a widget: errors and Caps Lock still
 # appear above it, from Noctalia. A clock with no time in its format: a label
@@ -169,12 +173,11 @@ def render_lock(outs, user, picture, weather, fingerprint):
              {"image_path": picture, "opacity": 1.0, "background": False}),
             (f"lucciola-name-{key}", "label", cx, field - 88, 0, 0,
              {"title": user, "color": "primary", **quiet}),
-            # The player scales its content with the box's height: 420x96 left
-            # small type in a band of empty sides (2026-11-09); 320x150 fills it,
-            # below the fingerprint line with a gap.
-            (f"lucciola-media-{key}", "media_player", cx, field + 160, 320, 150,
-             {"hide_when_no_media": True, "background": True, "background_color": "surface",
-              "background_opacity": 0.75, "shadow": False}),
+            # Lucciola's own strip (plugins/now_playing), the password field's twin,
+            # under the fingerprint line. Noctalia's media_player has one fixed
+            # arrangement that sat badly in this column (2026-11-10).
+            (f"lucciola-media-{key}", "lucciola/now_playing:strip", cx, field + 107, 0, 0,
+             {"background": False, "shadow": False}),
         ]
         if weather:
             parts.insert(1, (f"lucciola-weather-{key}", "weather", cx, max(70, field - 375) + 82, 340, 40,
@@ -194,7 +197,7 @@ def render_lock(outs, user, picture, weather, fingerprint):
             "show_password_reveal": True, "show_login_button": False, "show_keyboard_layout": True,
             "show_unlock_hint": False, "show_caps_lock": True, "center_password_text": False,
             "background_color": "surface", "background_opacity": 0.0, "background_radius": 12.0,
-            "input_opacity": 0.0, "input_radius": 12.0,
+            "input_opacity": 0.5, "input_radius": 12.0,
         }).replace("rotation = 0.0\n", f"placement_width = {float(width)}\nplacement_height = {float(height)}\nrotation = 0.0\n", 1))
     if not tables:
         return LOCK_HEADER
@@ -267,9 +270,123 @@ def retire_saved_lock_widgets():
     open(LOCK_RETIRED, "w").close()
 
 
-def write_lock(outs):
+def lucciola_widget(widget_id):
+    """The lock screen widgets this script places."""
+    return widget_id.startswith(("lucciola-", "lockscreen-login-box@"))
+
+
+def same_widget(saved, generated):
+    """A saved table that says what a generated one said: Noctalia's own copy
+    (it adds keys, such as the placement size), not somebody's edit."""
+    for key, value in generated.items():
+        if key == "settings":
+            mine = saved.get("settings") or {}
+            if any(mine.get(k) != v for k, v in value.items()):
+                return False
+        elif saved.get(key) != value:
+            return False
+    return True
+
+
+def header_path(line):
+    """The dotted path of a TOML table header line as a list, or None."""
+    found = re.match(r"\s*\[+\s*(.*?)\s*\]+\s*(#.*)?$", line)
+    if not found or line.lstrip().startswith(('"', "'")):
+        return None
+    return [a or b for a, b in re.findall(r'"([^"]*)"|([^.\s"]+)', found.group(1))]
+
+
+def release_saved_lock_widgets(text):
+    """Noctalia keeps a copy of the lock screen's widgets in its saved settings
+    (it writes one by itself once the lock screen has been shown), and the
+    saved settings win over the config files: a new arrangement from an update
+    never showed (2026-11-10: the player of 5 November stayed through two
+    updates). Before Noctalia starts, the saved copies of this script's
+    widgets go when they say what this script generated one of the last
+    times; a copy that differs is somebody's edit and stays, and so does
+    every widget that is not this script's. The first time there is nothing
+    to compare with, and the saved copies go once. The saved order goes with
+    them, unless it lists widgets of the user's own: then it is rewritten
+    with this arrangement's widgets and theirs."""
+    generated = (tomllib.loads(text).get("lockscreen_widgets") or {})
+    tables = generated.get("widget") or {}
+    try:
+        with open(LOCK_GENERATED, encoding="utf-8") as f:
+            history = json.load(f)
+        first = False
+    except (OSError, json.JSONDecodeError):
+        history, first = {}, True
+    try:
+        with open(SAVED_SETTINGS, encoding="utf-8") as f:
+            saved_text = f.read()
+        saved = (tomllib.loads(saved_text).get("lockscreen_widgets") or {})
+    except (OSError, tomllib.TOMLDecodeError):
+        saved_text, saved = "", {}
+    saved_tables = saved.get("widget") or {}
+    drop = {wid for wid, table in saved_tables.items() if lucciola_widget(wid) and (
+        first or any(same_widget(table, old) for old in history.get(wid, []) + ([tables[wid]] if wid in tables else [])))}
+    if drop:
+        own = [wid for wid in saved.get("widget_order") or [] if not lucciola_widget(wid)]
+        order = (generated.get("widget_order") or []) + own
+        kept, dropping, in_lock, skipping_order = [], False, False, False
+        for line in saved_text.splitlines(keepends=True):
+            path = header_path(line)
+            if path is not None:
+                dropping = path[:2] == ["lockscreen_widgets", "widget"] and len(path) > 2 and path[2] in drop
+                in_lock = path == ["lockscreen_widgets"]
+                skipping_order = False
+            elif in_lock and (skipping_order or re.match(r"\s*widget_order\s*=", line)):
+                # The saved order, on one line or many: gone, or rewritten.
+                starting = not skipping_order
+                skipping_order = "]" not in line
+                if starting and own:
+                    kept.append(f"widget_order = {json.dumps(order)}\n")
+                continue
+            if not dropping:
+                kept.append(line)
+        new_text = "".join(kept)
+        tomllib.loads(new_text)
+        shutil.copy2(SAVED_SETTINGS, SAVED_SETTINGS + ".bak-lock-release")
+        tmp = SAVED_SETTINGS + ".new"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(new_text)
+        os.replace(tmp, SAVED_SETTINGS)
+    for wid, table in tables.items():
+        past = [old for old in history.get(wid, []) if old != table]
+        history[wid] = (past + [table])[-LOCK_GENERATED_KEPT:]
+    os.makedirs(os.path.dirname(LOCK_GENERATED), exist_ok=True)
+    tmp = LOCK_GENERATED + ".new"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(history, f)
+    os.replace(tmp, LOCK_GENERATED)
+    return sorted(drop)
+
+
+def record_generated(text):
+    """While Noctalia runs (a monitor changed): only remember what was
+    generated, so the copy it saves of this is known at the next login."""
+    tables = (tomllib.loads(text).get("lockscreen_widgets") or {}).get("widget") or {}
+    try:
+        with open(LOCK_GENERATED, encoding="utf-8") as f:
+            history = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return  # the next login takes the first-time path
+    for wid, table in tables.items():
+        past = [old for old in history.get(wid, []) if old != table]
+        history[wid] = (past + [table])[-LOCK_GENERATED_KEPT:]
+    tmp = LOCK_GENERATED + ".new"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(history, f)
+    os.replace(tmp, LOCK_GENERATED)
+
+
+def write_lock(outs, once=False):
     user = pwd.getpwuid(os.getuid()).pw_name
     text = render_lock(outs, user, account_picture(user), location_known(), fingerprint_enrolled(user))
+    if once:
+        release_saved_lock_widgets(text)
+    else:
+        record_generated(text)
     try:
         with open(LOCK_TARGET) as f:
             if f.read() == text:
@@ -298,7 +415,7 @@ def lock_step(step, *args):
     lock screen keeps what it has."""
     try:
         return step(*args)
-    except (OSError, ValueError, KeyError) as e:
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
         print(f"bar-widths: lock screen arrangement not updated: {e}", file=sys.stderr)
         return False
 
@@ -311,7 +428,7 @@ def main():
     primary = primary_output()
     if outs is not None:
         write(outs, primary)
-        lock_step(write_lock, outs)
+        lock_step(write_lock, outs, once)
     if once:
         return
     last = signature(outs, primary) if outs else None

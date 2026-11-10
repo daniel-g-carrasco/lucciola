@@ -13,10 +13,11 @@ location = "/usr/share/lucciola/noctalia/plugins"
 enabled = true
 
 # The one list of enabled Lucciola plugins (a second fragment setting it
-# would replace this one): Keep Awake, Updates (29-updates.toml) and Remote
-# Login (30-remote-login.toml).
+# would replace this one): Keep Awake, Updates (29-updates.toml), Remote
+# Login (30-remote-login.toml) and Now Playing (the lock screen's strip,
+# placed by bar-widths).
 [plugins]
-enabled = ["lucciola/keep_awake", "lucciola/updates", "lucciola/remote_login"]
+enabled = ["lucciola/keep_awake", "lucciola/updates", "lucciola/remote_login", "lucciola/now_playing"]
 
 [widget.keep-awake]
 type = "lucciola/keep_awake:indicator"
