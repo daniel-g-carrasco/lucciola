@@ -21,14 +21,14 @@ go stale silently.
 
 | Upstream | Role for Margine | Derivation level | Files / patterns of ours | Last reviewed |
 | --- | --- | --- | --- | --- |
-| [Universal Blue main](https://github.com/ublue-os/main) (`silverblue-main`) | The `FROM` base of every Margine image since 2026-10-11 ([Bluefin DX](https://github.com/ublue-os/bluefin) from May to October 2026); we ship as their image + our delta | **Infrastructure** (we build on top, not from) | the entire image stack inherits; `zz1-margine.gschema.override` is a layered companion to their `zz0-bluefin-modifications.gschema.override` | 2026-10-03 |
-| [Origami Linux](https://gitlab.com/origami-linux/images) | Custom-kernel signing pipeline (CachyOS via COPR + MOK signing + first-boot enrollment) | **Direct code derivation** | `margine-image/build_files/custom-kernel/install.sh` | 2026-10-03 |
-| [MorrOS](https://github.com/morrolinux/morros) (by Morrolinux) | The "personal distro = fork the Universal Blue image-template + small delta" pattern; pragmatic Italian-community example | **Architectural inspiration** | overall repo shape (margine-image fork of `ublue-os/image-template`, `build_files/build.sh` as the single delta script) | 2026-10-03 |
-| [Universal Blue image-template](https://github.com/ublue-os/image-template) | The starting scaffold for `margine-image` (Containerfile + GH Actions structure) | **Initial fork** | `margine-image/Containerfile`, `margine-image/.github/workflows/build.yml` (heavily modified since) | 2026-10-03 |
-| [hhd-dev/rechunk](https://github.com/hhd-dev/rechunk) | Post-build re-commit of the OCI image into ostree-canonical form; the GH Action we used until the chunker switch (rpm-ostree, then chunkah on 2026-08-31) | **Former GH Action consumer** (kept in the watch list for the ecosystem signal) | none since 2026-08; history in the "Chunker" note below | 2026-10-03 |
-| [Bazzite](https://github.com/ublue-os/bazzite) | Reference for the *opt-in* gaming layer (their package set + tool choices) — not a base | **Reference only** (no code copied) | `60-custom.just` recipe `margine-gaming` (curated subset of Bazzite's bake) | 2026-10-03 |
-| [coreos/chunkah](https://github.com/coreos/chunkah) | The chunker behind every `:stable` and `:lts` image since 2026-08-31: content-based layers planned from the rpmdb, no `--previous-build` needed | **Tool consumer** (pinned by tag and digest: v0.6.0, v0.7.0 from #441) | step `Chunk the image` in `build.yml` / `build-lts.yml`; `99-cleanup.sh` mtime normalisation (works around chunkah#160) | 2026-10-03 |
-| [RakuOS](https://gitlab.com/rakuos) (canonical on GitLab; the GitHub org is a stale mirror) | Closest cousin: Fedora bootc minimal (was `base-atomic` until 2026-09-13) + CachyOS kernel + MOK-signed modules + chunkah at build time + persistent dnf overlay ("hybrid atomic"); GNOME/KDE/COSMIC/Niri editions, x86-64-v3/v4 builds | **Reference only** (no code copied) | none; watched for how they handle Secure Boot, the v3/v4 split (our #382) and the overlay model | 2026-10-03 |
+| [Universal Blue main](https://github.com/ublue-os/main) (`silverblue-main`) | The `FROM` base of every Margine image since 2026-10-11 ([Bluefin DX](https://github.com/ublue-os/bluefin) from May to October 2026); we ship as their image + our delta | **Infrastructure** (we build on top, not from) | the entire image stack inherits; `zz1-margine.gschema.override` is a layered companion to their `zz0-bluefin-modifications.gschema.override` | 2026-11-10 |
+| [Origami Linux](https://gitlab.com/origami-linux/images) | Custom-kernel signing pipeline (CachyOS via COPR + MOK signing + first-boot enrollment) | **Direct code derivation** | `margine-image/build_files/custom-kernel/install.sh` | 2026-11-10 |
+| [MorrOS](https://github.com/morrolinux/morros) (by Morrolinux) | The "personal distro = fork the Universal Blue image-template + small delta" pattern; pragmatic Italian-community example | **Architectural inspiration** | overall repo shape (margine-image fork of `ublue-os/image-template`, `build_files/build.sh` as the single delta script) | 2026-11-10 |
+| [Universal Blue image-template](https://github.com/ublue-os/image-template) | The starting scaffold for `margine-image` (Containerfile + GH Actions structure) | **Initial fork** | `margine-image/Containerfile`, `margine-image/.github/workflows/build.yml` (heavily modified since) | 2026-11-10 |
+| [hhd-dev/rechunk](https://github.com/hhd-dev/rechunk) | Post-build re-commit of the OCI image into ostree-canonical form; the GH Action we used until the chunker switch (rpm-ostree, then chunkah on 2026-08-31). Declared end of life and archived on 2026-10-13; its README now points everyone else to chunkah | **Former GH Action consumer** (off the watch list since 2026-11-10: an archived repository cannot move) | none since 2026-08; history in the "Chunker" note below | 2026-11-10 |
+| [Bazzite](https://github.com/ublue-os/bazzite) | Reference for the *opt-in* gaming layer (their package set + tool choices), not a base | **Reference only** (no code copied) | `60-custom.just` recipe `margine-gaming` (curated subset of Bazzite's bake) | 2026-11-10 |
+| [coreos/chunkah](https://github.com/coreos/chunkah) | The chunker behind every `:stable` and `:lts` image since 2026-08-31: content-based layers planned from the rpmdb, no `--previous-build` needed | **Tool consumer** (pinned by tag and digest: v0.6.0, v0.7.0 from #441, v0.7.1 since 2026-10) | step `Chunk the image` in `build.yml` / `build-lts.yml`; `99-cleanup.sh` mtime normalisation (works around chunkah#160) | 2026-11-10 |
+| [RakuOS](https://gitlab.com/rakuos) (canonical on GitLab; the GitHub org is a stale mirror) | Closest cousin: Fedora bootc minimal (was `base-atomic` until 2026-09-13; on Fedora 45 since 2026-11-03) + CachyOS kernel + MOK-signed modules + chunkah at build time + persistent dnf overlay ("hybrid atomic"); GNOME/KDE/COSMIC/Niri editions, x86-64-v3/v4 builds | **Reference only** (no code copied) | none; watched for how they handle Secure Boot, the v3/v4 split (our #382) and the overlay model | 2026-11-10 |
 
 ---
 
@@ -191,6 +191,10 @@ behaviour shift for us, see the review cadence below.
 
 ## hhd-dev/rechunk — post-build OCI re-commit
 
+> Archived upstream on 2026-10-13 (deprecated, folded into
+> `anatase-org/ludos`). We left it for chunkah on 2026-08-31; this section
+> is history.
+
 **License:** Apache-2.0. **Role:** action invoked as the second-to-last
 step of our `.github/workflows/build.yml`. Without it, our image's
 labels (ostree.linux, ostree.commit, ostree.bootable) are stale from
@@ -233,8 +237,8 @@ Each upstream listed above is expected to be re-reviewed when:
 2. **a Margine build starts failing in a way that smells like an
    upstream behaviour change** (e.g. dracut output path moved, OCI
    label semantics changed, rechunk arguments deprecated), OR
-3. **a Fedora release bump of the base occurs** (currently Fedora 44; the
-   next will be Fedora 45).
+3. **a Fedora release bump of the base occurs** (currently Fedora 45; the
+   next will be Fedora 46).
 
 To check whether any upstream has new commits since the last
 recorded review date, run this script. It updates the *Last reviewed*
@@ -256,11 +260,12 @@ declare -A repos=(
   [origami]="john-holt4/Origami-Linux"   # mirror; original is on GitLab
   [morros]="morrolinux/morros"
   [image-template]="ublue-os/image-template"
-  [rechunk]="hhd-dev/rechunk"
   [bazzite]="ublue-os/bazzite"
 )
 
-LAST_REVIEWED=$(grep -oE '202[0-9]-[0-9]{2}-[0-9]{2}' "$DOC" | sort -u | tail -1)
+# Only the table's last column counts: any other date in this file is
+# history, not a review.
+LAST_REVIEWED=$(grep -oE '\| 202[0-9]-[0-9]{2}-[0-9]{2} \|$' "$DOC" | grep -oE '202[0-9]-[0-9]{2}-[0-9]{2}' | sort -u | tail -1)
 echo "Most recent 'Last reviewed' in $DOC: $LAST_REVIEWED"
 echo
 
@@ -278,16 +283,134 @@ echo "commit log. If anything affects what's listed in"
 echo "$DOC, update the 'Last reviewed' date in that table row."
 ```
 
-Place this at `scripts/check-upstreams.sh` and run it manually every
-quarter, or wire it into a monthly GH Actions cron that opens an
-issue when activity is non-trivial. See
-`project_todo_check-upstreams-cron.md` in
-the project's internal notes for the reminder to
-implement the cron job.
+The script above is the first sketch. The one that runs is
+`build_files/40-spec-scripts/scripts/check-upstreams.sh`, with a longer
+watch list (the kernels, chunkah, the sealed-images test repo, RakuOS on
+GitLab); `check-upstreams.yml` runs it on the first of every month and
+opens an issue when something moved.
 
 ---
 
 ## Review log
+
+### 2026-11-10 (issue #70)
+
+Window: 2026-10-03 to 2026-11-10. Everything moved except Origami (last
+commit 2026-06-02 on GitLab, none on the mirror). Each point below was
+checked against the repository or the reference laptop
+(`lucciola.20261110`, kernel 7.3.3-1.cachyos1) where it says so. In order
+of how much it matters to us:
+
+- **The base (ublue-os/main, 135 commits, 9 that are not digest bumps).**
+  - `ublue-os-udev-rules` left the Fedora 45 base on 2026-10-26 (#3032,
+    #3033): controllers, Framework input modules, the Realtek dock
+    network rule, U2F keys. Nothing changes for us:
+    `15-devstack/install.sh` installs the package from the COPR when the
+    base lacks it and checks that it landed (0.10-1 on the laptop).
+  - Two units run at every boot since #3029: `bootc-update-ca-trust.service`
+    and `bootc-update-crypto-policies.service`. They exist because the
+    three-way merge of `/etc` can keep a stale trust store after a CA is
+    withdrawn. They are the two units of our baseline drift issue #59.
+    Cost on the laptop: 1.3 s and 0.2 s. Upstream is already discussing
+    removing them again (#3076), so the baseline should accept them
+    without depending on their names.
+  - `latest` is Fedora 45 since 2026-11-08, `gts` is 44. We pin `:45`.
+  - The `*-nvidia` images are retired (#3075). An NVIDIA variant, if it
+    ever comes, starts from the akmods image, whose kernel is not ours.
+  - Not merged yet: the 2023 kernel signing certificate is being retired
+    (#3085), which does not touch our MOK; and SELinux still denies
+    `ssh -L` forwarding on some images (#2845). The second is to try
+    through Remote Login.
+- **Fedora 45 traps, as the cousins met them.** RakuOS moved to Fedora 45
+  on 2026-11-03, MorrOS and Bazzite in October.
+  - oo7 has no D-Bus activation, so its service must be enabled for every
+    user: RakuOS and MorrOS found it independently, we have it since the
+    migration.
+  - **`pam_oo7` is missing where a password is changed from a terminal.**
+    Fedora's `/etc/pam.d/passwd` and `chpasswd` name only
+    `pam_gnome_keyring`, which the image does not ship; greetd's stack,
+    which is ours, has `pam_oo7`. So after `passwd` the Login keyring
+    stays on the old password and no longer opens at login (RakuOS
+    15944ef8). Read on the laptop, not yet reproduced. Follow-up 1.
+  - `ca-certificates` no longer ships `/etc/pki/tls/certs/ca-bundle.crt`
+    or `/etc/pki/tls/cert.pem`. Nothing in this repository names them.
+  - The distro `.repo` files are in `/usr/share/dnf5/repos.d`; our
+    scripts already look there.
+  - `bootupd`'s `EFI.json` describes the shim and GRUB of the base, and
+    goes stale if a build updates them. Ours matches what is installed
+    (grub2 2.12-83, shim 16.1-7).
+  - Consoles on tty2 to tty6 are `kmsconvt@` now; `autovt@` is its alias.
+- **Kernel: 7.2 to 7.3** (7.3.3 in the COPR since 2026-11-08).
+  - The RPM release changed form on 2026-10-23 (`7.3.0-4.cachyos1`
+    instead of `7.3.0-cachyos2`). The package removal guard stopped main
+    that day and was taught the new form.
+  - 7.3 carries AMD's "PerfOpt" patches, which let an integrated GPU skip
+    the IOMMU's address translation. On the laptop it is armed
+    (`AMD-Vi: PerfOpt armed on IOMMU0`), with the GPU and the NPU in the
+    identity domain and the other 36 groups in translated ones. Mainline
+    already puts devices of that kind in the identity domain
+    (`amd_iommu_def_domain_type()` in 7.2, untrusted devices excepted), so
+    what an external device can reach does not change; the switch, should
+    it ever be needed, is `amdgpu.iommu_perfopt=0`.
+  - 7.3.3 changes the xHCI handoff for every controller. One suspend and
+    resume on the laptop since, no USB error.
+  - BORE went to 7.0.0 with no commit in the spec to mark it, and
+    scx-scheds to 1.1.4. Nothing in the config touches module signing,
+    lockdown, hibernation or sched_ext.
+- **Our image carries two RPM databases, one of them stale.** Bazzite
+  links `/usr/lib/sysimage/rpm-ostree-base-db` to `/usr/share/rpm` at the
+  end of its build (#6142). In our image the first is still the base's
+  database: 78.8 MB, 1510 packages, no `kernel-cachyos`, no `niri`, next
+  to the real one of 87.7 MB. Bazzite's commit says rpm-ostree then
+  refuses to layer a package the image removed from its base, and that
+  one database instead of two saves about 30 MiB per update. Follow-up 2,
+  to be measured with `layer-delta.py`.
+- **Our user units also start for the greeter.** Bazzite found its user
+  services running inside the login screen's session (#6294). Same here:
+  the journal shows `lucciola-app-colors-flatpak.service`,
+  `margine-staged-update-notify.service` and the brew, Flatpak, staleness
+  and Ollama timers started for greetd's user. Harmless today, but a
+  machine left at the login screen runs a Flatpak update as that user.
+  greetd's user is a static system user, so `ConditionUser=!@system` is
+  enough. Follow-up 3.
+- **Easy Anti-Cheat v2.** Bazzite added a readiness check (#6065). By its
+  reading of Epic's requirements, the kernel must be signed by a
+  "well-known" key (Fedora, Universal Blue, Microsoft, Canonical and a
+  few more), with no other MOK enrolled. A CachyOS kernel signed with our
+  MOK does not qualify. I read Bazzite's script, not Epic's policy. If it
+  holds, it is the first concrete argument for the `:fedora-kernel` image
+  beyond being a reserve.
+- **chunkah**: nothing since v0.7.1, which we pin. coreos/chunkah#189
+  (packages that carry only RPM 6's 64-bit size tags get size zero) does
+  not touch us today: none of the laptop's 2283 packages lacks `SIZE`.
+  Bazzite moved from rechunk to chunkah on 2026-10-14 and met the same
+  mtime problems we did, in the same order. Two things of theirs are
+  worth keeping in mind: they verify chunkah's own signature before
+  running it, and they mark their own files with `user.component` and
+  `user.update-interval` so they land in stable layers. **rechunk** was
+  declared end of life and archived on 2026-10-13: off the watch list.
+- **Already ours**: a reproducible initramfs (`00-common.sh`; `--zstd` is
+  now the Fedora 45 default), `skip_if_unavailable=False` on our repo
+  files, the SELinux `subs_dist` line (#439).
+- **To measure, not to copy**: Bazzite's power-saver profile now forces
+  the AMD GPU to its low level, around a tuned bug (#6214). Lucciola runs
+  tuned too and the level stays `auto`. Worth one measurement on battery.
+- **image-template**: documentation for the NVIDIA change and action
+  bumps. **MorrOS**: oo7 as above, OpenSnitch checked against the release
+  API's digest. **OGC kernel**: one commit (CEC for the Steam Machine).
+  **Sealed images**: a runner bump.
+
+The checker changed with this review. `ublue-os/main` was missing from
+its list since the base switch, rechunk leaves it, and it counts 100
+commits per upstream instead of 30. It also read the newest date anywhere
+in this file as the last review: in November that was 2026-10-11, the day
+of the base switch, named in a table cell. It now reads the table's last
+column only.
+
+No change was required in the derivations this document records. Three
+follow-ups for the image: `pam_oo7` in the password stack of `passwd` and
+`chpasswd`; one RPM database instead of two; our user units kept out of
+the greeter's session.
 
 ### 2026-10-03 (issue #437)
 

@@ -65,7 +65,11 @@ def main():
         lines.append("")
 
     for title, key in (("Decisions pending", "Question"), ("Engineering items", "Item")):
-        rows = [r for r in t.get(title, []) if r.get("Status", "open").lower() != "done"]
+        # Done is "done" in the Status column, or in Due for the decisions
+        # table, which has no Status (D4 and D5 were listed as pending for a
+        # month after they were taken).
+        rows = [r for r in t.get(title, [])
+                if "done" not in (r.get("Status", "open").strip().lower(), r.get("Due", "").strip().lower())]
         lines.append(f"## {title} ({len(rows)})\n")
         for r in rows:
             d = due_of(r)
@@ -82,7 +86,7 @@ def main():
         "## Every month",
         "",
         "- [ ] Open \"Security baseline drift\" issues reviewed, baseline updated or the change reverted",
-        "- [ ] Last smoke-boot runs: security probe PASS, no new WARN lines (validator, SELinux denials)",
+        "- [ ] Last smoke-boot runs: security probe PASS, no new WARN lines (SELinux denials, failed units that are not ours)",
         "- [ ] Scorecard and Renovate security updates looked at",
         "- [ ] Upstream security news for what Lucciola ships: shim/GRUB/dbx, kernel (CachyOS), bootc/rpm-ostree, containers/image, cosign",
         "- [ ] Register updated: statuses, new claims, due dates; close this issue when done",

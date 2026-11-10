@@ -28,6 +28,34 @@ res() {  # name PASS|FAIL|WARN detail
   [ "$2" = FAIL ] && FAILS=$((FAILS + 1))
   return 0
 }
+# A failed unit of ours fails the gate; anyone else's is reported.
+unit_is_ours() {
+  case "$1" in
+    margine-*|lucciola-*|mok-enroll*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+# The in-image validator's verdict, from its exit code, its log and how long
+# it took. GATING since 2026-11-10 (register item E1; six clean smoke boots
+# in a row before the switch): anything but exit 0 is a FAIL, named by the
+# validator's own first FAIL lines, or by the exit code when it has none (a
+# timeout, a validator that is missing or crashed). The time is on the PASS
+# line so a validator creeping towards its limit shows before it gets there.
+VALIDATOR_TIMEOUT=180
+validator_res() {  # RC LOG SECONDS
+  local rc="$1" log="$2" secs="${3:-?}" why
+  if [ "$rc" = 0 ]; then
+    res validator PASS "lucciola-validate-margine-system (${secs} s of ${VALIDATOR_TIMEOUT})"
+  elif [ "$rc" = 124 ]; then
+    res validator FAIL "lucciola-validate-margine-system did not finish in ${VALIDATOR_TIMEOUT} s"
+  else
+    why="$(sed 's/\x1b\[[0-9;]*m//g' "$log" 2>/dev/null | grep -m3 'FAIL' | tr '\n' ' ' | cut -c1-220)"
+    res validator FAIL "${why:-exit code $rc and no FAIL line in its log}"
+  fi
+}
+# PROBE_FUNCTIONS_ONLY=1: stop here when sourced (tests/security-probe.test.sh).
+if [ "${PROBE_FUNCTIONS_ONLY:-0}" = 1 ]; then return 0 2>/dev/null || exit 0; fi
+
 SMOKE="${PROBE_DIR:-/etc/margine-smoke}"
 REF="$(cat "$SMOKE/image-ref" 2>/dev/null || true)"
 
@@ -119,16 +147,18 @@ while read -r proto addr; do
 done < <(ss -H -tlnu 2>/dev/null | awk '{print $1, $5}' | sort -u)
 [ "$lfail" = 0 ] && res listeners PASS "only allowed ports on non-loopback addresses"
 
-# 8. Failed units: a failed Margine unit fails the gate, others are reported.
+# 8. Failed units: a failed unit of ours (margine-*, lucciola-*, mok-enroll*)
+#    fails the gate, others are reported.
 #    An empty list says so explicitly: no line at all would look the same as
 #    a check that never ran.
 if failed_list="$(systemctl list-units --failed --plain --no-legend 2>/dev/null)"; then
   mapfile -t failed < <(printf '%s\n' "$failed_list" | awk 'NF {print $1}')
   for u in "${failed[@]}"; do
-    case "$u" in
-      margine-*|mok-enroll*) res failed-unit FAIL "$u: $(journalctl -b -u "$u" --no-pager -o cat 2>/dev/null | tail -n 4 | tr '\n' ' ' | cut -c1-240)" ;;
-      *) res failed-unit WARN "$u" ;;
-    esac
+    if unit_is_ours "$u"; then
+      res failed-unit FAIL "$u: $(journalctl -b -u "$u" --no-pager -o cat 2>/dev/null | tail -n 4 | tr '\n' ' ' | cut -c1-240)"
+    else
+      res failed-unit WARN "$u"
+    fi
   done
   [ "${#failed[@]}" -eq 0 ] && res failed-units PASS "no failed units"
 else
@@ -148,13 +178,12 @@ case ",$boot_opts," in
   *)      res boot-ro WARN "/boot is mounted read-write after boot: ${boot_opts}" ;;
 esac
 
-# 9. The in-image acceptance test (audit 2026-06-05 §8 rec #19, open
-#    until now): the same validator users run, in its smoke-boot context.
-if MARGINE_VALIDATE_CONTEXT=smoke-boot timeout 180 /usr/bin/lucciola-validate-margine-system > /tmp/validate.log 2>&1; then
-  res validator PASS "lucciola-validate-margine-system"
-else
-  res validator WARN "$(sed 's/\x1b\[[0-9;]*m//g' /tmp/validate.log | grep -m3 'FAIL' | tr '\n' ' ' | cut -c1-220)"
-fi
+# 9. The in-image acceptance test (audit 2026-06-05 §8 rec #19): the same
+#    validator users run, in its smoke-boot context. Gating, see
+#    validator_res above.
+vstart=$SECONDS; vrc=0
+MARGINE_VALIDATE_CONTEXT=smoke-boot timeout "$VALIDATOR_TIMEOUT" /usr/bin/lucciola-validate-margine-system > /tmp/validate.log 2>&1 || vrc=$?
+validator_res "$vrc" /tmp/validate.log "$((SECONDS - vstart))"
 
 # 10. SELinux denials. Permissive here, so this is the list of what would
 #     have been blocked on an enforcing system, minus the test scaffolding.
