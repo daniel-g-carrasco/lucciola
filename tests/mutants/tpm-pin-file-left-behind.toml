@@ -8,4 +8,4 @@ old = '''        for path in secret_paths:
 new = '''        for path in secret_paths[:0]:
             try:
                 os.remove(path)'''
-must_fail = "bash tests/system-logic.test.sh"
+must_fail = "bash tests/admin-secrets.test.sh"

@@ -492,6 +492,12 @@ jobs:
         # systemd-cryptenroll is the tpm-unlock-real job below.
         run: bash tests/tpm-unlock.test.sh
 
+      - name: The helper hands the passphrase and the PIN in root-only files
+        # admin's run_step for real, on a stand-in helper: both secrets whole,
+        # in files 600 under a directory 700, never arguments, gone when the
+        # step ends. See tests/admin-secrets.test.sh.
+        run: bash tests/admin-secrets.test.sh
+
       - name: The claims-register lint (fixtures)
         # A verified claim naming only words, a dangling path, an orphan
         # test: each caught on a throwaway tree. See tests/check-claims.test.sh.
