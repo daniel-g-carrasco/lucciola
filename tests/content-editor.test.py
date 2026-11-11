@@ -7,6 +7,7 @@ import copy
 import difflib
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -174,12 +175,28 @@ check("welcome: the Secure Boot section keeps its condition",
       any(s.get("show_if") == "mok-pending" for s in data["sections"]))
 
 program = (ROOT / "build_files/system_files/usr/libexec/margine/welcome").read_text(encoding="utf-8")
-wired = set(re.findall(r'^\s+"([a-z-]+)": \(\) => launch', program, re.M))
+editor_js = (ROOT / "tools/content-editor/ui/editor.js").read_text(encoding="utf-8")
+actions_src = program[program.index("const ACTIONS = {"):program.index("};", program.index("const ACTIONS = {"))]
+wired = set(re.findall(r'^\s+"([a-z-]+)": \(', actions_src, re.M))
 check("welcome: the program and the check know the same button actions", wired == set(wc.ACTIONS), wired)
 check("welcome: the program reads the shipped path",
       '"/usr/share/lucciola/welcome/content.json"' in program)
-check("welcome: no text left in the program", "Homebrew does not come" not in program
-      and "Homebrew does not come" in raw)
+sample = next(b["text"] for s in data["sections"] for b in s["blocks"] if b["type"] == "text")
+check("welcome: no text left in the program", sample[:40] not in program and sample[:40] in raw)
+
+
+def js_regex(src, name):
+    m = re.search(rf"const {name} = /(.+)/g;", src)
+    return m and m.group(1)
+
+
+check("welcome: the program, the editor's preview and the check read marks alike",
+      js_regex(program, "INLINE") == wc.INLINE.pattern == js_regex(editor_js, "INLINE"),
+      (js_regex(program, "INLINE"), wc.INLINE.pattern, js_regex(editor_js, "INLINE")))
+para_py = r"\n[ \t]*\n\s*"
+check("welcome: the program, the editor's preview and the check split paragraphs alike",
+      f"split(/{para_py}/)" in program and f"split(/{para_py}/)" in editor_js
+      and f'r"{para_py}"' in (ROOT / "tools/content-editor/welcome_content.py").read_text(encoding="utf-8"))
 
 
 def rejects(name, mutate, words):
@@ -207,14 +224,82 @@ rejects("no sections", lambda d2: d2.update(sections=[]), "at least one section"
 d3 = copy.deepcopy(data)
 d3["sections"][0]["hidden"] = False
 first_block(d3, "text")["dim"] = False
-d3["sections"][0]["blocks"][0] = {"dim": False, "text": first_block(d3, "text")["text"], "type": "text"}
+first_text = first_block(d3, "text")["text"]
+d3["sections"][0]["blocks"][0] = {"dim": False, "text": first_text, "type": "text"}
 check("welcome: defaults and key order do not show up as changes",
       wc.dumps(d3).count('"hidden"') == 0 and wc.dumps(d3).count('"dim": false') == 0
-      and wc.dumps(d3).index('"type": "text"') < wc.dumps(d3).index('"text": "Super'))
+      and wc.dumps(d3).index('"type": "text"') < wc.dumps(d3).index(json.dumps(first_text, ensure_ascii=False)[:30]))
 d4 = copy.deepcopy(data)
 d4["sections"][1]["hidden"] = True
 d4["sections"].insert(0, d4["sections"].pop(2))
 check("welcome: a hidden and reordered file still passes", wc.validate(d4) == [])
+
+# ---- welcome window: line breaks, bold, links, app buttons -------------------------
+check("marks: commands, bold and links split out of the text",
+      wc.parse_inline("Run `ujust x y`, then **press Enter** or [read the guide](guide#g-kernel).") == [
+          ("text", "Run "), ("code", "ujust x y"), ("text", ", then "), ("bold", "press Enter"),
+          ("text", " or "), ("link", "read the guide", "guide#g-kernel"), ("text", ".")])
+check("marks: a command keeps its stars and brackets as typed",
+      wc.parse_inline("`echo **[x](y)**`") == [("code", "echo **[x](y)**")])
+check("marks: a blank line starts a paragraph, newlines at the ends do not count",
+      wc.paragraphs("\nOne\ntwo\n\n\n  three\n \nfour\n\n") == ["One\ntwo", "three", "four"])
+check("marks: the shipped intro links to a part of the guide that exists",
+      ("link", "read more here", "guide#h-what") in wc.parse_inline(data["intro"]) and "h-what" in wc.guide_anchors())
+check("marks: the editor's list of guide parts holds only real places",
+      wc.guide_sections() and all(wc.link_problem(t, wc.guide_anchors()) is None for t, _ in wc.guide_sections()))
+check("marks: the shipped Bazaar button opens Bazaar by its desktop file",
+      {"type": "button", "action": "open-app", "app": "io.github.kolunmi.Bazaar.desktop", "label": "Open Bazaar",
+       "style": "plain"} in [b for s in data["sections"] for b in s["blocks"]])
+
+
+def accepts(name, mutate):
+    d2 = copy.deepcopy(data)
+    mutate(d2)
+    errs = wc.validate(d2)
+    check(f"welcome: accepts {name}", errs == [], errs)
+    return d2
+
+
+d5 = accepts("line breaks and paragraphs in every long text", lambda d2: (
+    d2.update(intro="One line\nand the next.\n\nA paragraph."),
+    first_block(d2, "text").update(text="\nA\nB\n\nC\n"),
+    first_block(d2, "items")["items"].append("An item\n\nwith two paragraphs."),
+    d2["footer"].update(text="Bottom\ntext.")))
+check("welcome: line breaks survive a save and a load", json.loads(wc.dumps(d5)) == wc.canonical(d5)
+      and json.loads(wc.dumps(d5))["intro"] == "One line\nand the next.\n\nA paragraph.")
+accepts("bold, commands and links of every kind", lambda d2: first_block(d2, "items")["items"].append(
+    "**Bold**, `ujust x`, [the guide](guide), [a part](guide#g-apps), [Bazaar](app:io.github.kolunmi.Bazaar.desktop), "
+    "[a page](https://github.com/daniel-g-carrasco/lucciola/issues)."))
+accepts("a button that opens another app", lambda d2: d2["sections"][0]["blocks"].append(
+    {"type": "button", "action": "open-app", "app": "org.gnome.Ptyxis.desktop", "label": "Open the terminal"}))
+rejects("a link to a file", lambda d2: d2.update(intro="[x](file:///etc/passwd)"), "the window opens only")
+rejects("a link to a script", lambda d2: d2.update(intro="[x](javascript:alert)"), "the window opens only")
+rejects("a plain http link", lambda d2: d2.update(intro="[x](http://example.org)"), "the window opens only")
+rejects("a link to a guide part that does not exist", lambda d2: d2.update(intro="[x](guide#g-nowhere)"),
+        "the guide has no such section")
+rejects("a link to an app without its desktop file", lambda d2: d2.update(intro="[x](app:bazaar)"), "desktop file")
+rejects("a link with no words", lambda d2: d2.update(intro="[](guide)"), "a link with no words")
+rejects("a link with no address", lambda d2: d2.update(intro="[here]()"), "no address")
+rejects("a lone [", lambda d2: d2.update(intro="read [here(guide)"), "not part of a link")
+rejects("a lone ]", lambda d2: d2.update(intro="read here](guide)"), "not part of a link")
+rejects("a lone ** mark", lambda d2: d2.update(intro="**bold"), "without its pair")
+rejects("a command inside bold", lambda d2: d2.update(intro="**run `x`**"), "inside bold")
+rejects("bold inside a link's words", lambda d2: d2.update(intro="[**x**](guide)"), "inside a link")
+rejects("a long dash in a link's words", lambda d2: d2.update(intro=f"[a {DASH} b](guide)"), "long dash")
+rejects("a link in a heading", lambda d2: d2["sections"][0].update(title="[keys](guide)"), "cannot hold a link")
+rejects("bold in a button", lambda d2: first_block(d2, "button").update(label="**Open**"), "cannot be bold")
+rejects("a heading on two lines", lambda d2: d2["sections"][0].update(title="the\nkeys"), "cannot break across lines")
+rejects("an app button without its app", lambda d2: d2["sections"][0]["blocks"].append(
+    {"type": "button", "action": "open-app", "label": "Open"}), '"app" must name')
+rejects("an app button with a command for an app", lambda d2: d2["sections"][0]["blocks"].append(
+    {"type": "button", "action": "open-app", "app": "sh -c reboot", "label": "Open"}), '"app" must name')
+rejects("an app on a button that opens something else", lambda d2: first_block(d2, "button").update(
+    app="io.github.kolunmi.Bazaar.desktop") if first_block(d2, "button")["action"] != "open-app" else None,
+    "only an open-app button")
+
+guide_open = ROOT / "build_files/system_files/usr/libexec/margine/guide-open"
+bad = subprocess.run(["bash", str(guide_open), "g-x;reboot"], capture_output=True, text=True)
+check("guide-open: refuses a section name that is not one", bad.returncode == 2 and "not a section name" in bad.stderr)
 
 dashed = [str(f.relative_to(ROOT)) for f in [*(ROOT / "tools/content-editor").rglob("*"), wc.CONTENT]
           if f.is_file() and f.suffix in (".py", ".js", ".css", ".html", ".md", ".json")

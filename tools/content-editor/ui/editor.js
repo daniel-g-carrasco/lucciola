@@ -19,7 +19,7 @@
   const ce = () => frame.contentWindow && frame.contentWindow.ce;
   let tab = 'site';
   const FILE_NAMES = { 'site/index.html': 'Website', 'lucciola/system_files/usr/share/lucciola/welcome/content.json': 'Welcome window' };
-  const W = { content: null, saved: '', actions: {}, conditions: {}, history: [] };
+  const W = { content: null, saved: '', actions: {}, conditions: {}, apps: {}, guideSections: [], history: [] };
 
   // ---- small helpers -----------------------------------------------------
   function h(tag, props = {}, ...kids) {
@@ -73,7 +73,7 @@
   const siteDirty = () => !!(ce() && ce().dirty());
   const HINTS = {
     site: `Click any text to change it. Point at a block for <b>↑ ↓ hide copy delete</b> (point at a heading for its whole section). <b>Ctrl+S</b> saves. Rule: no long dash (${DASH}); use a colon or a comma.`,
-    welcome: `Change the fields on the left; the right side shows the window. Put a command between \` marks, like <b>\`toolbox enter\`</b>. <b>Ctrl+S</b> saves. Rule: no long dash (${DASH}); use a colon or a comma.`,
+    welcome: `Change the fields on the left; the right side shows the window. A command goes between \` marks, like <b>\`toolbox enter\`</b>; select words and press <b>Bold</b> or <b>Link</b> for the rest. <b>Enter</b> breaks the line, an empty line starts a paragraph. <b>Ctrl+S</b> saves. Rule: no long dash (${DASH}); use a colon or a comma.`,
   };
   function changed() {
     const dirty = siteDirty() || welcomeDirty();
@@ -284,7 +284,71 @@
     return el;
   }
   const text = (get, set, cls) => bind(h('input', { type: 'text', class: cls || '' }), get, set);
-  const area = (get, set, rows = 3) => bind(h('textarea', { rows: String(rows) }), get, set);
+  const rowsFor = (v) => Math.min(10, String(v).split('\n').reduce((n, line) => n + Math.max(1, Math.ceil(line.length / 70)), 0) + 1);
+  const area = (get, set, rows) => bind(h('textarea', { rows: String(rows || rowsFor(get())) }), get, set);
+
+  // A multi-line text with its marks: Bold and Link wrap the selected words.
+  function replaceSelection(ta, fn) {
+    const s = ta.selectionStart, e = ta.selectionEnd;
+    const picked = ta.value.slice(s, e);
+    if (!picked.trim()) { toast('Select the words first, then press the button again.', [], 2600); ta.focus(); return null; }
+    if (/[\n`*[\]]/.test(picked)) { toast('Select words on one line, without ` * [ or ] marks.', [], 3200); ta.focus(); return null; }
+    return { s, e, picked, apply(rep) {
+      ta.focus();
+      ta.setRangeText(rep, s, e, 'end');
+      ta.dispatchEvent(new Event('input'));
+    } };
+  }
+  function rich(get, set, rows) {
+    const ta = area(get, set, rows);
+    const bold = () => { const sel = replaceSelection(ta); if (sel) sel.apply(`**${sel.picked}**`); };
+    const link = () => { const sel = replaceSelection(ta); if (sel) linkDialog(sel); };
+    return h('div', { class: 'rich' }, ta, h('div', { class: 'rich-tools' },
+      h('button', { type: 'button', title: 'Make the selected words bold', onclick: bold }, 'Bold'),
+      h('button', { type: 'button', title: 'Make the selected words a link', onclick: link }, 'Link')));
+  }
+
+  // Where an app button or an app: link goes: one of the apps the editor
+  // knows by name, or any other by its desktop file.
+  function appPicker(current, onPick) {
+    const other = h('input', { type: 'text', placeholder: 'org.example.App.desktop', value: W.apps[current] ? '' : (current || '') });
+    const sel = h('select', {}, Object.entries(W.apps).map(([id, name]) => h('option', { value: id }, name)),
+      h('option', { value: '' }, 'Another app (its desktop file)'));
+    sel.value = W.apps[current] ? current : '';
+    const sync = () => { other.hidden = sel.value !== ''; onPick(sel.value || other.value.trim()); };
+    sel.addEventListener('change', sync);
+    other.addEventListener('input', sync);
+    other.hidden = sel.value !== '';
+    return h('div', { class: 'app-pick' }, sel, other);
+  }
+
+  function linkDialog(sel) {
+    let app = Object.keys(W.apps)[0] || '';
+    const kind = h('select', {}, h('option', { value: 'guide' }, 'The guide'), h('option', { value: 'app' }, 'An app'),
+      h('option', { value: 'web' }, 'A web page'));
+    const where = h('select', {}, h('option', { value: 'guide' }, 'the guide, from the top'),
+      W.guideSections.map(([to, name]) => h('option', { value: to }, name)));
+    const apps = appPicker(app, (v) => { app = v; });
+    const url = h('input', { type: 'text', placeholder: 'https://', value: 'https://' });
+    const err = h('p', { class: 'errors' });
+    const parts = { guide: field('Which part of the guide', where), app: field('Which app', apps), web: field('Web address', url) };
+    const show = () => { for (const [k, el] of Object.entries(parts)) el.hidden = k !== kind.value; err.textContent = ''; };
+    kind.addEventListener('change', show);
+    show();
+    const ok = h('button', { type: 'button', class: 'primary', onclick: () => {
+      let to = '';
+      if (kind.value === 'guide') to = where.value;
+      else if (kind.value === 'app') to = /^[A-Za-z0-9_][A-Za-z0-9_.-]*\.desktop$/.test(app) ? `app:${app}` : '';
+      else to = /^https:\/\/[^\s()"'<>\\]+\.[^\s()"'<>\\]+$/.test(url.value.trim()) ? url.value.trim() : '';
+      if (!to) {
+        err.textContent = kind.value === 'app' ? 'Write the app\'s desktop file, like org.example.App.desktop.' : 'Write the whole address, starting with https://';
+        return;
+      }
+      dlg.close();
+      sel.apply(`[${sel.picked}](${to})`);
+    } }, 'Make it a link');
+    dialog(`Link “${sel.picked}”`, [field('It opens', kind), ...Object.values(parts), err], [closeBtn('Cancel'), ok]);
+  }
   const field = (label, control) => h('label', { class: 'field' }, label, control);
   const iconBtn = (label, title, fn, disabled, cls) => h('button', { type: 'button', title, 'aria-label': title, onclick: fn, disabled: !!disabled, class: cls || '' }, label);
 
@@ -298,12 +362,18 @@
         iconBtn('✕', 'Delete', () => structural(() => list.splice(bi, 1)), false, 'danger')));
     const box = h('div', { class: 'block' }, head);
     if (b.type === 'text') {
-      box.append(area(() => b.text, (v) => { b.text = v; }, Math.min(6, Math.ceil(b.text.length / 70) + 1)));
+      box.append(rich(() => b.text, (v) => { b.text = v; }));
       const cb = h('input', { type: 'checkbox' }); cb.checked = !!b.dim;
       cb.addEventListener('change', () => structural(() => { if (cb.checked) b.dim = true; else delete b.dim; }));
       box.append(h('label', { class: 'check' }, cb, 'Grey text (less important)'));
     } else if (b.type === 'items') {
-      box.append(field('One item per line', area(() => b.items.join('\n'), (v) => { b.items = v.split('\n').map((x) => x.trim()).filter(Boolean); }, Math.max(3, b.items.length * 2))));
+      b.items.forEach((item, ii) => box.append(h('div', { class: 'item' },
+        rich(() => b.items[ii], (v) => { b.items[ii] = v; }),
+        h('div', { class: 'icons' },
+          iconBtn('↑', 'Move the item up', () => structural(() => move(b.items, ii, -1)), ii === 0),
+          iconBtn('↓', 'Move the item down', () => structural(() => move(b.items, ii, 1)), ii === b.items.length - 1),
+          iconBtn('✕', 'Delete this item', () => structural(() => b.items.splice(ii, 1)), b.items.length === 1, 'danger')))));
+      box.append(h('div', { class: 'adds' }, h('button', { type: 'button', onclick: () => structural(() => b.items.push('New item.')) }, '+ item')));
     } else if (b.type === 'keys') {
       box.append(h('p', { class: 'note' }, 'Keys joined with +, alternatives with /. Example: Super + H / Super + L'));
       b.rows.forEach((row, ri) => box.append(h('div', { class: 'row' },
@@ -319,6 +389,9 @@
         text(() => b.label, (v) => { b.label = v; }),
         h('span', { class: 'note' }, (W.actions[b.action] || b.action).replace(/^./, (c) => c.toUpperCase())),
         h('span')));
+      if (b.action === 'open-app') {
+        box.append(field('The app it opens', appPicker(b.app, (v) => { b.app = v; renderPreview(); changed(); })));
+      }
       const cb = h('input', { type: 'checkbox' }); cb.checked = b.style === 'cta';
       cb.addEventListener('change', () => structural(() => { b.style = cb.checked ? 'cta' : 'plain'; }));
       box.append(h('label', { class: 'check' }, cb, 'Highlighted (beige) button'));
@@ -344,7 +417,9 @@
       h('button', { type: 'button', onclick: () => structural(() => sec.blocks.push({ type: 'text', text: 'New paragraph.' })) }, '+ paragraph'),
       h('button', { type: 'button', onclick: () => structural(() => sec.blocks.push({ type: 'items', items: ['First item.', 'Second item.'] })) }, '+ list'),
       h('button', { type: 'button', onclick: () => structural(() => sec.blocks.push({ type: 'keys', rows: [{ keys: [['Super', 'X']], label: 'what it does' }] })) }, '+ keys'),
-      h('button', { type: 'button', onclick: () => structural(() => sec.blocks.push({ type: 'button', action: actionSel.value, label: 'Open', style: 'plain' })) }, '+ button that'),
+      h('button', { type: 'button', onclick: () => structural(() => sec.blocks.push(actionSel.value === 'open-app'
+        ? { type: 'button', action: 'open-app', app: Object.keys(W.apps)[0], label: 'Open', style: 'plain' }
+        : { type: 'button', action: actionSel.value, label: 'Open', style: 'plain' })) }, '+ button that'),
       actionSel));
     return card;
   }
@@ -356,7 +431,7 @@
     form.replaceChildren(
       h('div', { class: 'card' }, h('h3', {}, 'Top of the window'),
         field('Window title', text(() => c.window_title, (v) => { c.window_title = v; })),
-        field('Intro, under the name', area(() => c.intro, (v) => { c.intro = v; }, 2))),
+        field('Intro, under the name', rich(() => c.intro, (v) => { c.intro = v; }))),
       ...c.sections.map(sectionCard),
       h('div', { class: 'adds' }, h('button', { type: 'button', onclick: () => structural(() => {
         let n = c.sections.length + 1;
@@ -364,30 +439,56 @@
         c.sections.push({ id: `section-${n}`, title: 'new section', blocks: [{ type: 'text', text: 'New paragraph.' }] });
       }) }, '+ section')),
       h('div', { class: 'card' }, h('h3', {}, 'Bottom of the window'),
-        field('Text', area(() => c.footer.text, (v) => { c.footer.text = v; }, 2)),
+        field('Text', rich(() => c.footer.text, (v) => { c.footer.text = v; })),
         field('Close button', text(() => c.footer.close_label, (v) => { c.footer.close_label = v; }))));
     form.scrollTop = y;
   }
 
   // ---- welcome window: preview ---------------------------------------------------------
-  const md = (s) => esc(s).replace(/`([^`]+)`/g, '<span class="g-cmd">$1</span>');
+  // The window's marks (welcome_content.py INLINE): `command`, **bold**,
+  // [words](where); a newline breaks the line, an empty line starts a paragraph.
+  const INLINE = /`([^`\n]+)`|\*\*([^*\n]+)\*\*|\[([^\[\]\n]*)\]\(([^()\s]*)\)/g;
+  function linkName(to) {
+    if (to === 'guide') return 'Opens the guide';
+    if (to.startsWith('guide#')) { const sec = W.guideSections.find(([t]) => t === to); return `Opens the ${sec ? sec[1] : to.slice(6)}`; }
+    if (to.startsWith('app:')) return `Opens ${W.apps[to.slice(4)] || to.slice(4)}`;
+    return `Opens ${to}`;
+  }
+  function md(s) {
+    const plain = (t) => esc(t).replace(/\n/g, '<br>');
+    let out = '', pos = 0;
+    for (const m of String(s).matchAll(INLINE)) {
+      out += plain(s.slice(pos, m.index));
+      if (m[1] !== undefined) out += `<span class="g-cmd">${esc(m[1])}</span>`;
+      else if (m[2] !== undefined) out += `<b>${esc(m[2])}</b>`;
+      else out += `<a class="g-link" href="#" title="${esc(linkName(m[4]))}" data-to="${esc(m[4])}">${esc(m[3])}</a>`;
+      pos = m.index + m[0].length;
+    }
+    return out + plain(s.slice(pos));
+  }
+  const paras = (s) => String(s).trim().split(/\n[ \t]*\n\s*/).map((p) => p.trim()).filter(Boolean);
+  const block = (s, cls) => `<div class="g-rich ${cls || ''}">${paras(s).map((p) => `<p>${md(p)}</p>`).join('')}</div>`;
+  $('#wpreview').addEventListener('click', (e) => {
+    const a = e.target.closest('a.g-link');
+    if (a) { e.preventDefault(); toast(`In the window this link: ${a.title.replace(/^O/, 'o')}.`, [], 2600); }
+  });
   function renderPreview() {
     const c = W.content;
-    const parts = [`<div class="g-hero"><div class="g-word">lucciola<i></i></div><p class="g-lede">${md(c.intro)}</p></div>`];
+    const parts = [`<div class="g-hero"><div class="g-word">lucciola<i></i></div>${block(c.intro, 'g-lede')}</div>`];
     for (const sec of c.sections) {
       const cls = ['g-sec', sec.hidden ? 'g-off' : '', sec.show_if ? 'g-cond' : ''].join(' ');
       const tag = sec.hidden ? '<small>hidden</small>' : sec.show_if ? '<small>only when needed</small>' : '';
       const blocks = sec.blocks.map((b) => {
-        if (b.type === 'text') return `<p class="g-p${b.dim ? ' g-dim' : ''}">${md(b.text)}</p>`;
-        if (b.type === 'items') return `<ul class="g-list">${b.items.map((i) => `<li><span>${md(i)}</span></li>`).join('')}</ul>`;
+        if (b.type === 'text') return block(b.text, b.dim ? 'g-dim' : '');
+        if (b.type === 'items') return `<ul class="g-list">${b.items.map((i) => `<li>${block(i, 'g-item')}</li>`).join('')}</ul>`;
         if (b.type === 'keys') return `<div class="g-keys">${b.rows.map((r) => `<div class="g-caps">${r.keys.map((combo) =>
-          combo.map((k) => `<span class="g-cap">${esc(k)}</span>`).join('')).join('<span class="g-sep">/</span>')}</div><div>${md(r.label)}</div>`).join('')}</div>`;
+          combo.map((k) => `<span class="g-cap">${esc(k)}</span>`).join('')).join('<span class="g-sep">/</span>')}</div>${block(r.label, 'g-item')}`).join('')}</div>`;
         if (b.type === 'button') return `<span class="g-btn${b.style === 'cta' ? ' cta' : ''}">${esc(b.label)}</span>`;
         return '';
       }).join('');
       parts.push(`<div class="${cls}"><p class="g-h">${md(sec.title)}${tag}</p>${blocks}</div>`);
     }
-    parts.push(`<div class="g-foot"><hr><div><p>${md(c.footer.text)}</p><span class="g-btn">${esc(c.footer.close_label)}</span></div></div>`);
+    parts.push(`<div class="g-foot"><hr><div>${block(c.footer.text, 'g-dim g-grow')}<span class="g-btn">${esc(c.footer.close_label)}</span></div></div>`);
     $('#wpreview').innerHTML = parts.join('');
   }
   function renderWelcome() { renderForm(); renderPreview(); }
@@ -396,6 +497,7 @@
     const res = await api('/api/welcome');
     if (res.error) { $('#wform').replaceChildren(h('p', { class: 'errors' }, res.error)); return; }
     W.content = res.content; W.actions = res.actions; W.conditions = res.conditions;
+    W.apps = res.apps || {}; W.guideSections = res.guide_sections || [];
     W.saved = JSON.stringify(W.content); W.history = [];
     renderWelcome();
     changed();
