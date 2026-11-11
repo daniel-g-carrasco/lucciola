@@ -113,6 +113,30 @@
     <annotate key="org.freedesktop.policykit.exec.argv1">tpm-unlock-enable</annotate>
   </action>
 
+  <action id="dev.lucciola.admin.tpm-unlock-pin">
+    <description>Ask a PIN before the TPM unlocks the disk at startup</description>
+    <message>Authentication is required to make the TPM security chip ask a PIN before it unlocks the disk at startup.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">tpm-unlock-pin</annotate>
+  </action>
+
+  <action id="dev.lucciola.admin.tpm-unlock-no-pin">
+    <description>Let the TPM unlock the disk at startup without a PIN</description>
+    <message>Authentication is required to let the TPM security chip unlock the disk at startup without asking its PIN.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lucciola/admin</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">tpm-unlock-no-pin</annotate>
+  </action>
+
   <action id="dev.lucciola.admin.tpm-unlock-disable">
     <description>Stop the TPM from unlocking the disk at startup</description>
     <message>Authentication is required to stop the TPM from unlocking the disk; the passphrase is asked at every startup instead.</message>

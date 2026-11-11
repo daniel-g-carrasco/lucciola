@@ -18,7 +18,7 @@ says() { grep -q -- "$1" "$T/out"; }
 
 # A protection as the API returns it, matching the policy.
 cat > "$T/good.json" <<'JSON'
-{"required_status_checks":{"strict":true,"contexts":["policy","lint","build-inputs-need-vm-test","flatpak-preinstall"],
+{"required_status_checks":{"strict":true,"contexts":["policy","lint","build-inputs-need-vm-test","flatpak-preinstall","tpm-unlock-real"],
  "checks":[{"context":"lint","app_id":15368}]},
  "enforce_admins":{"enabled":true},
  "required_pull_request_reviews":{"required_approving_review_count":0,"dismiss_stale_reviews":false},
@@ -80,7 +80,7 @@ check "apply without a typed yes: nothing sent, exit 1 (rc $RC)"   bash -c "[ '$
 check "...and it says so"                                            says 'Not applied'
 apply yes
 check "apply with yes: one PUT to the protection endpoint (rc $RC)" bash -c "[ '$RC' = 0 ] && [ \"\$(grep -c -- '-X PUT repos/daniel-g-carrasco/lucciola/branches/main/protection --input -' '$T/log')\" = 1 ]"
-check "...with the policy as its body"                               bash -c "jq -e '.required_status_checks.contexts | sort == [\"build-inputs-need-vm-test\",\"flatpak-preinstall\",\"lint\",\"policy\"]' '$T/log.body' >/dev/null"
+check "...with the policy as its body"                               bash -c "jq -e '.required_status_checks.contexts | sort == [\"build-inputs-need-vm-test\",\"flatpak-preinstall\",\"lint\",\"policy\",\"tpm-unlock-real\"]' '$T/log.body' >/dev/null"
 check "...then reads it back"                                        says 'matches the policy'
 
 # The contexts are lint.yml's always-running jobs, by the names GitHub uses.

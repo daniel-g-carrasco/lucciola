@@ -776,7 +776,7 @@ lucciola-secureboot ACTION="status":
         echo "usage: ujust lucciola-secureboot [status|enroll|never]"; exit 1 ;;
     esac
 
-# TPM2 LUKS auto-unlock for the encrypted root (status/enable/disable).
+# TPM2 LUKS auto-unlock for the encrypted root (status/enable/disable), with a PIN asked at startup or without (pin/no-pin).
 [group('Lucciola')]
 lucciola-tpm-unlock ACTION="status" PCRS="7":
     sudo /usr/bin/lucciola-tpm-unlock "{{ ACTION }}" "{{ PCRS }}"

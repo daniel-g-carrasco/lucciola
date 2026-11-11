@@ -23,7 +23,8 @@
 # behind a `paths:` filter or an `if:` other than "this is a pull request".
 # GitHub names an Actions check by the job's `name:` or, without one, its
 # id; the names below are what the check-runs API reports on pull request
-# heads (lint, flatpak-preinstall) and the two jobs added with them.
+# heads (lint, flatpak-preinstall, tpm-unlock-real) and the two jobs added
+# with them.
 # tests/repo-guard.test.sh keeps CONTEXTS equal to lint.yml's always-running
 # jobs; repo-guard.yml reads the public `protected` field weekly and runs
 # this check (which, with the workflow token, can only say it cannot read).
@@ -31,7 +32,7 @@ set -euo pipefail
 
 REPO="${REPO_GUARD_REPO:-daniel-g-carrasco/lucciola}"
 BRANCH="${REPO_GUARD_BRANCH:-main}"
-CONTEXTS=(lint flatpak-preinstall build-inputs-need-vm-test policy)
+CONTEXTS=(lint flatpak-preinstall tpm-unlock-real build-inputs-need-vm-test policy)
 # Tests point this at a JSON file instead of calling gh (tests/repo-guard.test.sh).
 STATE_FILE="${REPO_GUARD_STATE_FILE:-}"
 

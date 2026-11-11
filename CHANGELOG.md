@@ -7,6 +7,22 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Added (2026-11-10, a PIN for the disk unlock)
+- **The TPM can ask a PIN before it unlocks the disk.** An option, off unless
+  you turn it on: Lucciola System, Startup and Security, "Ask a PIN at
+  Startup…", or `ujust lucciola-tpm-unlock pin`. Without a PIN the disk
+  unlocks on its own, which is convenient and leaves one door open: someone
+  who has the laptop in hand and can start it from other media can make the
+  TPM hand over the key. With a PIN the TPM gives nothing until it is typed,
+  and after a few wrong ones it refuses them all for a while. At least six
+  characters. The disk passphrase keeps working: Enter on an empty PIN asks
+  for it. `no-pin` goes back, and `enable`, the remedy after a Secure Boot or
+  kernel change, keeps the PIN you chose.
+
+### Fixed (2026-11-10, Keep Awake)
+- A hold counted in whole seconds could end up to a second early. Nothing
+  for a night's download; it made one of its tests fail now and then.
+
 ### Changed (2026-11-10, the upstream review)
 - **The monthly upstream check watches the base.** `ublue-os/main`, what every
   image is built on since October, was not on its list; the archived rechunk

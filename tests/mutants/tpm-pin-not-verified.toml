@@ -1,0 +1,7 @@
+# After enrolling with a PIN the token is read back: a key enrolled without
+# the PIN that was asked for is an error, not a success the owner trusts.
+name = "tpm-pin-not-verified"
+file = "build_files/system_files/usr/bin/lucciola-tpm-unlock"
+old = '''  if [ "$with_pin" -eq 1 ] && ! has_tpm2_pin; then'''
+new = '''  if false; then'''
+must_fail = "bash tests/tpm-unlock.test.sh"

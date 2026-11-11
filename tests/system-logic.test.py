@@ -123,6 +123,18 @@ st = ls.parse_tpm_status("Could not auto-detect a LUKS device backing root\nLUKS
 check("tpm status: no LUKS root", st["error"] and ls.tpm_summary(st)[0] == "unencrypted")
 check("tpm status: no chip", ls.tpm_summary(ls.parse_tpm_status("  TPM2 device                ✗ not found / not 2.0\n"))[0] == "no-tpm")
 check("tpm status: unknown on empty", ls.tpm_summary(ls.parse_tpm_status(""))[0] == "unknown")
+tpm_no_pin = tpm_root.replace("  Boot path", "  PIN at startup             — not asked  (the disk unlocks unattended)\n  Boot path")
+tpm_pin = tpm_root.replace("  Boot path", "  PIN at startup             ✓ asked  (the TPM releases the key only with it)\n  Boot path")
+check("tpm status: an older helper says nothing about the PIN", ls.parse_tpm_status(tpm_root)["pin"] is None)
+check("tpm status: no PIN asked", ls.parse_tpm_status(tpm_no_pin)["pin"] is False and ls.tpm_summary(ls.parse_tpm_status(tpm_no_pin)) == ls.tpm_summary(ls.parse_tpm_status(tpm_root)))
+st = ls.parse_tpm_status(tpm_pin)
+check("tpm status: PIN asked", st["pin"] is True and st["token"] and st["wired"])
+check("tpm summary: on, and the sentence names the PIN", ls.tpm_summary(st)[0] == "on" and "PIN" in ls.tpm_summary(st)[1] and "PIN" not in ls.tpm_summary(ls.parse_tpm_status(tpm_no_pin))[1])
+check("tpm pin: empty", ls.tpm_pin_problem("", "") == "Choose a PIN")
+check("tpm pin: five characters are too few", "At least 6" in ls.tpm_pin_problem("12345", "12345"))
+check("tpm pin: the two differ", ls.tpm_pin_problem("123456", "123457") == "The two PINs differ")
+check("tpm pin: one line only", ls.tpm_pin_problem("123\n456", "123\n456") == "The PIN must be one line")
+check("tpm pin: six characters, twice the same, can go", ls.tpm_pin_problem("c0ffee", "c0ffee") == "" and ls.tpm_pin_problem("àèìòùé", "àèìòùé") == "")
 
 check("grub lock: ON", ls.parse_grub_lock("GRUB menu lock: ON (user: root).\nmore\n") == "on")
 check("grub lock: off", ls.parse_grub_lock("GRUB menu lock: off. The boot menu can be edited by anyone.") == "off")
@@ -604,6 +616,8 @@ check("lanes: SSH, the login, the TPM, GRUB, the scheduler, the dock, the printe
 check("lanes: on and off of one switch are one operation",
       lanes("ssh-on") == lanes("ssh-off") == lanes("ssh-allow", "1.2.3.4", "PC") == lanes("ssh-forget", "1.2.3.4") == {"ssh"}
       and lanes("grub-lock-on") == lanes("grub-lock-off")
+      and lanes("tpm-unlock-enable") == lanes("tpm-unlock-disable") == lanes("tpm-unlock-pin") == lanes("tpm-unlock-no-pin") == {"tpm-unlock"}
+      and lanes("pin", "1") != lanes("tpm-unlock-pin")
       and lanes("dock-wake") == lanes("dock-rescue") and lanes("scheduler") == lanes("scheduler-off")
       and ls.operation_lanes(["/usr/bin/lucciola-keyring", "tpm"]) == ls.operation_lanes(["/usr/bin/lucciola-keyring", "tpm-off"]))
 check("lanes: gaming holds the system and Flatpak, the AI apps only Flatpak, Docker only the system",

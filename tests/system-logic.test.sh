@@ -37,6 +37,11 @@ plan tpm-unlock-enable;           check "tpm-unlock-enable: PCR 7, passphrase in
   bash -c "[ '$RC' = 0 ] && grep -q 'root-only file' '$T/out' && grep -q 'lucciola-tpm-unlock enable 7\$' '$T/out' && ! grep -q 'LUCCIOLA_UNLOCK_KEY_FILE=' '$T/out'"
 plan tpm-unlock-enable 7+14;      check "tpm-unlock-enable with PCRs 7+14 (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -q 'enable 7+14\$' '$T/out'"
 plan tpm-unlock-disable;          check "tpm-unlock-disable (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -q 'lucciola-tpm-unlock disable' '$T/out'"
+plan tpm-unlock-pin;              check "tpm-unlock-pin: passphrase and PIN in root-only files, never argv (rc $RC)" \
+  bash -c "[ '$RC' = 0 ] && grep -qx 'CONFIRM=yes (passphrase and PIN in root-only files) /usr/bin/lucciola-tpm-unlock pin 7' '$T/out' && ! grep -qE 'LUCCIOLA_(UNLOCK_KEY|TPM_PIN)_FILE=' '$T/out'"
+plan tpm-unlock-pin 7+14;         check "tpm-unlock-pin with PCRs 7+14 (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -q 'pin 7+14\$' '$T/out'"
+plan tpm-unlock-no-pin;           check "tpm-unlock-no-pin: the passphrase only (rc $RC)" \
+  bash -c "[ '$RC' = 0 ] && grep -qx 'CONFIRM=yes (passphrase in a root-only file) /usr/bin/lucciola-tpm-unlock no-pin 7' '$T/out'"
 plan grub-lock-status;            check "grub-lock-status (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/margine/grub-lock status' '$T/out'"
 plan grub-lock-on;                check "grub-lock-on: password on stdin twice, never argv (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -q 'password on stdin, twice' '$T/out'"
 plan grub-lock-off;               check "grub-lock-off (rc $RC)" bash -c "[ '$RC' = 0 ] && grep -qx '/usr/libexec/margine/grub-lock off' '$T/out'"
@@ -70,7 +75,7 @@ plan dock-rescue off;             check "dock-rescue off writes the switch (rc $
 for bad in "ai-on amd" "ai-on nvidia" "gaming-on now" "dock-rescue maybe" "apps-slim please" "flatpak-unblock" "flatpak-unblock a b" "flatpak-unblock 'x; rm -rf /'" "flatpak-unblock ../etc" "flatpak-unblock -y" \
            "update now" "rollback --force" "reboot" "--check" "kernel" "kernel foo" "kernel fedora now" \
            "pin" "pin 12" "pin x" "pin -1" "unpin" "unpin 1 2" "pin '1; rm -rf /'" \
-           "tpm-unlock-enable '7;8'" "tpm-unlock-enable 7 8" "tpm-unlock-enable ../x" "grub-lock-on pw" "grub-lock-off x" \
+           "tpm-unlock-enable '7;8'" "tpm-unlock-enable 7 8" "tpm-unlock-enable ../x" "tpm-unlock-pin '7;8'" "tpm-unlock-pin 7 8" "tpm-unlock-pin 123456" "tpm-unlock-no-pin x" "tpm-unlock-no-pin 7 8" "grub-lock-on pw" "grub-lock-off x" \
            "autologin-on bob" "autologin-off x" "ssh-on x" "ssh-off x" "ssh-allow" "ssh-allow 1.2.3.4" "ssh-allow 'a;b' x" "ssh-allow 1.2.3.4 'x;reboot'" "ssh-allow -h x" "ssh-forget" "ssh-forget 'a b'" "ssh-forget ../x" "secureboot-enroll x" "scheduler" "scheduler lavd Turbo" "scheduler 'x;y' Auto" "scheduler LAVD" "scheduler-off x"; do
   eval "python3 -I '$ADMIN' --check $bad" > "$T/out" 2>&1 && RC=0 || RC=$?
   check "admin refuses: $bad (rc $RC)" [ "$RC" != 0 ]
@@ -113,6 +118,7 @@ check "no other polkit rule relaxes org.freedesktop.policykit.exec" \
 # The helpers' non-interactive switches the dispatcher relies on.
 check "kernel-switch honours CONFIRM=yes" grep -q 'CONFIRM:-}" == yes' "$SF/usr/libexec/margine/kernel-switch"
 check "tpm-unlock takes the passphrase from a key file" grep -q 'LUCCIOLA_UNLOCK_KEY_FILE' "$SF/usr/bin/lucciola-tpm-unlock"
+check "tpm-unlock takes the PIN from a file too" grep -q 'LUCCIOLA_TPM_PIN_FILE' "$SF/usr/bin/lucciola-tpm-unlock"
 check "grub-lock reads the password from stdin when not a terminal" grep -q 'read -r p1; read -r p2' "$SF/usr/libexec/margine/grub-lock"
 check "lucciola-keyring reads the password from stdin when not a terminal" grep -q 'IFS= read -r pw1' "$SF/usr/bin/lucciola-keyring"
 # The feature helper: no prompt, no advice, root checked, every feature known.

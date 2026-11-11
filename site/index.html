@@ -774,6 +774,8 @@ html[data-going="home"]::view-transition-new(root) { --arrive: -48px; }
     <h2 id="g-h-unlock">disk unlock</h2>
     <p>If your disk is encrypted, the TPM security chip can unlock it at startup, and you type only your login password. This needs Secure Boot on and Lucciola’s key registered.</p>
     <div class="cmd"><pre>ujust lucciola-tpm-unlock enable</pre><button type="button">Copy</button></div>
+    <p>On a laptop that travels, add a PIN: the TPM then unlocks the disk only after you type it at startup, so someone who has the laptop in hand cannot get the disk open. It is at least six characters; after a few wrong ones the TPM refuses every PIN for a while and the startup asks for the passphrase. Replace <code>pin</code> with <code>no-pin</code> to go back.</p>
+    <div class="cmd"><pre>ujust lucciola-tpm-unlock pin</pre><button type="button">Copy</button></div>
     <p>Then lock the boot menu, so that changing how the system starts takes a password. You choose it, at least eight letters and digits; the user name is <code>root</code>. Normal starts need no password, and neither does going back to a previous version.</p>
     <div class="cmd"><pre>ujust lucciola-grub-lock on</pre><button type="button">Copy</button></div>
     <p>Replace <code>enable</code> or <code>on</code> with <code>status</code> to see where you are, or with <code>disable</code> or <code>off</code> to undo. The disk passphrase keeps working throughout.</p>

@@ -2333,11 +2333,13 @@ class SystemWindow(Adw.ApplicationWindow):
 
         disk_group = Adw.PreferencesGroup(
             title="Disk Unlock",
-            description="An encrypted disk normally asks its passphrase at every startup. The TPM security chip can unlock it instead, as long as the system that starts is the one it knows: Secure Boot on, Lucciola's key registered.",
+            description="An encrypted disk normally asks its passphrase at every startup. The TPM security chip can unlock it instead, as long as the system that starts is the one it knows: Secure Boot on, Lucciola's key registered. With a PIN, the chip also wants a short code typed at startup: that protects the disk from someone who has the laptop in hand.",
         )
         page.add(disk_group)
         self._tpm_row = info_row(disk_group, "Disk Unlock at Startup", "drive-harddisk-symbolic")
         self._tpm_enable_button = button_row(disk_group, "Let the TPM Unlock the Disk…", "drive-harddisk-symbolic", self._on_tpm_enable, "suggested-action")
+        self._tpm_pin_button = button_row(disk_group, "Ask a PIN at Startup…", "dialog-password-symbolic", self._on_tpm_pin)
+        self._tpm_no_pin_button = button_row(disk_group, "Stop Asking the PIN at Startup…", "dialog-password-symbolic", self._on_tpm_no_pin)
         self._tpm_disable_button = button_row(disk_group, "Ask the Passphrase at Startup Again…", "drive-harddisk-symbolic", self._on_tpm_disable, "destructive-action")
 
         boot_group = Adw.PreferencesGroup(
@@ -2364,7 +2366,7 @@ class SystemWindow(Adw.ApplicationWindow):
         gen = self._bump("startup")
         for row in (self._sb_row, self._mok_row, self._tpm_row, self._grub_row, self._kernel_running_row, self._kernel_follows_row):
             self._set_loading(row, True)
-        for b in (self._mok_enroll_button, self._mok_never_button, self._tpm_enable_button, self._tpm_disable_button,
+        for b in (self._mok_enroll_button, self._mok_never_button, self._tpm_enable_button, self._tpm_pin_button, self._tpm_no_pin_button, self._tpm_disable_button,
                   self._grub_on_button, self._grub_off_button, self._kernel_switch_button):
             b.set_sensitive(False)
 
@@ -2426,6 +2428,13 @@ class SystemWindow(Adw.ApplicationWindow):
         self._tpm_enable_button.set_sensitive(bool(can_enable) and self._may("tpm-unlock-enable"))
         if state in ("off", "half") and not can_enable:
             self._tpm_row.set_subtitle(text + ". Secure Boot on and the key registered come first")
+        # The PIN is an option on top of a working unlock: offered once the
+        # TPM unlocks the disk, taken away from the same place.
+        has_pin = bool(tpm.get("pin"))
+        self._tpm_pin_button.set_visible(state == "on" and not has_pin)
+        self._tpm_pin_button.set_sensitive(state == "on" and self._may("tpm-unlock-pin"))
+        self._tpm_no_pin_button.set_visible(state == "on" and has_pin)
+        self._tpm_no_pin_button.set_sensitive(state == "on" and self._may("tpm-unlock-no-pin"))
         self._tpm_disable_button.set_visible(state in ("on", "half"))
         self._tpm_disable_button.set_sensitive(state in ("on", "half") and self._may("tpm-unlock-disable"))
 
@@ -2487,6 +2496,10 @@ class SystemWindow(Adw.ApplicationWindow):
         )
 
     def _on_tpm_enable(self, _row):
+        # A key that asks a PIN, enrolled but not used at startup yet: letting
+        # it in again needs the PIN typed again, so the PIN dialog does it.
+        if (getattr(self, "_tpm", None) or {}).get("pin"):
+            return self._on_tpm_pin(_row)
         entry = Adw.PasswordEntryRow(title="Current disk passphrase")
         group = Adw.PreferencesGroup()
         group.add(entry)
@@ -2501,6 +2514,57 @@ class SystemWindow(Adw.ApplicationWindow):
                 done="The TPM unlocks the disk from the next startup", stdin_text=entry.get_text() + "\n",
             ),
             extra=group,
+        )
+        dialog.set_response_enabled("go", False)
+        entry.connect("changed", lambda e: dialog.set_response_enabled("go", bool(e.get_text())))
+
+    def _on_tpm_pin(self, _row):
+        passphrase = Adw.PasswordEntryRow(title="Current disk passphrase")
+        pin = Adw.PasswordEntryRow(title=f"New PIN (at least {ls.TPM_PIN_MIN} characters)")
+        again = Adw.PasswordEntryRow(title="The PIN again")
+        group = Adw.PreferencesGroup(
+            description="Digits and plain letters are safest: the startup screen may use another keyboard layout.",
+        )
+        for row in (passphrase, pin, again):
+            group.add(row)
+        dialog = self._confirm(
+            "Ask a PIN at Startup?",
+            "From the next startup the screen asks this PIN, and the TPM unlocks the disk only with it. "
+            "Someone who has the laptop in hand cannot get the disk open without it, and after a few wrong "
+            "PINs the TPM refuses them all for a while. The disk passphrase keeps working: it is the way in "
+            "if you forget the PIN.",
+            "Set the PIN", lambda: self._run_operation(
+                ["pkexec", ADMIN, "tpm-unlock-pin"], title="Setting the PIN",
+                working="Enrolling the TPM again, with the PIN.",
+                done="The PIN is asked from the next startup",
+                stdin_text=passphrase.get_text() + "\n" + pin.get_text() + "\n",
+            ),
+            extra=group,
+        )
+        dialog.set_response_enabled("go", False)
+
+        def changed(_entry):
+            problem = ls.tpm_pin_problem(pin.get_text(), again.get_text())
+            dialog.set_response_enabled("go", bool(passphrase.get_text()) and not problem)
+            again.set_title(problem if problem and again.get_text() else "The PIN again")
+
+        for row in (passphrase, pin, again):
+            row.connect("changed", changed)
+
+    def _on_tpm_no_pin(self, _row):
+        entry = Adw.PasswordEntryRow(title="Current disk passphrase")
+        group = Adw.PreferencesGroup()
+        group.add(entry)
+        dialog = self._confirm(
+            "Stop Asking the PIN at Startup?",
+            "The TPM unlocks the disk on its own again, and only the login is asked. Someone who has the "
+            "laptop in hand, and can start it from other media, can then get the disk open.",
+            "Remove the PIN", lambda: self._run_operation(
+                ["pkexec", ADMIN, "tpm-unlock-no-pin"], title="Removing the PIN",
+                working="Enrolling the TPM again, without the PIN.",
+                done="No PIN is asked from the next startup", stdin_text=entry.get_text() + "\n",
+            ),
+            destructive=True, extra=group,
         )
         dialog.set_response_enabled("go", False)
         entry.connect("changed", lambda e: dialog.set_response_enabled("go", bool(e.get_text())))

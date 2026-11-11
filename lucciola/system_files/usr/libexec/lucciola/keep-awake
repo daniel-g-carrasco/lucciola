@@ -219,8 +219,11 @@ lid_closed() {
 }
 lid_opened() { profile restore || true; }
 hold() {  # _hold SECS: what the inhibitor runs; ends after SECS
+  # Microseconds, not seconds: counted in whole seconds, a hold that started
+  # late in a second came out up to a second short (nothing for a night, but
+  # `_hold 1` could end at once, and its test failed now and then in CI).
   local secs=$1 t0 left line
-  t0=$(date +%s)
+  t0=${EPOCHREALTIME/[.,]/}
   if lid_closed_now; then lid_closed; fi
   if [[ -x "$GDBUS" ]]; then
     timeout "$secs" "$GDBUS" monitor --system --dest org.freedesktop.UPower --object-path /org/freedesktop/UPower 2>/dev/null \
@@ -233,8 +236,8 @@ hold() {  # _hold SECS: what the inhibitor runs; ends after SECS
   else
     echo "keep-awake: $GDBUS is missing: the lid is not watched" >&2
   fi
-  left=$(( secs - ($(date +%s) - t0) ))
-  if (( left > 0 )); then sleep "$left"; fi
+  left=$(( secs * 1000000 - (${EPOCHREALTIME/[.,]/} - t0) ))
+  if (( left > 0 )); then sleep "$(printf '%d.%06d' $(( left / 1000000 )) $(( left % 1000000 )))"; fi
 }
 
 current_profile() {  # the power profile (tuned-ppd or power-profiles-daemon), or nothing
