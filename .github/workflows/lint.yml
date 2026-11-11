@@ -458,6 +458,13 @@ jobs:
         # tests/vm-test-gate.test.sh.
         run: bash tests/vm-test-gate.test.sh
 
+      - name: The upstream checker reads its own table
+        # The last review is the newest date in the table's last column and
+        # nothing else (the 2026-11 run counted from the day of the base
+        # switch, named in a cell); a full page of commits reads "100+"; the
+        # base is on the list. See tests/check-upstreams.test.sh.
+        run: bash tests/check-upstreams.test.sh
+
       - name: The security probe's gating verdicts
         # The in-image validator is gating in the smoke boot (register item
         # E1): a failure, a timeout or a missing validator fails the probe,

@@ -14,7 +14,8 @@ set -euo pipefail
 
 # Resolve repo root (works from anywhere)
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DOC="${REPO_ROOT}/docs/upstream-inspirations.md"
+# CHECK_UPSTREAMS_DOC: another document, for tests/check-upstreams.test.sh.
+DOC="${CHECK_UPSTREAMS_DOC:-${REPO_ROOT}/docs/upstream-inspirations.md}"
 
 if [[ ! -f "$DOC" ]]; then
   echo "ERROR: $DOC not found" >&2
@@ -22,11 +23,17 @@ if [[ ! -f "$DOC" ]]; then
 fi
 
 declare -A repos=(
+  # The FROM base of every image since 2026-10-11 (silverblue-main). It was
+  # missing from this list until the 2026-11 review: a package dropped from
+  # the base (ublue-os-udev-rules, 2026-10-26) or a unit added to it (the
+  # two bootc-update-* units of baseline drift #59) shows up here first.
+  [main]="ublue-os/main"
   [bluefin]="ublue-os/bluefin"
   [origami]="john-holt4/Origami-Linux"   # GitHub mirror; canonical is on GitLab
   [morros]="morrolinux/morros"
   [image-template]="ublue-os/image-template"
-  [rechunk]="hhd-dev/rechunk"
+  # hhd-dev/rechunk left this list on 2026-11-10: archived upstream on
+  # 2026-10-13, and not ours since the chunker switch of 2026-08-31.
   [bazzite]="ublue-os/bazzite"
   # OGC kernel — not used by Margine (see ADR 0006), but we watch it so we
   # know when re-review trigger #3 (OGC adopts BORE + ThinLTO + HZ=1000)
@@ -65,10 +72,21 @@ declare -A gitlab_repos=(
   [rakuos-gnome]="rakuos/images/rakuos-gnome"
 )
 
-LAST_REVIEWED=$(grep -oE '202[0-9]-[0-9]{2}-[0-9]{2}' "$DOC" | sort -u | tail -1)
+# The newest date in the table's last column, and only there. Any other
+# date in the document is history: the 2026-11 run counted from 2026-10-11,
+# the day of the base switch named in a table cell, not from the review of
+# 2026-10-03.
+LAST_REVIEWED=$(grep -oE '\| *202[0-9]-[0-9]{2}-[0-9]{2} *\|[[:space:]]*$' "$DOC" \
+                  | grep -oE '202[0-9]-[0-9]{2}-[0-9]{2}' | sort -u | tail -1 || true)
 if [[ -z "$LAST_REVIEWED" ]]; then
   echo "ERROR: no 'Last reviewed' date found in $DOC" >&2
   exit 1
+fi
+
+# --last-reviewed: print the date and stop, without the network.
+if [[ "${1:-}" == "--last-reviewed" ]]; then
+  echo "$LAST_REVIEWED"
+  exit 0
 fi
 
 echo "Most recent 'Last reviewed' date in $DOC: $LAST_REVIEWED"
@@ -79,10 +97,13 @@ echo
 any_activity=0
 for name in $(echo "${!repos[@]}" | tr ' ' '\n' | sort); do
   repo="${repos[$name]}"
+  # per_page=100: the default page is 30, and "30 new commits" hid how far
+  # an upstream had moved (ublue-os/main had 135 in the 2026-11 window).
   count=$(gh api -X GET "/repos/${repo}/commits" \
-                 -f since="${LAST_REVIEWED}T00:00:00Z" \
+                 -f since="${LAST_REVIEWED}T00:00:00Z" -f per_page=100 \
                  --jq 'length' 2>/dev/null || echo "?")
-  if [[ "$count" =~ ^[0-9]+$ ]] && (( count > 0 )); then
+  [[ "$count" == "100" ]] && count="100+"
+  if [[ "$count" =~ ^[0-9]+\+?$ ]] && [[ "$count" != "0" ]]; then
     any_activity=1
     printf "  %-15s %-30s  %s new commit(s)  →  https://github.com/%s/commits/main\n" \
       "$name" "$repo" "$count" "$repo"
@@ -111,8 +132,8 @@ if (( any_activity )); then
   cat <<EOF
 For each upstream with new commits, skim the commit log on GitHub or GitLab.
 If anything affects what's listed in docs/upstream-inspirations.md
-(custom-kernel script for Origami, build pattern for MorrOS, action
-arguments for rechunk, gschema baseline for Bluefin, …) update the
+(custom-kernel script for Origami, build pattern for MorrOS, packages
+and units of the base, chunkah's flags, …) update the
 'Last reviewed' date in that table row to today: $(date -u +%Y-%m-%d)
 EOF
 else
