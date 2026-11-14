@@ -7,6 +7,12 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-11-14, the Remote Login icon)
+- **The Remote Login icon stays in the bar when it is off.** It hid itself,
+  so turning remote login off from the icon left nothing there to turn it back
+  on with. It is dim when off and lit when on, and a right click turns it on
+  as well as off.
+
 ### Added (2026-11-10, a PIN for the disk unlock)
 - **The TPM can ask a PIN before it unlocks the disk.** An option, off unless
   you turn it on: Lucciola System, Startup and Security, "Ask a PIN at

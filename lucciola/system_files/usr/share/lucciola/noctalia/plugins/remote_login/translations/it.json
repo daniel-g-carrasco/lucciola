@@ -6,6 +6,10 @@
 
   "tooltip.title": "Accesso remoto",
   "tooltip.on": "acceso",
+  "tooltip.off": "spento",
+  "tooltip.hint_label": "Clic destro",
+  "tooltip.hint_on": "lo accende",
+  "tooltip.hint_off": "lo spegne",
   "tooltip.who": "Da",
   "tooltip.everyone": "acceso per ogni rete: apri il pannello per limitarlo",
 

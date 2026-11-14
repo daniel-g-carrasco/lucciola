@@ -165,4 +165,15 @@ check "on closes the open-to-everyone service" [ "$(fw '"ssh" in d["runtime"]["F
 
 run bogus; check "an unknown verb is refused (rc $RC)" [ "$RC" = 2 ]
 
+# The bar icon is the control: it stays when remote login is off (dim), or
+# there is nothing left to turn it back on with (2026-11-14: it hid itself,
+# and a right click that turned it off could not be undone from the bar).
+PLUG="$ROOT/lucciola/system_files/usr/share/lucciola/noctalia/plugins/remote_login"
+check "the bar icon never hides itself" bash -c "grep -q 'barWidget.setVisible(true)' '$PLUG/indicator.luau' && ! grep -q 'setVisible(false)' '$PLUG/indicator.luau'"
+check "...off has its own glyph and colour" bash -c "grep -q 'setGlyph(common.GLYPH_OFF)' '$PLUG/indicator.luau' && grep -q 'on_surface_variant' '$PLUG/indicator.luau'"
+check "...a right click turns it on as well as off" grep -q 'common.send(common.isOn(common.snapshot()) and "off" or "on")' "$PLUG/indicator.luau"
+for lang in en it; do
+  check "...the tooltip's words exist in $lang" python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if all(d.get(k) for k in ("tooltip.off","tooltip.hint_label","tooltip.hint_on","tooltip.hint_off")) else 1)' "$PLUG/translations/$lang.json"
+done
+
 echo; [ "$fails" = 0 ] && echo "remote-login: all checks passed" || { echo "remote-login: $fails failed"; exit 1; }
