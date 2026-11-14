@@ -7,6 +7,16 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (2026-11-14, Noctalia 5.5)
+- **Noctalia goes from 5.3.0 to 5.5.0.** Two releases of fixes, among them
+  two for the lock screen (5.4.1): it no longer accepts an unlock or a
+  fingerprint match announced by another program, and a program can no longer
+  keep the screen from locking by forging the idle signals. Saved
+  notifications are stored encrypted. Two colour names changed upstream
+  (`surface_variant` is `surface_container`, `outline` is `outline_variant`);
+  Lucciola's style and plugins use the new ones. Bar, panels and lock screen
+  were compared before and after: they look the same.
+
 ### Added (2026-11-10, a PIN for the disk unlock)
 - **The TPM can ask a PIN before it unlocks the disk.** An option, off unless
   you turn it on: Lucciola System, Startup and Security, "Ask a PIN at
