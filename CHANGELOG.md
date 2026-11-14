@@ -7,6 +7,15 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (2026-11-14, the login screen)
+- **The login screen moves to Noctalia Greeter 1.7.0** (from 1.6.0). Among
+  its changes: Ctrl+arrows no longer stop at the spaces of a masked password,
+  so they cannot reveal where the spaces are; scrollbars in the session list;
+  JPEG XL wallpapers; a clock, which Lucciola shows: time and date above the
+  login panel. Lucciola's eight changes to the greeter come
+  along: the fingerprint reader listens at once, PAM results in words, the
+  brightness keys, the field and status line as on the lock screen.
+
 ### Fixed (2026-11-14, the Remote Login icon)
 - **The Remote Login icon stays in the bar when it is off.** It hid itself,
   so turning remote login off from the icon left nothing there to turn it back

@@ -13,14 +13,14 @@ longer pushes the field to the left of everything else.
 37 more pixels between the name and the field, the room the lock screen needs
 there for its messages, so the two forms have one shape.
 
-Applied by lucciola/greeter/noctalia-greeter.spec to the v1.6.0 tag, after 0006.
+Applied by lucciola/greeter/noctalia-greeter.spec to the v1.7.0 tag, after 0006.
 A look of Lucciola's, not proposed upstream.
 
 diff --git a/src/greeter/greeter_surface.cpp b/src/greeter/greeter_surface.cpp
-index e7add21..5f5ac77 100644
+index 807e6c6..1d47020 100644
 --- a/src/greeter/greeter_surface.cpp
 +++ b/src/greeter/greeter_surface.cpp
-@@ -1189,7 +1189,9 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
+@@ -1241,7 +1241,9 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
  
    const float headerTopPadding = Style::spaceSm();
    const float headerGlyphBlock = headerGlyphSize + Style::spaceMd();
@@ -31,7 +31,7 @@ index e7add21..5f5ac77 100644
    const float headerBlockHeight = headerTopPadding + headerGlyphBlock + subtitleGap + headerToContentGap;
  
    const float sessionRowH = rowHeight;
-@@ -1385,11 +1387,13 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
+@@ -1438,11 +1440,13 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
      }
  
      m_passwordField->setSize(inputWidth, 0.0f);
@@ -47,7 +47,7 @@ index e7add21..5f5ac77 100644
      m_loginButton->layout(*renderer);
      if (Glyph* loginGlyph = m_loginButton->glyph()) {
        (void)loginGlyph->measure(*renderer);
-@@ -1410,7 +1414,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
+@@ -1463,7 +1467,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
    if (hasStatus) {
      const float statusY = contentTop + contentBlockHeight + statusGap;
      m_statusLabel->setVisible(true);
@@ -57,7 +57,7 @@ index e7add21..5f5ac77 100644
      m_statusLabel->setVisible(false);
    }
 diff --git a/src/ui/controls/input.cpp b/src/ui/controls/input.cpp
-index 6fc4644..eadd773 100644
+index 4bdfe73..0204fcb 100644
 --- a/src/ui/controls/input.cpp
 +++ b/src/ui/controls/input.cpp
 @@ -556,11 +556,11 @@ void Input::applyVisualState() {

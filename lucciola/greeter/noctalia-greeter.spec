@@ -11,7 +11,7 @@
 
 Name:           noctalia-greeter
 Version:        %{greeter_version}
-Release:        9%{?dist}
+Release:        10%{?dist}
 Summary:        Login greeter for greetd with the look of Noctalia Shell
 License:        MIT AND (Apache-2.0 OR MIT)
 URL:            https://github.com/noctalia-dev/noctalia-greeter
@@ -71,6 +71,8 @@ BuildRequires:  pkgconfig(nlohmann_json)
 BuildRequires:  pkgconfig(wlroots-0.20)
 BuildRequires:  pkgconfig(libinput)
 BuildRequires:  pkgconfig(libwebp)
+BuildRequires:  pkgconfig(libjxl)
+BuildRequires:  pkgconfig(libjxl_threads)
 BuildRequires:  pkgconfig(egl)
 BuildRequires:  pkgconfig(glesv2)
 BuildRequires:  stb_image_resize2-devel
@@ -120,6 +122,13 @@ install -m 0644 %{SOURCE1} %{buildroot}%{_datadir}/noctalia-greeter/assets/nocta
 %{_datadir}/polkit-1/actions/org.noctalia.greeter.apply-appearance.policy
 
 %changelog
+* Sat Nov 14 2026 Daniel Grasso Carrasco <code@danielgrasso.com> - %{greeter_version}-10
+- Upstream 1.7.0: a clock on the login screen, JPEG XL wallpapers,
+  scrollbars in the session and scheme lists, a masked password is one
+  word for Ctrl+arrows, empty PAM answers kept. Lucciola's eight patches
+  carried over (0002 merged with the new [clock] keys; 0008 no longer
+  adds an include upstream now has).
+
 * Mon Nov 09 2026 Daniel Grasso Carrasco <code@danielgrasso.com> - %{greeter_version}-9
 - The brightness keys work on the login screen, through logind (0008).
 
