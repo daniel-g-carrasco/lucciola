@@ -13,12 +13,14 @@ carets usually follow the text: a palette that blends the field into the
 background (primary equal to the surface, so that no focus border
 shows) would otherwise hide it.
 
-Applied by lucciola/greeter/noctalia-greeter.spec to the v1.6.0 tag,
+Applied by lucciola/greeter/noctalia-greeter.spec to the v1.7.0 tag,
 after 0002. Could be proposed upstream (noctalia-dev/noctalia-greeter).
 
+diff --git a/src/ui/controls/input.cpp b/src/ui/controls/input.cpp
+index 5b26442..4bdfe73 100644
 --- a/src/ui/controls/input.cpp
 +++ b/src/ui/controls/input.cpp
-@@ -101,14 +101,9 @@
+@@ -101,14 +101,9 @@ Input::Input() : Node(NodeType::Container) {
    label->setColor(colorForRole(ColorRole::OnSurface));
    m_label = static_cast<Label*>(m_textViewport->addChild(std::move(label)));
  
@@ -35,7 +37,7 @@ after 0002. Could be proposed upstream (noctalia-dev/noctalia-greeter).
    cursor->setVisible(false);
    m_cursor = static_cast<RectNode*>(m_textViewport->addChild(std::move(cursor)));
  
-@@ -139,7 +134,6 @@
+@@ -139,7 +134,6 @@ Input::Input() : Node(NodeType::Container) {
  
    auto revealIcon = std::make_unique<GlyphNode>();
    revealIcon->setCodepoint(GlyphRegistry::lookup("eye"));
@@ -43,7 +45,7 @@ after 0002. Could be proposed upstream (noctalia-dev/noctalia-greeter).
    revealIcon->setHitTestVisible(false);
    revealIcon->setVisible(false);
    m_revealIcon = static_cast<GlyphNode*>(addChild(std::move(revealIcon)));
-@@ -516,6 +510,24 @@
+@@ -516,6 +510,24 @@ void Input::applyVisualState() {
      return;
    }
  

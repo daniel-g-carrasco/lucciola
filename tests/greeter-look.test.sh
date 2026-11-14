@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests for the login screen's look (Noctalia Greeter 1.6.0): what greeter.toml
+# Tests for the login screen's look (Noctalia Greeter 1.7.0): what greeter.toml
 # must hold for the greeter to use it, the patches the spec applies, and the
 # path that brings the look to systems installed before it changed. The greeter takes colours, font and corners
 # from greeter.toml only with a complete palette, and an installed system
@@ -57,6 +57,8 @@ check "greeter.toml: the fingerprint still starts on an empty Enter" \
   toml "$G/greeter.toml" "d.get('auth', {}).get('allow_empty_password') is True"
 check "greeter.toml: the fingerprint listens without an Enter (start_on_select, patch 0002)" \
   toml "$G/greeter.toml" "d.get('auth', {}).get('start_on_select') is True"
+check "greeter.toml: the clock above the login panel, time and date (greeter 1.7.0)" \
+  toml "$G/greeter.toml" "d.get('clock') == {'enabled': True, 'position': 'above-panel', 'time_format': '{:%H:%M}', 'date_format': '%A, %x'}"
 # shellcheck disable=SC2016  # $1..$4 belong to the inner bash
 for p in "Patch1 0002-start-auth-on-select" "Patch2 0003-caret-in-palette-colour" \
   "Patch3 0004-quiet-bare-password-prompt" "Patch4 0005-password-follows-the-conversation" \
