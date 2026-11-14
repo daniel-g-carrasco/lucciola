@@ -13,3 +13,10 @@ polkit.addRule(function(action, subject) {
             return polkit.Result.YES;
     }
 });
+
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.gnome.remotedesktop.use-grd-pcscd" &&
+        subject.user == "sssd") {
+            return polkit.Result.YES;
+    }
+});
