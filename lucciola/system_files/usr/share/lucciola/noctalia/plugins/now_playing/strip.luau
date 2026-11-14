@@ -74,7 +74,7 @@ render = function()
   if state.art and state.art ~= "" then
     cover = ui.image({ path = state.art, width = COVER, height = COVER, radius = 6, fit = "cover" })
   else
-    cover = ui.row({ width = COVER, height = COVER, radius = 6, fill = "surface_variant/0.6", align = "center", justify = "center" }, {
+    cover = ui.row({ width = COVER, height = COVER, radius = 6, fill = "surface_container/0.6", align = "center", justify = "center" }, {
       ui.glyph({ name = "music", size = 18, color = "on_surface_variant" }),
     })
   end
