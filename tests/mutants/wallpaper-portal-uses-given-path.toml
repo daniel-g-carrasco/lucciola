@@ -1,0 +1,10 @@
+# Noctalia gets the copy in the user's store, not the path the portal handed
+# over: for a Flatpak app that path is the document portal's and is gone at
+# the next login, leaving no wallpaper.
+name = "wallpaper-portal-uses-given-path"
+file = "lucciola/system_files/usr/libexec/lucciola/wallpaper-portal"
+old = '''    dest = keep(src)
+    rc, out = noctalia("wallpaper-set", dest)'''
+new = '''    dest = src
+    rc, out = noctalia("wallpaper-set", dest)'''
+must_fail = "bash tests/wallpaper-portal.test.sh"

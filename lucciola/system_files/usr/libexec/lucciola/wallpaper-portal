@@ -1,0 +1,174 @@
+#!/usr/bin/python3
+"""Lucciola's Wallpaper portal backend: "Set as Background" in any app.
+
+An app (Loupe, a browser, a Flatpak) asks xdg-desktop-portal to set the
+wallpaper. The backend niri sessions had for that is GNOME's, which changes
+a GNOME Shell setting nobody reads here: nothing happened. This one hands
+the picture to Noctalia, which draws the wallpaper.
+
+    wallpaper-portal            serve org.freedesktop.impl.portal.Wallpaper
+    wallpaper-portal set URI    do it once, without D-Bus (tests, by hand)
+
+The picture is copied first, to ~/.local/share/lucciola/wallpapers/, named
+after its content: what the portal hands over is often a temporary path
+(the document portal's, for a Flatpak app) that is gone at the next login,
+and Noctalia stores a path, not a picture. Only files are taken, only the
+image types Noctalia reads, up to 64 MB. The copy that was the wallpaper
+before, if this program made it, is removed.
+
+Activated by D-Bus (org.freedesktop.impl.portal.desktop.lucciola) and gone
+after a minute of nothing to do. niri-portals.conf sends only the Wallpaper
+interface here.
+"""
+
+import hashlib
+import os
+import shutil
+import subprocess
+import sys
+import urllib.parse
+
+NAME = "org.freedesktop.impl.portal.desktop.lucciola"
+PATH = "/org/freedesktop/portal/desktop"
+EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".jxl", ".avif", ".bmp", ".gif", ".svg", ".tif", ".tiff"}
+MAX_BYTES = 64 * 1024 * 1024
+NOCTALIA = os.environ.get("WALLPAPER_PORTAL_NOCTALIA", "/usr/bin/noctalia")
+IDLE_SECONDS = 60
+
+XML = """
+<node>
+  <interface name="org.freedesktop.impl.portal.Wallpaper">
+    <method name="SetWallpaperURI">
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="s" name="app_id" direction="in"/>
+      <arg type="s" name="parent_window" direction="in"/>
+      <arg type="s" name="uri" direction="in"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="u" name="response" direction="out"/>
+    </method>
+  </interface>
+</node>
+"""
+
+
+def store():
+    base = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
+    return os.path.join(base, "lucciola", "wallpapers")
+
+
+def source_path(uri):
+    """The local file a URI names, or a ValueError saying why not."""
+    parsed = urllib.parse.urlparse(uri)
+    if parsed.scheme not in ("file", ""):
+        raise ValueError(f"only local files can be the wallpaper, not {parsed.scheme}://")
+    path = urllib.parse.unquote(parsed.path)
+    if not os.path.isabs(path):
+        raise ValueError("the wallpaper's path is not absolute")
+    ext = os.path.splitext(path)[1].lower()
+    if ext not in EXTENSIONS:
+        raise ValueError(f"'{ext or 'no extension'}' is not a picture Noctalia reads")
+    try:
+        st = os.stat(path)
+    except OSError as e:
+        raise ValueError(f"the picture cannot be read: {e.strerror}") from e
+    if not os.path.isfile(path):
+        raise ValueError("the wallpaper must be a file")
+    if st.st_size == 0 or st.st_size > MAX_BYTES:
+        raise ValueError(f"the picture is {st.st_size} bytes; between 1 byte and {MAX_BYTES // (1024 * 1024)} MB can be the wallpaper")
+    return path
+
+
+def keep(path):
+    """Copy the picture into the store, named after its content. Returns
+    the copy's path; the same picture twice is one file."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            digest.update(block)
+    os.makedirs(store(), mode=0o700, exist_ok=True)
+    dest = os.path.join(store(), digest.hexdigest()[:16] + os.path.splitext(path)[1].lower())
+    if not os.path.exists(dest):
+        tmp = dest + ".new"
+        shutil.copyfile(path, tmp)
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, dest)
+    return dest
+
+
+def noctalia(*args):
+    r = subprocess.run([NOCTALIA, "msg", *args], capture_output=True, text=True, timeout=15, check=False)
+    return r.returncode, (r.stdout + r.stderr).strip()
+
+
+def set_wallpaper(uri):
+    """(ok, message). The previous wallpaper's copy goes only once the new
+    one is set, and only if it is one of ours."""
+    try:
+        src = source_path(uri)
+    except ValueError as e:
+        return False, str(e)
+    _, before = noctalia("wallpaper-get")
+    dest = keep(src)
+    rc, out = noctalia("wallpaper-set", dest)
+    if rc != 0:
+        if dest != before:
+            try:
+                os.remove(dest)
+            except OSError:
+                pass
+        return False, f"Noctalia did not take the wallpaper: {out or 'no answer'}"
+    if before and before != dest and os.path.dirname(before) == store() and len(os.path.basename(before).split(".")[0]) == 16:
+        try:
+            os.remove(before)
+        except OSError:
+            pass
+    return True, dest
+
+
+def serve():
+    import gi
+    gi.require_version("Gio", "2.0")
+    from gi.repository import Gio, GLib
+
+    loop = GLib.MainLoop()
+    idle = {"id": 0}
+
+    def rearm():
+        if idle["id"]:
+            GLib.source_remove(idle["id"])
+        idle["id"] = GLib.timeout_add_seconds(IDLE_SECONDS, loop.quit)
+
+    def on_call(_conn, _sender, _path, _iface, method, params, invocation):
+        rearm()
+        if method != "SetWallpaperURI":
+            invocation.return_dbus_error("org.freedesktop.DBus.Error.UnknownMethod", method)
+            return
+        _handle, app_id, _parent, uri, _options = params.unpack()
+        ok, message = set_wallpaper(uri)
+        print(f"wallpaper-portal: {'set' if ok else 'refused'} for {app_id or 'an app'}: {message}", flush=True)
+        # 0 success, 2 "other": the app shows its own failure.
+        invocation.return_value(GLib.Variant("(u)", (0 if ok else 2,)))
+
+    def on_bus(conn, _name):
+        info = Gio.DBusNodeInfo.new_for_xml(XML)
+        conn.register_object(PATH, info.interfaces[0], on_call, None, None)
+
+    Gio.bus_own_name(Gio.BusType.SESSION, NAME, Gio.BusNameOwnerFlags.NONE, on_bus, None, lambda *_: loop.quit())
+    rearm()
+    loop.run()
+
+
+def main(argv):
+    if argv[:1] == ["set"] and len(argv) == 2:
+        ok, message = set_wallpaper(argv[1])
+        print(message)
+        return 0 if ok else 1
+    if argv:
+        print(__doc__.strip().splitlines()[0], file=sys.stderr)
+        return 2
+    serve()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

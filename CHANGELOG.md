@@ -7,6 +7,14 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-11-15, "Set as Background")
+- **"Set as Background" in an app sets the wallpaper.** In Loupe, a browser
+  or any other app it did nothing: the request went to GNOME's portal, which
+  changes a GNOME Shell setting nobody reads under niri. Lucciola now has its
+  own small portal for it, which hands the picture to Noctalia. The picture is
+  copied to `~/.local/share/lucciola/wallpapers/` first, so the wallpaper
+  stays when the original is moved or was a temporary file.
+
 ### Changed (2026-11-14, the login screen)
 - **The login screen moves to Noctalia Greeter 1.7.0** (from 1.6.0). Among
   its changes: Ctrl+arrows no longer stop at the spaces of a masked password,

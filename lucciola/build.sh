@@ -342,6 +342,15 @@ log "greetd PAM stack: $(grep -cvE '^[[:space:]]*(#|$)' /usr/lib/pam.d/greetd) l
 grep -qx 'org.freedesktop.impl.portal.Secret=oo7-portal;' /etc/xdg-desktop-portal/niri-portals.conf \
   && [[ -f /usr/share/xdg-desktop-portal/portals/oo7-portal.portal ]] \
   || { echo "ERROR: niri sessions would have no Secret portal (oo7-portal)" >&2; exit 1; }
+# "Set as Background" in niri sessions goes to Lucciola's own Wallpaper
+# backend, which hands the picture to Noctalia (GNOME's sets a GNOME Shell
+# setting, and nothing happened).
+grep -qx 'org.freedesktop.impl.portal.Wallpaper=lucciola;' /etc/xdg-desktop-portal/niri-portals.conf \
+  && [[ -x /usr/libexec/lucciola/wallpaper-portal ]] \
+  && [[ -f /usr/share/xdg-desktop-portal/portals/lucciola.portal ]] \
+  && [[ -f /usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.lucciola.service ]] \
+  && python3 -c 'import gi; gi.require_version("Gio", "2.0")' \
+  || { echo "ERROR: niri sessions would have no working Wallpaper portal" >&2; exit 1; }
 
 # 5d. greetd's configuration (the template says what each line is for). The
 #     package's own file is %config(noreplace); written over here, in the
