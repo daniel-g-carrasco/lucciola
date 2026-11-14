@@ -7,6 +7,14 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (2026-11-14, the login screen)
+- **The login screen moves to Noctalia Greeter 1.7.0** (from 1.6.0). Among
+  its changes: Ctrl+arrows no longer stop at the spaces of a masked password,
+  so they cannot reveal where the spaces are; scrollbars in the session list;
+  JPEG XL wallpapers; a clock. Lucciola's eight changes to the greeter come
+  along: the fingerprint reader listens at once, PAM results in words, the
+  brightness keys, the field and status line as on the lock screen.
+
 ### Added (2026-11-10, a PIN for the disk unlock)
 - **The TPM can ask a PIN before it unlocks the disk.** An option, off unless
   you turn it on: Lucciola System, Startup and Security, "Ask a PIN at

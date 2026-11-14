@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests for the login screen's look (Noctalia Greeter 1.6.0): what greeter.toml
+# Tests for the login screen's look (Noctalia Greeter 1.7.0): what greeter.toml
 # must hold for the greeter to use it, the patches the spec applies, and the
 # path that brings the look to systems installed before it changed. The greeter takes colours, font and corners
 # from greeter.toml only with a complete palette, and an installed system

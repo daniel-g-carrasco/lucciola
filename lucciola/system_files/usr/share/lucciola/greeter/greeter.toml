@@ -3,7 +3,7 @@
 # tmpfiles.d), so every image update brings the current version to installed
 # systems too.
 #
-# How the greeter (v1.6.0) combines this file with sync.toml, the file that
+# How the greeter (v1.7.0) combines this file with sync.toml, the file that
 # "Sync with Noctalia" and the greeter itself write:
 # - Colours, font, corner radius and theme mode come as one block from ONE
 #   file: this one when its [appearance.palette] is complete, sync.toml
