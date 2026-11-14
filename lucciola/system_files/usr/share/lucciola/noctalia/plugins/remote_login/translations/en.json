@@ -6,6 +6,10 @@
 
   "tooltip.title": "Remote Login",
   "tooltip.on": "on",
+  "tooltip.off": "off",
+  "tooltip.hint_label": "Right click",
+  "tooltip.hint_on": "turns it on",
+  "tooltip.hint_off": "turns it off",
   "tooltip.who": "From",
   "tooltip.everyone": "on for every network: open the panel to limit it",
 

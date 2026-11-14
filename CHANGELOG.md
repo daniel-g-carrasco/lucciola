@@ -16,6 +16,12 @@ stable release is cut.
   along: the fingerprint reader listens at once, PAM results in words, the
   brightness keys, the field and status line as on the lock screen.
 
+### Fixed (2026-11-14, the Remote Login icon)
+- **The Remote Login icon stays in the bar when it is off.** It hid itself,
+  so turning remote login off from the icon left nothing there to turn it back
+  on with. It is dim when off and lit when on, and a right click turns it on
+  as well as off.
+
 ### Changed (2026-11-14, Noctalia 5.5)
 - **Noctalia goes from 5.3.0 to 5.5.0.** Two releases of fixes, among them
   two for the lock screen (5.4.1): it no longer accepts an unlock or a
