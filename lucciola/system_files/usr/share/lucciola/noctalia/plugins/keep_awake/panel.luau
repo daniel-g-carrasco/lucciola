@@ -109,7 +109,7 @@ local function statusBlock(s)
       end }),
     }))
   end
-  return ui.column({ gap = 10, padding = 12, fill = "surface_variant/0.4", radius = 10 }, lines)
+  return ui.column({ gap = 10, padding = 12, fill = "surface_container/0.4", radius = 10 }, lines)
 end
 
 local function quickButton(label, ...)

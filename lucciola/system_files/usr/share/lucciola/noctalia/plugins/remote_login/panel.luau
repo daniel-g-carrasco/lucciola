@@ -28,7 +28,7 @@ local function statusBlock(s)
     detail = noctalia.tr("panel.unknown_detail")
   end
   local on = common.isOn(s)
-  return ui.column({ gap = 10, padding = 12, fill = "surface_variant/0.4", radius = 10 }, {
+  return ui.column({ gap = 10, padding = 12, fill = "surface_container/0.4", radius = 10 }, {
     ui.row({ gap = 10, align = "center" }, {
       ui.glyph({ name = glyph, size = 22, color = color }),
       ui.column({ gap = 2, flexGrow = 1 }, {

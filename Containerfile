@@ -213,7 +213,7 @@ FROM system
 # Version and release only: build.sh adds the base's Fedora tag (.fc44, .fc45).
 # The build does not depend on the repositories still having that build:
 # when they drop it, build.sh installs Koji's signed copy of it (2026-10-20).
-ARG NOCTALIA_VR=5.3.0-1
+ARG NOCTALIA_VR=5.5.0-3
 # The greeter RPM comes from the greeter-rpm stage; build.sh installs exactly
 # the version that stage built (the ARG at the top).
 ARG NOCTALIA_GREETER_VERSION
