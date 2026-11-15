@@ -517,6 +517,13 @@ jobs:
         # overdue and counted. See tests/security-review-report.test.sh.
         run: bash tests/security-review-report.test.sh
 
+      - name: Set as Background reaches Noctalia
+        # The Wallpaper portal backend: the picture is copied under a name
+        # made from its content, only local pictures are taken, nothing is
+        # left behind on a refusal, and niri sessions are sent to it. See
+        # tests/wallpaper-portal.test.sh.
+        run: bash tests/wallpaper-portal.test.sh
+
       - name: The claims-register lint (fixtures)
         # A verified claim naming only words, a dangling path, an orphan
         # test: each caught on a throwaway tree. See tests/check-claims.test.sh.

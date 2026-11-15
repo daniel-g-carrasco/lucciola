@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=org.freedesktop.impl.portal.desktop.lucciola
+Exec=/usr/libexec/lucciola/wallpaper-portal
