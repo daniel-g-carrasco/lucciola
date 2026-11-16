@@ -419,6 +419,14 @@ check("outcome: failed", ls.unit_outcome(units["uupd.service"]) == "failed")
 check("outcome: ok", ls.unit_outcome(units["margine-flatpak-update.service"]) == "ok")
 check("outcome: hung", ls.unit_outcome({"result": "timeout", "active": "failed", "exited": 1}) == "hung")
 check("outcome: running", ls.unit_outcome({"result": "success", "active": "activating", "started": 1}) == "running")
+check("outcome: a run its ExecCondition skipped is skipped, not failed", ls.unit_outcome({"result": "exec-condition", "active": "inactive", "started": None, "exited": None}) == "skipped")
+skip_units = {"margine-flatpak-update.service": {"result": "exec-condition", "active": "inactive", "started": None, "exited": None},
+              "margine-flatpak-user-update.service": {"result": "exec-condition", "active": "inactive", "started": None, "exited": None}}
+skip_noon = 1793530800.0
+skipped = [c for c in ls.channel_health(skip_units, {"margine-flatpak-update.timer": {"last": int(skip_noon - 60), "next": int(skip_noon + 60)}}, skip_noon) if c["key"] == "apps"][0]
+check("health: apps skipped on both units is skipped, with when", skipped["outcome"] == "skipped" and skipped["line"].startswith("Skipped ") and "metered connection or low battery" in skipped["line"] and "next" in skipped["line"])
+half = dict(skip_units); half["margine-flatpak-user-update.service"] = {"result": "exit-code", "active": "failed", "started": 1, "exited": 2}
+check("health: a real failure beside a skipped run still fails the channel", [c for c in ls.channel_health(half, {}, skip_noon) if c["key"] == "apps"][0]["outcome"] == "failed")
 check("outcome: never", ls.unit_outcome(None) == "never" and ls.unit_outcome({"result": "", "active": "inactive", "started": None, "exited": None}) == "never")
 noon = time.mktime(time.strptime("2026-11-01 12:00:00", "%Y-%m-%d %H:%M:%S"))
 killed = ls.parse_journal_run("1793699730.666552 lucciola systemd[1]: uupd.service: Failed with result 'signal'.\n")
@@ -460,6 +468,12 @@ check("excerpt: uupd's plain text output, the line that says error", ls.failure_
 check("excerpt: module_fail with no output names the step", ls.failure_excerpt('{"msg": "module_fail", "module": "system", "context": "System Update"}') == "System Update")
 check("excerpt: a number as output does not stop it", ls.failure_excerpt('{"msg": "module_fail", "module": "system", "output": 3}') == "system: 3")
 check("excerpt: brew's Error line, not the summary", ls.failure_excerpt(brew_log) == "Error: No developer tools installed.")
+flatpak_log = ("F: Warning: Treating remote fetch error as non-fatal since app/app.zen_browser.zen/x86_64/stable is already installed: No such ref\n"
+               "Updating app/io.example.App/x86_64/stable\n"
+               "Error: Failed to update io.example.App: Update is older than current version\n"
+               "margine-flatpak-user-update.service: Failed with result 'exit-code'.\n")
+check("excerpt: flatpak's Error line, not systemd's summary nor a non-fatal warning", ls.failure_excerpt(flatpak_log).startswith("Error: Failed to update io.example.App"))
+check("excerpt: a non-fatal warning alone is never the reason", "non-fatal" not in ls.failure_excerpt("F: Warning: Treating remote fetch error as non-fatal since x is already installed\nNothing to update.\n"))
 check("excerpt: no error word, the last line", ls.failure_excerpt("one\ntwo\n\n") == "two")
 check("excerpt: empty", ls.failure_excerpt("") == "")
 check("excerpt: ansi stripped", "\x1b" not in ls.failure_excerpt("\x1b[31mError: red\x1b[0m\n"))
