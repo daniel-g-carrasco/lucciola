@@ -1,11 +1,19 @@
 #!/usr/bin/bash
 # Open the copy of the Lucciola guide that ships in the image (the website's
 # single page, built from site/index.html) in the default browser, on its
-# guide view.
+# guide view, or at one of the page's sections:
+#   guide-open            the guide, from the top
+#   guide-open g-kernel   a section by id (#g-... in the guide, #h-... on
+#                         the home page), as the welcome window's links do
 set -euo pipefail
 GUIDE=/usr/share/lucciola/guide/index.html
+WHERE="${1:-guide}"
+if [[ ! "$WHERE" =~ ^[a-z][a-z0-9-]*$ ]]; then
+  echo "guide-open: \"$WHERE\" is not a section name" >&2
+  exit 2
+fi
 if [[ ! -r "$GUIDE" ]]; then
   echo "guide-open: $GUIDE is missing from this image" >&2
   exit 1
 fi
-exec xdg-open "file://${GUIDE}#guide"
+exec xdg-open "file://${GUIDE}#${WHERE}"
