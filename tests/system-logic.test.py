@@ -425,7 +425,8 @@ skip_units = {"margine-flatpak-update.service": {"result": "exec-condition", "ac
 skip_noon = 1793530800.0
 skipped = [c for c in ls.channel_health(skip_units, {"margine-flatpak-update.timer": {"last": int(skip_noon - 60), "next": int(skip_noon + 60)}}, skip_noon) if c["key"] == "apps"][0]
 check("health: apps skipped on both units is skipped, with when", skipped["outcome"] == "skipped" and skipped["line"].startswith("Skipped ") and "metered connection or low battery" in skipped["line"] and "next" in skipped["line"])
-half = dict(skip_units); half["margine-flatpak-user-update.service"] = {"result": "exit-code", "active": "failed", "started": 1, "exited": 2}
+half = dict(skip_units)
+half["margine-flatpak-user-update.service"] = {"result": "exit-code", "active": "failed", "started": 1, "exited": 2}
 check("health: a real failure beside a skipped run still fails the channel", [c for c in ls.channel_health(half, {}, skip_noon) if c["key"] == "apps"][0]["outcome"] == "failed")
 check("outcome: never", ls.unit_outcome(None) == "never" and ls.unit_outcome({"result": "", "active": "inactive", "started": None, "exited": None}) == "never")
 noon = time.mktime(time.strptime("2026-11-01 12:00:00", "%Y-%m-%d %H:%M:%S"))
