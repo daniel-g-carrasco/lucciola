@@ -151,6 +151,16 @@ window-rule {
     open-floating true
 }
 
+// The password prompt of the keyring ("Unlock private key", "Unlock
+// keyring"): gcr's GTK 3 dialog. It holds the pointer while it is open, so
+// its title bar cannot be dragged, and a prompt raised by a background job
+// (an SSH key asked for by a sync) landed in the middle of the work and
+// stayed there. It opens under the bar instead. Mod+drag still moves it.
+window-rule {
+    match app-id="^gcr-prompter$"
+    default-floating-position x=0 y=12 relative-to="top"
+}
+
 // Noctalia's surfaces are opaque here, so no blur behind them. With blur on,
 // niri samples the wallpaper (xray) and its colours leak through the
 // anti-aliased rounded edges of panels and launcher as a coloured hairline.
