@@ -65,10 +65,13 @@ def collect():
         if channel["outcome"] not in ("failed", "hung") or not channel["unit"]:
             continue
         scope = ["--user"] if channel["user"] else []
-        rc, out = run(["journalctl", *scope, "-u", channel["unit"], "-n", "400", "-o", "cat", "--no-pager", "-q"], timeout=20)
+        # Only the failed run's own lines: an older run's warnings are not
+        # this run's reason.
+        started = (units.get(channel["unit"]) or {}).get("started")
+        since = ["--since", f"@{int(started)}"] if started else []
+        rc, out = run(["journalctl", *scope, "-u", channel["unit"], *since, "-n", "400", "-o", "cat", "--no-pager", "-q"], timeout=20)
         log = out if rc == 0 else ""
         channel["reason"] = ls.failure_excerpt(log)
-        started = (units.get(channel["unit"]) or {}).get("started")
         channel["line"] = ls.health_line(channel["outcome"], channel["last"], channel["next"], started, now, channel["reason"])
         ls.settle_system_failure(channel, log, state, now)
     return {

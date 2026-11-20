@@ -499,7 +499,8 @@ def forgotten_units(units, names):
 
 def unit_outcome(unit):
     """One word for a unit's last run: ok, failed, hung (killed on timeout),
-    interrupted (by a restart), running, never."""
+    interrupted (by a restart), skipped (its ExecCondition said not now),
+    running, never."""
     if not unit:
         return "never"
     if unit.get("active") in ("activating", "active", "deactivating"):
@@ -509,6 +510,12 @@ def unit_outcome(unit):
         return "interrupted"
     if result == "timeout":
         return "hung"
+    # The Flatpak updaters skip a run on a metered connection or a low
+    # battery: systemd records that as Result=exec-condition. It is not a
+    # failure (2026-11-16: every skipped run raised "Automatic update
+    # failed: Apps", with a warning from days before as its reason).
+    if result == "exec-condition":
+        return "skipped"
     if result and result != "success":
         return "failed"
     if not unit.get("exited") and not unit.get("started"):
@@ -523,7 +530,7 @@ def channel_health(units, timers, now):
     # A failure anywhere names the channel; a run in progress next; a
     # channel is "never" only when none of its units ever ran (a user unit
     # that has not run yet does not hide the system one's last run).
-    rank = {"failed": 0, "hung": 1, "running": 2, "interrupted": 3, "ok": 4, "never": 5}
+    rank = {"failed": 0, "hung": 1, "running": 2, "interrupted": 3, "ok": 4, "skipped": 5, "never": 6}
     out = []
     for key, title, sys_units, user_units, sys_timers, user_timers in CHANNELS:
         members = [(u, False) for u in sys_units] + [(u, True) for u in user_units]
@@ -541,7 +548,7 @@ def channel_health(units, timers, now):
         # Nothing known about the runs (a journal this account may not read):
         # the timers still remember when they fired.
         fired = [timers[t]["last"] for t in sys_timers + user_timers if t in timers and timers[t]["last"]]
-        if worst == "never" and fired:
+        if worst in ("never", "skipped") and fired:
             last = max(fired)
         started = (units.get(worst_unit) or {}).get("started") if worst == "running" else None
         out.append({
@@ -560,6 +567,9 @@ def health_line(outcome, last, next_run, started, now, reason=""):
         return f"Last started {when_phrase(last, now)}" + (f", next {nxt}" if nxt else "")
     if outcome == "never":
         return f"Not run yet. First run {nxt}" if nxt else "Not run yet"
+    if outcome == "skipped":
+        text = f"Skipped {when_phrase(last, now)}".rstrip() + " (metered connection or low battery)"
+        return text + (f", next {nxt}" if nxt else "")
     if outcome == "interrupted":
         return f"Interrupted by a restart {when_phrase(last, now)}".rstrip() + (f", next {nxt}" if nxt else "")
     if outcome == "superseded":
@@ -631,7 +641,9 @@ def failure_excerpt(journal_text, limit=160):
     stopped update-state on the very night it had something to say). The
     error is the line that says `error:`, else the last that speaks of one.
     Plain scripts (brew-upgrade, the Flatpak updaters): the last line that
-    speaks of an error, else the last non-empty line."""
+    states an error (`Error:`), else the last that speaks of one, else the
+    last non-empty line. A warning Flatpak itself calls non-fatal is never
+    the reason."""
     lines = [ANSI.sub("", ln).rstrip() for ln in (journal_text or "").splitlines()]
     for line in reversed(lines):
         if '"module_fail"' not in line:
@@ -655,8 +667,10 @@ def failure_excerpt(journal_text, limit=160):
     plain = [ln.strip() for ln in lines if ln.strip() and not ln.startswith("{")]
     errors = [ln for ln in plain if re.search(r"\berror\b|failed|cannot|could not|unable", ln, re.I)
               and "reported errors" not in ln and not ln.startswith("+ ")]
-    if errors:
-        return errors[-1][:limit]
+    errors = [ln for ln in errors if "non-fatal" not in ln]
+    stated = [ln for ln in errors if re.match(r"error:", ln, re.I)]
+    if stated or errors:
+        return (stated or errors)[-1][:limit]
     return plain[-1][:limit] if plain else ""
 
 
