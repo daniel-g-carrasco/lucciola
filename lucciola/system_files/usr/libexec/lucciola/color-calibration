@@ -145,6 +145,30 @@ def load_overrides():
     return rules
 
 
+def usable_model(model):
+    model = squash(model)
+    return len(model) >= 4 and model != "unknown"
+
+
+def model_keys(output):
+    """What to look for in the profiles, best first.
+
+    The screen's model, where the compositor sends it. wlroots compositors
+    send "Unknown" there and put make, model and serial in the description
+    ("BOE NE135A1M-NY1 (eDP-1)"): then the runs of words of the description
+    that hold a digit, as model names do and makers' names do not, longest
+    first, so "DELL P2415Q" is tried before "P2415Q" and a maker's name alone
+    never picks another screen's profile.
+    """
+    if usable_model(output["model"]):
+        return [squash(output["model"])]
+    words = [squash(w) for w in output["description"].split() if not w.startswith("(")]
+    words = [w for w in words if w]
+    runs = {"".join(words[i:j]) for i in range(len(words)) for j in range(i + 1, len(words) + 1)}
+    return sorted((r for r in runs if len(r) >= 4 and any(c.isdigit() for c in r)),
+                  key=lambda r: (-len(r), r))
+
+
 def profile_for(output, profiles, overrides):
     """The profile for an output, with the reason, or (None, reason)."""
     identity = " ".join([output["name"], output["make"], output["model"],
@@ -157,13 +181,15 @@ def profile_for(output, profiles, overrides):
             if profile:
                 return profile, f"set in {OVERRIDES}"
             return None, f"{value} (from {OVERRIDES}) has no calibration curves"
-    model = squash(output["model"])
-    if len(model) < 4:
+    keys = model_keys(output)
+    if not keys:
         return None, "the screen reports no model to match"
-    found = [p for p in profiles if model in p["match"]]
-    if not found:
-        return None, f"no calibrated profile for {output['model']} in {ICC_DIR}"
-    return max(found, key=lambda p: (p["created"], p["path"])), "newest calibrated profile"
+    for key in keys:
+        found = [p for p in profiles if key in p["match"]]
+        if found:
+            return max(found, key=lambda p: (p["created"], p["path"])), "newest calibrated profile"
+    label = output["model"] if usable_model(output["model"]) else output["description"]
+    return None, f"no calibrated profile for {label} in {ICC_DIR}"
 
 
 def ramps(curves, size):

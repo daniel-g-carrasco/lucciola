@@ -7,6 +7,14 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-11-20, calibration curves on wlroots compositors)
+- **The calibration curves of a profiled screen load on wlroots compositors
+  too.** The loader chose a screen's profile by the model the compositor
+  sends. wlroots compositors send "Unknown" there and put make, model and
+  serial in the screen's description, so no profile was found and the curves
+  were not loaded. The description is read as well; a maker's name alone
+  never picks another screen's profile. Nothing changes under niri.
+
 ### Added (2026-11-20, search in Lucciola System)
 - **Lucciola System has a search.** The magnifier at the start of the
   sidebar, Ctrl+F, or just typing: the sidebar lists the pages, the groups
