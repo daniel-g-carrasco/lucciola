@@ -7,6 +7,19 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-11-16, false "Automatic update failed: Apps")
+- **A skipped app update is no longer reported as a failed one.** On a
+  metered connection or a low battery the app updaters skip their run on
+  purpose. That was read as a failure: a notification "Automatic update
+  failed: Apps", the red glyph in the bar, and a red row in Lucciola System.
+  The row now says "Skipped today at 19:22 (metered connection or low
+  battery)" and nothing is notified.
+- **The reason shown for a failed update is that run's own error.** It could
+  be a harmless warning from days before ("Treating remote fetch error as
+  non-fatal ..."). Only the failed run's lines are read now, a line that
+  states the error wins, and a warning Flatpak calls non-fatal is never the
+  reason.
+
 ### Fixed (2026-11-15, "Set as Background")
 - **"Set as Background" in an app sets the wallpaper.** In Loupe, a browser
   or any other app it did nothing: the request went to GNOME's portal, which

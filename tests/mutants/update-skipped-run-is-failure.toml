@@ -1,0 +1,10 @@
+# A Flatpak update its ExecCondition skipped (metered connection, low
+# battery) is not a failed one. Without the rule every skipped run raised
+# "Automatic update failed: Apps" (2026-11-16).
+name = "update-skipped-run-is-failure"
+file = "build_files/system_files/usr/share/lucciola/system/lucciola_system.py"
+old = '''    if result == "exec-condition":
+        return "skipped"'''
+new = '''    if result == "exec-condition":
+        return "failed"'''
+must_fail = "python3 tests/system-logic.test.py"
