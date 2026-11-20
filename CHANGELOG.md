@@ -7,6 +7,14 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-11-20, calibration curves on wlroots compositors)
+- **The calibration curves of a profiled screen load on wlroots compositors
+  too.** The loader chose a screen's profile by the model the compositor
+  sends. wlroots compositors send "Unknown" there and put make, model and
+  serial in the screen's description, so no profile was found and the curves
+  were not loaded. The description is read as well; a maker's name alone
+  never picks another screen's profile. Nothing changes under niri.
+
 ### Changed (2026-11-20, the keyring's password prompt)
 - **The password prompt opens under the bar, not in the middle of the
   screen.** "Unlock private key" and the other keyring prompts cannot be

@@ -1,0 +1,8 @@
+# Without a model from the compositor, only the words of the description that
+# hold a digit may pick a profile. If any word could, "Dell" alone would load
+# another Dell screen's calibration curves.
+name = "calibration-maker-name-matches"
+file = "lucciola/system_files/usr/libexec/lucciola/color-calibration"
+old = '''    return sorted((r for r in runs if len(r) >= 4 and any(c.isdigit() for c in r)),'''
+new = '''    return sorted((r for r in runs if len(r) >= 4),'''
+must_fail = "bash tests/color-calibration.test.sh"

@@ -158,6 +158,11 @@ jobs:
         run: |
           sudo apt-get install -y -qq --no-install-recommends libxml2-utils >/dev/null 2>&1 || true
           bash tests/system-logic.test.sh
+      - name: Which calibration profile a screen gets
+        # color-calibration's choice of profile, by model and, on compositors
+        # that send none, by the screen's description. See
+        # tests/color-calibration.test.sh.
+        run: bash tests/color-calibration.test.sh
       - name: Laptop screen only, for a dock that gives power
         # laptop-only on a fake niri: which outputs go off, which come back. See
         # tests/laptop-only.test.sh.
