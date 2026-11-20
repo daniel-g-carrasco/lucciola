@@ -50,7 +50,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 gi.require_version("Gst", "1.0")
 
-from gi.repository import Adw, Gdk, Gio, GLib, Gst, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Graphene, Gst, Gtk, Pango  # noqa: E402
 
 sys.path.insert(0, "/usr/share/lucciola/system")
 import lucciola_system as ls  # noqa: E402
@@ -305,6 +305,32 @@ def in_thread(fn, *args):
 
 def on_main(fn, *args):
     GLib.idle_add(lambda: (fn(*args), False)[1])
+
+
+# A result of the search lights up for a moment where it is, in the accent
+# colour, then fades: the eye lands on it without a permanent mark.
+# A veil over the row, not its background: a suggested or a destructive
+# button row keeps its own colour underneath.
+SEARCH_CSS = """
+@keyframes lucciola-search-hit {
+  from { box-shadow: inset 0 0 0 9999px alpha(@accent_bg_color, 0.32); }
+  to   { box-shadow: inset 0 0 0 9999px alpha(@accent_bg_color, 0); }
+}
+row.search-hit { animation: lucciola-search-hit 1600ms ease-out; }
+"""
+SEARCH_HIT_MS = 1700
+
+
+def plain_text(text, markup=True):
+    """A title as read, without Pango markup."""
+    if not text:
+        return ""
+    if markup and ("<" in text or "&" in text):
+        try:
+            return Pango.parse_markup(text, -1, "\0")[2]
+        except GLib.Error:
+            pass
+    return text
 
 
 def icon(name):
@@ -1390,16 +1416,22 @@ class SystemWindow(Adw.ApplicationWindow):
             ("report", lambda *_: self._on_report()),
             ("about", lambda *_: self._on_about()),
             ("show-log", lambda *_: self._show_last_log()),
+            ("search", lambda *_: self._search_bar.set_search_mode(True)),
         ):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", cb)
             self.add_action(action)
 
+        css = Gtk.CssProvider()
+        css.load_from_string(SEARCH_CSS)
+        Gtk.StyleContext.add_provider_for_display(self.get_display(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
         self._toasts = Adw.ToastOverlay()
         self.set_content(self._toasts)
         self._split = Adw.NavigationSplitView()
-        self._split.set_min_sidebar_width(200)
-        self._split.set_max_sidebar_width(260)
+        # Wide enough for the title between the search and the menu buttons.
+        self._split.set_min_sidebar_width(250)
+        self._split.set_max_sidebar_width(290)
         self._toasts.set_child(self._split)
         breakpoint = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 620sp"))
         breakpoint.add_setter(self._split, "collapsed", True)
@@ -1423,7 +1455,38 @@ class SystemWindow(Adw.ApplicationWindow):
         menu_button.set_menu_model(menu)
         menu_button.set_tooltip_text("Main Menu")
         side_header.pack_end(menu_button)
+        # Search, as in GNOME Settings: a toggle at the start of the sidebar's
+        # header, Ctrl+F, or just typing; Esc leaves.
+        self._search_button = Gtk.ToggleButton(icon_name="edit-find-symbolic")
+        self._search_button.set_tooltip_text("Search")
+        side_header.pack_start(self._search_button)
         side_toolbar.add_top_bar(side_header)
+        self._search_entry = Gtk.SearchEntry(placeholder_text="Search")
+        self._search_entry.set_hexpand(True)
+        self._search_entry.update_property([Gtk.AccessibleProperty.LABEL], ["Search Lucciola System"])
+        self._search_bar = Gtk.SearchBar()
+        self._search_bar.set_child(self._search_entry)
+        self._search_bar.connect_entry(self._search_entry)
+        self._search_bar.set_key_capture_widget(self)
+        self._search_bar.bind_property(
+            "search-mode-enabled", self._search_button, "active",
+            GObject.BindingFlags.BIDIRECTIONAL | GObject.BindingFlags.SYNC_CREATE)
+        self._search_bar.connect("notify::search-mode-enabled", self._on_search_mode)
+        self._search_entry.connect("search-changed", self._on_search_changed)
+        self._search_entry.connect("activate", self._on_search_activate)
+        # Up and Down choose among the results while the typing stays in
+        # the entry; Enter opens the chosen one.
+        keys = Gtk.EventControllerKey()
+        keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        keys.connect("key-pressed", self._on_search_key)
+        self._search_entry.add_controller(keys)
+        side_toolbar.add_top_bar(self._search_bar)
+        # Typing behind an open dialog must not start a search.
+        self.connect("notify::visible-dialog", self._on_dialog_changed)
+        self._search_entries = []
+        self._search_shown = []
+        self._search_query = ""
+        self._search_flash = None
         self._sidebar = Gtk.ListBox()
         self._sidebar.add_css_class("navigation-sidebar")
         self._sidebar.set_selection_mode(Gtk.SelectionMode.SINGLE)
@@ -1440,7 +1503,22 @@ class SystemWindow(Adw.ApplicationWindow):
             self._sidebar.append(row)
             self._rows_by_page[page_id] = row
         self._sidebar.connect("row-selected", self._on_page_selected)
-        side_toolbar.set_content(self._sidebar)
+        self._results = Gtk.ListBox()
+        self._results.add_css_class("navigation-sidebar")
+        self._results.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self._results.update_property([Gtk.AccessibleProperty.LABEL], ["Search results"])
+        self._results.connect("row-activated", self._on_result_activated)
+        results_scroller = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
+        results_scroller.set_child(self._results)
+        self._results_scroller = results_scroller
+        no_results = Adw.StatusPage(
+            icon_name="edit-find-symbolic", title="No Results Found", description="Try a different search")
+        no_results.add_css_class("compact")
+        self._side_stack = Gtk.Stack()
+        self._side_stack.add_named(self._sidebar, "pages")
+        self._side_stack.add_named(results_scroller, "results")
+        self._side_stack.add_named(no_results, "empty")
+        side_toolbar.set_content(self._side_stack)
         self._split.set_sidebar(Adw.NavigationPage.new(side_toolbar, "Lucciola System"))
 
         # ── content ──────────────────────────────────────────────────
@@ -1469,6 +1547,208 @@ class SystemWindow(Adw.ApplicationWindow):
         GLib.timeout_add_seconds(REFRESH_EVERY, self._on_timer)
         self._refresh_overview()
         self.show_page(start_page if start_page in dict((p[0], p) for p in PAGES) else "overview")
+
+    # ── search ───────────────────────────────────────────────────────
+    #
+    # What can be found is what the pages hold at this moment: the pages
+    # are walked at every search, so a row is never listed that is not
+    # there, and nothing has to be kept in step by hand. What matches and
+    # in which order is ls.search.
+
+    def _search_index(self):
+        entries = []
+
+        def walk(widget, page_id, page_title, group):
+            if not widget.get_visible():
+                return
+            if isinstance(widget, Adw.PreferencesGroup):
+                group = plain_text(widget.get_title())
+                if group:
+                    entries.append({"kind": "group", "title": group, "page": page_title, "page_id": page_id,
+                                    "subtitle": plain_text(widget.get_description()), "widget": widget})
+            elif isinstance(widget, Adw.PreferencesRow):
+                title = plain_text(widget.get_title(), widget.get_use_markup())
+                if title:
+                    subtitle = widget.get_subtitle() if hasattr(widget, "get_subtitle") else ""
+                    entries.append({"kind": "row", "title": title, "group": group, "page": page_title,
+                                    "page_id": page_id, "subtitle": plain_text(subtitle),
+                                    "keywords": getattr(widget, "_search_words", ""), "widget": widget})
+            child = widget.get_first_child()
+            while child is not None:
+                walk(child, page_id, page_title, group)
+                child = child.get_next_sibling()
+
+        for page_id, title, _icon in PAGES:
+            entries.append({"kind": "page", "title": title, "page_id": page_id, "widget": None})
+            root = self._stack.get_child_by_name(page_id)
+            if root is not None:
+                walk(root, page_id, title, "")
+        return entries
+
+    def _on_dialog_changed(self, *_args):
+        self._search_bar.set_key_capture_widget(None if self.get_visible_dialog() else self)
+
+    def _on_search_mode(self, *_args):
+        if self._search_bar.get_search_mode():
+            # In a narrow window the sidebar is a page of its own: come back to it.
+            self._split.set_show_content(False)
+        else:
+            self._search_entry.set_text("")
+            self._side_stack.set_visible_child_name("pages")
+
+    def _on_search_changed(self, entry):
+        query = entry.get_text().strip()
+        self._search_query = query
+        if not query:
+            self._side_stack.set_visible_child_name("pages")
+            return
+        self._search_entries = self._search_index()
+        self._search_shown = ls.search(query, self._search_entries)
+        self._results.remove_all()
+        icons = dict((p[0], p[2]) for p in PAGES)
+        for index in self._search_shown:
+            found = self._search_entries[index]
+            box = Gtk.Box(spacing=12)
+            box.set_margin_top(6)
+            box.set_margin_bottom(6)
+            box.append(icon(icons[found["page_id"]]))
+            text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER)
+            title = Gtk.Label(label=found["title"], xalign=0, ellipsize=Pango.EllipsizeMode.END)
+            text.append(title)
+            caption = ls.search_caption(found)
+            if caption:
+                where = Gtk.Label(label=caption, xalign=0, ellipsize=Pango.EllipsizeMode.END)
+                where.add_css_class("caption")
+                where.add_css_class("dimmed")
+                text.append(where)
+            box.append(text)
+            row = Gtk.ListBoxRow(child=box)
+            row.set_tooltip_text(f"{found['title']}\n{caption}" if caption else found["title"])
+            self._results.append(row)
+        if self._search_shown:
+            # The first answer is the one Enter opens: show it as chosen.
+            self._results.select_row(self._results.get_row_at_index(0))
+            self._side_stack.set_visible_child_name("results")
+        else:
+            self._side_stack.set_visible_child_name("empty")
+
+    def _on_search_key(self, _controller, keyval, _keycode, state):
+        step = {Gdk.KEY_Down: 1, Gdk.KEY_KP_Down: 1, Gdk.KEY_Up: -1, Gdk.KEY_KP_Up: -1}.get(keyval)
+        if step is None or state & (Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.ALT_MASK):
+            return False
+        if self._side_stack.get_visible_child_name() != "results":
+            return False
+        chosen = self._results.get_selected_row()
+        position = (chosen.get_index() if chosen is not None else -1) + step
+        row = self._results.get_row_at_index(max(0, min(position, len(self._search_shown) - 1)))
+        if row is not None:
+            self._results.select_row(row)
+            # Keep the chosen one in view in a long list.
+            ok, point = row.compute_point(self._results_scroller, Graphene.Point())
+            adjustment = self._results_scroller.get_vadjustment()
+            if ok and point.y < 0:
+                adjustment.set_value(adjustment.get_value() + point.y)
+            elif ok and point.y + row.get_height() > adjustment.get_page_size():
+                adjustment.set_value(adjustment.get_value() + point.y + row.get_height() - adjustment.get_page_size())
+        return True
+
+    def _on_search_activate(self, entry):
+        # The entry tells of a change a moment after the last key: Enter
+        # right after the last letter must open what was typed, not the
+        # answer to the search before it.
+        if entry.get_text().strip() != self._search_query:
+            self._on_search_changed(entry)
+        row = self._results.get_selected_row() or self._results.get_row_at_index(0)
+        if row is not None and self._side_stack.get_visible_child_name() == "results":
+            self._on_result_activated(self._results, row)
+
+    def _on_result_activated(self, _listbox, row):
+        position = row.get_index()
+        if not 0 <= position < len(self._search_shown):
+            return
+        self._results.select_row(row)
+        self._show_found(self._search_entries[self._search_shown[position]])
+
+    def _show_found(self, found):
+        """Open the page of a search result and bring the eye to it."""
+        self.show_page(found["page_id"])
+        self._split.set_show_content(True)
+        if found["kind"] == "page":
+            return
+        # After the page has had the time to change (and, when it was
+        # stale, to start rereading itself).
+        GLib.timeout_add(120, self._reveal_found, found)
+
+    def _reveal_found(self, found):
+        widget = found["widget"]
+        if widget is None or widget.get_root() is not self:
+            # The page rebuilt that row meanwhile (a phone's card, a device
+            # allowed in): the one that took its place has the same name.
+            widget = next((e["widget"] for e in self._search_index()
+                           if (e["kind"], e["page_id"], e.get("group"), e["title"])
+                           == (found["kind"], found["page_id"], found.get("group"), found["title"])), None)
+        if widget is None:
+            return False
+        parent = widget.get_parent()
+        while parent is not None:
+            if isinstance(parent, Adw.ExpanderRow):
+                parent.set_expanded(True)
+            parent = parent.get_parent()
+        rows = [widget]
+        if isinstance(widget, Adw.PreferencesGroup):
+            rows = []
+
+            def collect(w):
+                if isinstance(w, Gtk.ListBoxRow) and w.get_visible():
+                    rows.append(w)
+                    return
+                child = w.get_first_child()
+                while child is not None:
+                    collect(child)
+                    child = child.get_next_sibling()
+
+            collect(widget)
+        self._scroll_to(widget)
+        self._flash(rows)
+        return False
+
+    def _scroll_to(self, widget):
+        scroller = widget.get_ancestor(Gtk.ScrolledWindow)
+        if scroller is None:
+            return
+        ok, point = widget.compute_point(scroller, Graphene.Point())
+        if not ok:
+            return
+        adjustment = scroller.get_vadjustment()
+        page = adjustment.get_page_size()
+        # Already in full view: leave the page where it is.
+        if point.y >= 12 and point.y + widget.get_height() <= page - 12:
+            return
+        target = adjustment.get_value() + point.y - 72
+        target = max(adjustment.get_lower(), min(target, adjustment.get_upper() - page))
+        animation = Adw.TimedAnimation.new(
+            scroller, adjustment.get_value(), target, 250,
+            Adw.CallbackAnimationTarget.new(adjustment.set_value))
+        animation.set_easing(Adw.Easing.EASE_OUT_CUBIC)
+        animation.play()
+        self._search_scroll = animation   # kept alive while it runs
+
+    def _flash(self, rows):
+        if self._search_flash is not None:
+            old_rows, source = self._search_flash
+            GLib.source_remove(source)
+            for row in old_rows:
+                row.remove_css_class("search-hit")
+        for row in rows:
+            row.add_css_class("search-hit")
+
+        def done():
+            for row in rows:
+                row.remove_css_class("search-hit")
+            self._search_flash = None
+            return False
+
+        self._search_flash = (rows, GLib.timeout_add(SEARCH_HIT_MS, done))
 
     # ── pages: navigation ────────────────────────────────────────────
 
@@ -3152,6 +3432,8 @@ class SystemWindow(Adw.ApplicationWindow):
                     row.add_suffix(button)
                 row._install, row._remove = install, remove
                 self._set_loading(row, True)
+                # What the feature brings, so "steam" finds Gaming.
+                row._search_words = " ".join(spec.get(k, "") for k in ("explain", "native"))
                 group.add(row)
                 self._feature_rows[spec["key"]] = row
         return box
@@ -4121,6 +4403,7 @@ class SystemWindow(Adw.ApplicationWindow):
         dialog = Adw.ShortcutsDialog()
         section = Adw.ShortcutsSection(title="General")
         for title, accel in (
+            ("Search", "<Control>f"),
             ("Check again", "<Control>r"),
             ("Help", "F1"),
             ("Keyboard shortcuts", "<Control>question"),
@@ -4390,6 +4673,7 @@ class SystemApp(Adw.Application):
         self.set_accels_for_action("app.quit", ["<Control>q"])
         self.set_accels_for_action("window.close", ["<Control>w"])
         self.set_accels_for_action("win.refresh", ["<Control>r", "F5"])
+        self.set_accels_for_action("win.search", ["<Control>f"])
         self.set_accels_for_action("win.help", ["F1"])
         self.set_accels_for_action("win.shortcuts", ["<Control>question"])
 
