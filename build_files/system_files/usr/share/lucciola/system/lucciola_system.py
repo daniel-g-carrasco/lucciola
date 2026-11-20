@@ -1657,3 +1657,127 @@ def models_state(text):
     if len(words) == 3 and words[0] == "installed" and words[2] in ("running", "stopped"):
         return (words[2], words[1])
     return ("unknown", "")
+
+
+# ── search ───────────────────────────────────────────────────────────
+#
+# The window's search looks through what the pages show right now: the
+# window walks its own pages and hands the entries here, so a row can never
+# be found that is not there, and a new row is found without touching a
+# list. This module decides what matches and in which order.
+
+# Words people look for that the titles do not say. Keyed by the title of a
+# page, a group or a row, exactly as the window shows it; the test checks
+# that every key still exists in the window's source.
+SEARCH_KEYWORDS = {
+    "Overview": "update upgrade version release health status check restart rollback previous report",
+    "Features": "install remove optional layer extra packages",
+    "Apps": "flatpak flathub application default set restore trim",
+    "Phone": "android kde connect kdeconnect camera webcam usb debugging adb pair",
+    "Startup & Security": "boot uefi tpm luks encryption grub kernel",
+    "Login": "fingerprint password keyring autologin ssh remote user account",
+    "Hardware": "cpu scheduler dock monitor display printer folders",
+    "Automatic Updates": "upgrade unattended daily nightly uupd",
+    "Health and Recovery": "doctor diagnose repair rollback previous version",
+    "Roll Back…": "rollback previous version undo update",
+    "Run System Check…": "doctor diagnose health validate",
+    "Disk Unlock": "tpm luks encryption encrypted passphrase pin chip",
+    "Boot Menu": "grub bootloader",
+    "Secure Boot": "uefi mok signature",
+    "Lucciola's Key": "mok secure boot enroll",
+    "Kernel": "cachyos fedora lts linux",
+    "Remote Login": "ssh sshd wireguard tunnel",
+    "Allow Remote Login": "ssh sshd remote shell terminal",
+    "Automatic Login": "autologin password",
+    "Keyring": "passwords secrets wallet oo7 tpm",
+    "CPU Scheduler": "scx sched_ext performance battery gaming latency",
+    "Docks and Displays": "monitor external screen usb-c displayport hdmi dock",
+    "Printers": "print cups queue",
+    "Home Folders": "xdg documents downloads data dev scratch",
+    "Default Apps": "flatpak flathub restore remove",
+    "Updates": "flatpak upgrade runtimes",
+}
+
+SEARCH_LIMIT = 20
+_SEARCH_WORD = re.compile(r"[a-z0-9]+")
+
+
+def search_fold(text):
+    """Lower case, no accents, no punctuation: what a search compares."""
+    import unicodedata
+    plain = unicodedata.normalize("NFKD", text or "")
+    return "".join(ch for ch in plain if not unicodedata.combining(ch)).casefold()
+
+
+def search_words(text):
+    # An apostrophe joins: "Fedora's" is one word, found by "fedora" and by "fedoras".
+    return _SEARCH_WORD.findall(search_fold(text).replace("'", "").replace("\u2019", ""))
+
+
+def _word_score(word, words):
+    """How well one typed word is found among an entry's words: 3 for the
+    whole word, 2 for its beginning, 1 for a piece in the middle (only from
+    three letters on: "ss" must not find "passphrase"), 0 for nothing."""
+    best = 0
+    for candidate in words:
+        if candidate == word:
+            return 3
+        if candidate.startswith(word):
+            best = max(best, 2)
+        elif len(word) >= 3 and word in candidate:
+            best = max(best, 1)
+    return best
+
+
+def search(query, entries, limit=SEARCH_LIMIT):
+    """The entries that answer `query`, best first, as indexes into
+    `entries`. An entry is a dict: "kind" ("page", "group" or "row"),
+    "title", and optionally "group", "page", "subtitle", "keywords".
+
+    Every typed word must be found somewhere in the entry. The title counts
+    most, then the keywords (SEARCH_KEYWORDS and what the window adds), then
+    the subtitle (a row's state, a group's description). A row is not found through its group's or page's title:
+    the group and the page are entries of their own, and "kernel" should
+    give the Kernel group once, not each of its rows. Ties keep the order of
+    the window, pages first."""
+    typed = search_words(query)
+    if not typed:
+        return []
+    found = []
+    for index, entry in enumerate(entries):
+        title = search_words(entry.get("title"))
+        extra = search_words(SEARCH_KEYWORDS.get(entry.get("title") or "", "")) + search_words(entry.get("keywords"))
+        subtitle = search_words(entry.get("subtitle"))
+        score = 0
+        for word in typed:
+            in_title, in_extra, in_subtitle = _word_score(word, title), _word_score(word, extra), _word_score(word, subtitle)
+            if in_title:
+                score += 30 + in_title
+            elif in_extra:
+                # A page's keywords are wide on purpose: the group or the
+                # row that says the same word is the better answer.
+                score += (15 if entry.get("kind") == "page" else 20) + in_extra
+            elif in_subtitle:
+                score += 10 + in_subtitle
+            else:
+                score = 0
+                break
+        if not score:
+            continue
+        # A whole title typed as it is goes first among equals.
+        if search_fold(entry.get("title")).startswith(search_fold(query).strip()):
+            score += 5
+        rank = {"page": 0, "group": 1, "row": 2}.get(entry.get("kind"), 2)
+        found.append((-score, rank, index))
+    return [index for _score, _rank, index in sorted(found)[:limit]]
+
+
+def search_caption(entry):
+    """The line under a result: where it is. "Startup & Security" for a
+    group, "Startup & Security › Kernel" for a row; nothing for a page."""
+    if entry.get("kind") == "page":
+        return ""
+    parts = [entry.get("page") or ""]
+    if entry.get("kind") == "row" and entry.get("group"):
+        parts.append(entry["group"])
+    return " › ".join(p for p in parts if p)

@@ -1,0 +1,12 @@
+# A typed word must be found in the entry itself. If a miss stopped counting
+# as a miss, "fedora zebra" would find everything that says Fedora.
+name = "search-word-miss-still-matches"
+file = "build_files/system_files/usr/share/lucciola/system/lucciola_system.py"
+old = '''            else:
+                score = 0
+                break
+        if not score:'''
+new = '''            else:
+                continue
+        if not score:'''
+must_fail = "python3 tests/system-logic.test.py"

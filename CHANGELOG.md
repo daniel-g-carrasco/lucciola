@@ -7,6 +7,17 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Added (2026-11-20, search in Lucciola System)
+- **Lucciola System has a search.** The magnifier at the start of the
+  sidebar, Ctrl+F, or just typing: the sidebar lists the pages, the groups
+  and the single settings that answer, each with where it is ("Startup &
+  Security › Kernel"). Up and Down choose, Enter opens: the page comes up,
+  scrolls to the setting and lights it for a moment. Esc goes back to the
+  pages. It finds words the titles do not say too: "ssh" gives Remote Login,
+  "tpm" the disk unlock, "steam" the Gaming feature.
+- What can be found is what the pages show at that moment, read from the
+  window itself: nothing to keep in step by hand when a setting is added.
+
 ### Fixed (2026-11-16, false "Automatic update failed: Apps")
 - **A skipped app update is no longer reported as a failed one.** On a
   metered connection or a low battery the app updaters skip their run on

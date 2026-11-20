@@ -719,5 +719,43 @@ check("banner: says what waits and that the rest works",
       and ls.banner_text([], background=True).startswith("A system update is running in the background")
       and ls.banner_text([]) == "")
 
+# ── search ───────────────────────────────────────────────────────────
+found = [
+    {"kind": "page", "title": "Overview"},
+    {"kind": "page", "title": "Startup & Security"},
+    {"kind": "group", "title": "Kernel", "page": "Startup & Security", "subtitle": "Lucciola runs the CachyOS kernel."},
+    {"kind": "row", "title": "Running Now", "group": "Kernel", "page": "Startup & Security", "subtitle": "The cachyos kernel, 7.3.4"},
+    {"kind": "row", "title": "Switch to Fedora's Kernel…", "group": "Kernel", "page": "Startup & Security"},
+    {"kind": "group", "title": "Disk Unlock", "page": "Startup & Security", "subtitle": "The chip also wants a short code typed at startup."},
+    {"kind": "row", "title": "Disk Unlock at Startup", "group": "Disk Unlock", "page": "Startup & Security"},
+    {"kind": "row", "title": "Allow Remote Login", "group": "Remote Login", "page": "Login", "subtitle": "Off"},
+    {"kind": "row", "title": "Gaming", "group": "Gaming", "page": "Features", "keywords": "Steam, Lutris, Heroic and RetroArch"},
+]
+
+
+def titles(query):
+    return [found[i]["title"] for i in ls.search(query, found)]
+
+
+check("search: the group named as typed goes first, then the row that says it, then the page that covers it",
+      titles("kernel")[:3] == ["Kernel", "Switch to Fedora's Kernel…", "Startup & Security"], titles("kernel"))
+check("search: a row is not found through its group's title", "Running Now" not in titles("kernel")[:3] and titles("disk unlock")[0] == "Disk Unlock")
+check("search: a row's state is found last", titles("kernel")[-1] == "Running Now", titles("kernel"))
+check("search: a word the titles do not say (ssh)", titles("ssh") == ["Allow Remote Login"], titles("ssh"))
+check("search: what a feature brings (steam)", titles("steam") == ["Gaming"], titles("steam"))
+check("search: the specific answer before the page with the same keyword", titles("tpm")[:2] == ["Disk Unlock", "Startup & Security"], titles("tpm"))
+check("search: every typed word must be found", titles("fedora kernel")[0] == "Switch to Fedora's Kernel…" and "Running Now" not in titles("fedora kernel")
+      and titles("fedora zebra") == [], titles("fedora kernel"))
+check("search: capitals, accents and punctuation do not matter", titles("KÉRNEL!") == titles("kernel") and titles("fedora's") == titles("fedoras") != [])
+check("search: two letters match only the beginning of a word", "Disk Unlock" not in titles("ph") and "Disk Unlock at Startup" in titles("sta"), titles("ph"))
+check("search: nothing typed, nothing found", titles("") == [] and titles("   ") == [] and titles("…") == [])
+check("search: no match", titles("zzzz") == [])
+check("search: the limit holds", len(ls.search("a", [{"kind": "row", "title": f"Alpha {n}"} for n in range(50)])) == ls.SEARCH_LIMIT)
+check("search: where a result is", ls.search_caption(found[3]) == "Startup & Security › Kernel"
+      and ls.search_caption(found[2]) == "Startup & Security" and ls.search_caption(found[0]) == "")
+window_source = (ROOT / "build_files/system_files/usr/libexec/margine/system-gui").read_text()
+lost = [title for title in ls.SEARCH_KEYWORDS if f'"{title}"' not in window_source]
+check("search: every keyword belongs to a title the window still has", not lost, f"gone from the window: {lost}")
+
 print("system-logic: all checks passed" if fails == 0 else f"system-logic: {fails} failed")
 sys.exit(1 if fails else 0)
