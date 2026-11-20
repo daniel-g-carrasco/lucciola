@@ -15,6 +15,13 @@ stable release is cut.
   were not loaded. The description is read as well; a maker's name alone
   never picks another screen's profile. Nothing changes under niri.
 
+### Changed (2026-11-20, the keyring's password prompt)
+- **The password prompt opens under the bar, not in the middle of the
+  screen.** "Unlock private key" and the other keyring prompts cannot be
+  dragged by their title bar (the dialog holds the pointer while it is
+  open), and one raised by a background job sat on top of the work. It now
+  opens at the top; Mod+drag moves it like any other window.
+
 ### Added (2026-11-20, search in Lucciola System)
 - **Lucciola System has a search.** The magnifier at the start of the
   sidebar, Ctrl+F, or just typing: the sidebar lists the pages, the groups
