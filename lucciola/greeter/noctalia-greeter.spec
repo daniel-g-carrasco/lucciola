@@ -11,7 +11,7 @@
 
 Name:           noctalia-greeter
 Version:        %{greeter_version}
-Release:        10%{?dist}
+Release:        11%{?dist}
 Summary:        Login greeter for greetd with the look of Noctalia Shell
 License:        MIT AND (Apache-2.0 OR MIT)
 URL:            https://github.com/noctalia-dev/noctalia-greeter
@@ -44,6 +44,9 @@ Patch5:         0006-keep-the-login-panel-still.patch
 Patch6:         0007-field-and-status-like-the-lock-screen.patch
 # The brightness keys at the login screen, through logind.
 Patch7:         0008-brightness-keys-on-the-login-screen.patch
+# The entry already chosen in the session and user menus in the secondary
+# colour: Lucciola's palette gives primary the background colour, which hid it.
+Patch8:         0009-current-entry-in-secondary.patch
 
 # The pkg-config names come from meson.build of the tag.
 BuildRequires:  gcc
@@ -95,8 +98,9 @@ its colours, font and wallpaper to it ("Sync with Noctalia").
 
 %build
 # Fedora's %%meson uses buildtype=plain with the distribution's flags; the
-# project's "release" buildtype would add -march=native.
-%meson -Db_pie=true
+# project's "release" buildtype would add -march=native, and so would its
+# native_optimizations option (1.7.1, off by default): kept off by name.
+%meson -Db_pie=true -Dnative_optimizations=false
 %meson_build
 
 %install
@@ -122,6 +126,13 @@ install -m 0644 %{SOURCE1} %{buildroot}%{_datadir}/noctalia-greeter/assets/nocta
 %{_datadir}/polkit-1/actions/org.noctalia.greeter.apply-appearance.policy
 
 %changelog
+* Sat Nov 21 2026 Daniel Grasso Carrasco <code@danielgrasso.com> - %{greeter_version}-11
+- Upstream 1.7.1: the clock in the system's language when greetd does not
+  pass it, logins cancelled before switching users, pointer speed and
+  acceleration settings, settings kept across the startup migration.
+  Lucciola's eight patches carried over (0001 and 0002 rebased; 0002 keeps
+  upstream's cancel before a user switch). 0009: the chosen entry of the
+  session and user menus in the secondary colour, not black on black.
 * Sat Nov 14 2026 Daniel Grasso Carrasco <code@danielgrasso.com> - %{greeter_version}-10
 - Upstream 1.7.0: a clock on the login screen, JPEG XL wallpapers,
   scrollbars in the session and scheme lists, a masked password is one

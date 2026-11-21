@@ -42,8 +42,8 @@ ARG BASE_IMAGE=ghcr.io/ublue-os/silverblue-main:45
 # Noctalia Greeter's pinned tag and the sha256 of its archive: declared here,
 # before any FROM, so the stage that builds it and the step that installs it
 # read the same value (see the greeter-rpm stage).
-ARG NOCTALIA_GREETER_VERSION=1.7.0
-ARG NOCTALIA_GREETER_SHA256=5b092784c0147bb6739efc2e8146d2d07e3572a59d7a370e93092f9f56d4fcc8
+ARG NOCTALIA_GREETER_VERSION=1.7.1
+ARG NOCTALIA_GREETER_SHA256=79344d9629393ab3f4d605068eec94d2bfe8e12402618e1521f46111e27ff6ed
 # xdg-desktop-portal-luminous's pinned tag and archive sha256, the same way
 # (see the luminous-rpm stage).
 ARG LUMINOUS_VERSION=0.1.21
@@ -96,8 +96,8 @@ COPY build_files/custom-kernel/mok-sign.sh /mok-sign.sh
 # runtime libraries from Fedora. To move to a new tag: set the version and
 # the sha256 of https://github.com/noctalia-dev/noctalia-greeter/archive/refs/tags/v<version>.tar.gz
 # (the ARGs at the top), check the spec's BuildRequires against the tag's
-# meson.build, test-boot. v1.7.0 is commit
-# COMMIT170 (a signed tag). On top of the
+# meson.build, test-boot. v1.7.1 is commit
+# 2726e75375d95d5458d021f76c330ab14f6a5d03 (a signed tag). On top of the
 # tag the spec applies Lucciola's patches (the .patch files in
 # lucciola/greeter/, each says why) and puts Lucciola's mark in place of the
 # Noctalia logo; check that the patches still apply when the tag moves.
@@ -213,7 +213,7 @@ FROM system
 # Version and release only: build.sh adds the base's Fedora tag (.fc44, .fc45).
 # The build does not depend on the repositories still having that build:
 # when they drop it, build.sh installs Koji's signed copy of it (2026-10-20).
-ARG NOCTALIA_VR=5.5.0-3
+ARG NOCTALIA_VR=5.6.0-1
 # The greeter RPM comes from the greeter-rpm stage; build.sh installs exactly
 # the version that stage built (the ARG at the top).
 ARG NOCTALIA_GREETER_VERSION

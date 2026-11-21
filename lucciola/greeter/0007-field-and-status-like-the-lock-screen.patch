@@ -13,14 +13,14 @@ longer pushes the field to the left of everything else.
 37 more pixels between the name and the field, the room the lock screen needs
 there for its messages, so the two forms have one shape.
 
-Applied by lucciola/greeter/noctalia-greeter.spec to the v1.7.0 tag, after 0006.
+Applied by lucciola/greeter/noctalia-greeter.spec to the v1.7.1 tag, after 0006.
 A look of Lucciola's, not proposed upstream.
 
 diff --git a/src/greeter/greeter_surface.cpp b/src/greeter/greeter_surface.cpp
-index 807e6c6..1d47020 100644
+index 79ca164..a0790be 100644
 --- a/src/greeter/greeter_surface.cpp
 +++ b/src/greeter/greeter_surface.cpp
-@@ -1241,7 +1241,9 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
+@@ -1257,7 +1257,9 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
  
    const float headerTopPadding = Style::spaceSm();
    const float headerGlyphBlock = headerGlyphSize + Style::spaceMd();
@@ -31,7 +31,7 @@ index 807e6c6..1d47020 100644
    const float headerBlockHeight = headerTopPadding + headerGlyphBlock + subtitleGap + headerToContentGap;
  
    const float sessionRowH = rowHeight;
-@@ -1438,11 +1440,13 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
+@@ -1454,11 +1456,13 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
      }
  
      m_passwordField->setSize(inputWidth, 0.0f);
@@ -47,7 +47,7 @@ index 807e6c6..1d47020 100644
      m_loginButton->layout(*renderer);
      if (Glyph* loginGlyph = m_loginButton->glyph()) {
        (void)loginGlyph->measure(*renderer);
-@@ -1463,7 +1467,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
+@@ -1479,7 +1483,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
    if (hasStatus) {
      const float statusY = contentTop + contentBlockHeight + statusGap;
      m_statusLabel->setVisible(true);

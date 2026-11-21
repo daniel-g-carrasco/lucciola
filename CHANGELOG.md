@@ -7,6 +7,24 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (2026-11-21, Noctalia 5.6.0, login screen 1.7.1)
+- **Noctalia 5.6.0** (from 5.5.0): a font scale for all of the shell's
+  text, "Screenshot saved" notifications with Open and Show in folder, the
+  emoji search also lists common symbols, sharper images and text at
+  fractional scales, panels no longer open with blank icons, the dock
+  activates an app's most recent window.
+- **Login screen 1.7.1** (from 1.7.0): the clock in the system's language
+  when greetd does not pass it, a login in progress is cancelled before
+  switching users, settings kept across the startup migration. Lucciola's
+  patches carried over.
+
+### Fixed (2026-11-21, the chosen session on the login screen)
+- **The session chosen last is readable in the login screen's list.** It
+  was written in the palette's primary colour, which Lucciola's login
+  palette keeps in the background's colour: after a login with another
+  session, that session's name was black on black. It now takes the
+  secondary colour, as the user list's current entry does.
+
 ### Fixed (2026-11-20, calibration curves on wlroots compositors)
 - **The calibration curves of a profiled screen load on wlroots compositors
   too.** The loader chose a screen's profile by the model the compositor

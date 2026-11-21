@@ -9,10 +9,10 @@ no shell. The backlight is the one the kernel prefers (firmware, then
 platform, then raw).
 
 diff --git a/src/compositor/noctalia_compositor.c b/src/compositor/noctalia_compositor.c
-index 5b5d5f7..8f6639a 100644
+index e05b708..6bc481a 100644
 --- a/src/compositor/noctalia_compositor.c
 +++ b/src/compositor/noctalia_compositor.c
-@@ -2065,6 +2065,105 @@ static void handle_keyboard_modifiers(struct wl_listener* listener, void* data)
+@@ -2052,6 +2052,105 @@ static void handle_keyboard_modifiers(struct wl_listener* listener, void* data)
    wlr_seat_keyboard_notify_modifiers(server->seat, &keyboard->wlr_keyboard->modifiers);
  }
  
@@ -118,7 +118,7 @@ index 5b5d5f7..8f6639a 100644
  static void handle_keyboard_key(struct wl_listener* listener, void* data) {
    struct greeter_keyboard* keyboard = wl_container_of(listener, keyboard, key);
    struct greeter_server* server = keyboard->server;
-@@ -2074,6 +2173,18 @@ static void handle_keyboard_key(struct wl_listener* listener, void* data) {
+@@ -2061,6 +2160,18 @@ static void handle_keyboard_key(struct wl_listener* listener, void* data) {
      return;
    }
  
