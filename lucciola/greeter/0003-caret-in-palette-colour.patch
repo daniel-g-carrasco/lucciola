@@ -13,7 +13,7 @@ carets usually follow the text: a palette that blends the field into the
 background (primary equal to the surface, so that no focus border
 shows) would otherwise hide it.
 
-Applied by lucciola/greeter/noctalia-greeter.spec to the v1.7.0 tag,
+Applied by lucciola/greeter/noctalia-greeter.spec to the v1.7.1 tag,
 after 0002. Could be proposed upstream (noctalia-dev/noctalia-greeter).
 
 diff --git a/src/ui/controls/input.cpp b/src/ui/controls/input.cpp

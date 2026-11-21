@@ -30,16 +30,16 @@ With the key on:
   unplugged output; its messages show on every output.
 With the key off nothing changes.
 
-Applied by lucciola/greeter/noctalia-greeter.spec to the v1.7.0 tag,
+Applied by lucciola/greeter/noctalia-greeter.spec to the v1.7.1 tag,
 after 0001. Could be proposed upstream (noctalia-dev/noctalia-greeter):
 the key, its parsing and writing, the docs and the example are in the
 patch.
 
 diff --git a/docs/user/configuration.md b/docs/user/configuration.md
-index 400d09b..fca932d 100644
+index c1bca11..b193a4d 100644
 --- a/docs/user/configuration.md
 +++ b/docs/user/configuration.md
-@@ -81,6 +81,7 @@ Set these keys in `greeter.toml`. A command-line `--session` or `--user` value t
+@@ -90,6 +90,7 @@ Set these keys in `greeter.toml`. A command-line `--session` or `--user` value t
  | `[keyboard].layout` / `.variant` / `.options` / `.numlock` | XKB keymap |
  | `[auth].allow_empty_password` | Permit an empty submission to start fprintd or smartcard PAM; this does not make password and fingerprint checks run in parallel |
  | `[auth].request_timeout` | Seconds to wait for each greetd reply (`0`–`3600`, default `60`); `0` disables the watchdog |
@@ -48,10 +48,10 @@ index 400d09b..fca932d 100644
  Display and input settings have task-oriented guides:
  
 diff --git a/docs/user/troubleshooting.md b/docs/user/troubleshooting.md
-index cbc2c4e..29e40a4 100644
+index 92bb951..81226ac 100644
 --- a/docs/user/troubleshooting.md
 +++ b/docs/user/troubleshooting.md
-@@ -192,6 +192,11 @@ Choose the behavior that fits the system:
+@@ -284,6 +284,11 @@ Choose the behavior that fits the system:
  - A custom Authselect profile can instead give `pam_fprintd` a shorter
    `timeout` or fewer `max-tries`, reducing the delay before password fallback.
  
@@ -64,10 +64,10 @@ index cbc2c4e..29e40a4 100644
  field so fingerprint or smartcard PAM can start. It does not make fingerprint
  and password authentication parallel. Keep `[auth].request_timeout` longer
 diff --git a/examples/greeter.toml b/examples/greeter.toml
-index 8669231..208b781 100644
+index 80ace2d..dae42b7 100644
 --- a/examples/greeter.toml
 +++ b/examples/greeter.toml
-@@ -139,3 +139,6 @@ allow_empty_password = false
+@@ -154,3 +154,6 @@ allow_empty_password = false
  # Seconds to wait for each greetd reply (0-3600). Keep this longer than any
  # fingerprint timeout; 0 disables the watchdog.
  request_timeout = 60
@@ -75,7 +75,7 @@ index 8669231..208b781 100644
 +# without an Enter first. Default false.
 +start_on_select = false
 diff --git a/src/greeter/greeter.cpp b/src/greeter/greeter.cpp
-index b242734..c413bf9 100644
+index 2877b0d..4138d05 100644
 --- a/src/greeter/greeter.cpp
 +++ b/src/greeter/greeter.cpp
 @@ -74,6 +74,7 @@ bool Greeter::initialize(WaylandClient& client) {
@@ -126,7 +126,7 @@ index b242734..c413bf9 100644
        m_activeSurface = nullptr;
      }
      it = m_views.erase(it);
-@@ -407,12 +427,50 @@ void Greeter::syncOutputWindows() {
+@@ -410,12 +430,50 @@ void Greeter::syncOutputWindows() {
  }
  
  void Greeter::setActiveSurface(GreeterSurface* surface) {
@@ -206,10 +206,10 @@ index 635f711..8104433 100644
    std::string m_defaultUsername;
    bool m_exitRequested = false;
 diff --git a/src/greeter/greeter_config_io.cpp b/src/greeter/greeter_config_io.cpp
-index 3f078ca..31cbd0e 100644
+index 7d43340..8e54e47 100644
 --- a/src/greeter/greeter_config_io.cpp
 +++ b/src/greeter/greeter_config_io.cpp
-@@ -101,7 +101,7 @@ namespace {
+@@ -107,7 +107,7 @@ namespace {
    }
  
    [[nodiscard]] bool isKnownAuthKey(std::string_view key) {
@@ -218,7 +218,7 @@ index 3f078ca..31cbd0e 100644
    }
  
    [[nodiscard]] std::optional<std::string> stringValue(const toml::node& node) {
-@@ -407,6 +407,12 @@ namespace {
+@@ -463,6 +463,12 @@ namespace {
              } else {
                kLog.warn("{}: invalid auth.allow_empty_password value", path.string());
              }
@@ -231,7 +231,7 @@ index 3f078ca..31cbd0e 100644
            } else if (const auto timeout = authRequestTimeoutValue(entryNode)) {
              config.authRequestTimeoutSec = *timeout;
            } else {
-@@ -672,7 +678,8 @@ namespace {
+@@ -756,7 +762,8 @@ namespace {
        root.insert("keyboard", std::move(keyboard));
      }
  
@@ -241,7 +241,7 @@ index 3f078ca..31cbd0e 100644
        toml::table auth;
        if (config.authAllowEmptyPassword.has_value()) {
          auth.insert_or_assign("allow_empty_password", *config.authAllowEmptyPassword);
-@@ -680,6 +687,9 @@ namespace {
+@@ -764,6 +771,9 @@ namespace {
        if (config.authRequestTimeoutSec.has_value()) {
          auth.insert_or_assign("request_timeout", static_cast<int64_t>(*config.authRequestTimeoutSec));
        }
@@ -251,21 +251,21 @@ index 3f078ca..31cbd0e 100644
        root.insert("auth", std::move(auth));
      }
  
-@@ -1008,7 +1018,8 @@ namespace greeter::config {
+@@ -1093,7 +1103,8 @@ namespace greeter::config {
      out << "# [output] name/use_synced_settings/layout/scale/scales/width/height/refresh_rate/transforms, "
             "[idle] timeout, [cursor] theme/size/path\n";
-     out << "# [keyboard] layout/variant/options/numlock\n";
+     out << "# [keyboard] layout/variant/options/numlock, [pointer] accel_profile/accel_speed\n";
 -    out << "# [auth] allow_empty_password (bool), request_timeout (0-3600 seconds; default 60, 0 disables)\n";
 +    out << "# [auth] allow_empty_password (bool), request_timeout (0-3600 seconds; default 60, 0 disables), "
 +           "start_on_select (bool)\n";
-     out << "# [clock] enabled/position/time_format/date_format\n";
+     out << "# [clock] enabled/position/time_format/date_format/time_font_size/date_font_size\n";
      out << '\n';
      out << formatToml(table);
 diff --git a/src/greeter/greeter_config_store.h b/src/greeter/greeter_config_store.h
-index c2dcf84..1596810 100644
+index 0218515..e00b0a1 100644
 --- a/src/greeter/greeter_config_store.h
 +++ b/src/greeter/greeter_config_store.h
-@@ -78,6 +78,7 @@ namespace greeter::config {
+@@ -84,6 +84,7 @@ namespace greeter::config {
  
      std::optional<bool> authAllowEmptyPassword;
      std::optional<int> authRequestTimeoutSec;
@@ -274,10 +274,10 @@ index c2dcf84..1596810 100644
      std::optional<bool> clockEnabled;
      std::optional<std::string> clockPosition;
 diff --git a/src/greeter/greeter_preferences.cpp b/src/greeter/greeter_preferences.cpp
-index 274e152..b16d439 100644
+index 038d6f5..e1dda14 100644
 --- a/src/greeter/greeter_preferences.cpp
 +++ b/src/greeter/greeter_preferences.cpp
-@@ -457,6 +457,9 @@ namespace greeter {
+@@ -453,6 +453,9 @@ namespace greeter {
      if (file.authRequestTimeoutSec.has_value()) {
        prefs.authRequestTimeoutSec = *file.authRequestTimeoutSec;
      }
@@ -288,7 +288,7 @@ index 274e152..b16d439 100644
    }
  
 diff --git a/src/greeter/greeter_preferences.h b/src/greeter/greeter_preferences.h
-index b50841d..173cac1 100644
+index 9107b7f..9afdae4 100644
 --- a/src/greeter/greeter_preferences.h
 +++ b/src/greeter/greeter_preferences.h
 @@ -32,6 +32,9 @@ namespace greeter {
@@ -302,10 +302,10 @@ index b50841d..173cac1 100644
      // UI element positioning: "hidden", "bottom-left", "bottom-right", "top-left", "top-right"
      std::optional<std::string> powerButtonsPosition;
 diff --git a/src/greeter/greeter_surface.cpp b/src/greeter/greeter_surface.cpp
-index 607820e..a9dde28 100644
+index 2541edc..ae0b720 100644
 --- a/src/greeter/greeter_surface.cpp
 +++ b/src/greeter/greeter_surface.cpp
-@@ -84,6 +84,14 @@ namespace {
+@@ -87,6 +87,14 @@ namespace {
      return description;
    }
  
@@ -320,7 +320,7 @@ index 607820e..a9dde28 100644
    Button::ButtonStateColors
    makePaletteState(ColorRole bg, std::optional<ColorRole> border, ColorRole label, float alpha = 1.0f) {
      return Button::ButtonStateColors{
-@@ -1453,6 +1461,9 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
+@@ -1469,6 +1477,9 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
  }
  
  void GreeterSurface::tryAuthenticate() {
@@ -330,7 +330,7 @@ index 607820e..a9dde28 100644
    // Ignore re-submits while a request is already in flight.
    if (m_greetdClient == nullptr || m_greetdUnavailable || m_sharedAuthBlocked || awaitingReply()) {
      return;
-@@ -1476,6 +1487,10 @@ void GreeterSurface::tryAuthenticate() {
+@@ -1492,6 +1503,10 @@ void GreeterSurface::tryAuthenticate() {
      m_pendingResponse = m_password;
      m_hasPendingResponse = true;
      m_authenticating = true;
@@ -341,7 +341,7 @@ index 607820e..a9dde28 100644
      kLog.info("greetd: create_session for '{}'", m_username);
      if (!m_greetdClient->requestCreateSession(m_username)) {
        reportGreetdTransportError(
-@@ -1492,6 +1507,155 @@ void GreeterSurface::tryAuthenticate() {
+@@ -1508,6 +1523,155 @@ void GreeterSurface::tryAuthenticate() {
    }
  }
  
@@ -497,7 +497,7 @@ index 607820e..a9dde28 100644
  void GreeterSurface::onGreetdReadable() {
    if (m_greetdClient == nullptr) {
      return;
-@@ -1536,6 +1700,21 @@ void GreeterSurface::handleGreetdResponse(const GreetdResponse& response) {
+@@ -1574,6 +1738,21 @@ void GreeterSurface::handleGreetdResponse(const GreetdResponse& response) {
      return;
    }
  
@@ -519,7 +519,7 @@ index 607820e..a9dde28 100644
    switch (response.type) {
    case GreetdResponseType::Error:
      onAuthError(response.error);
-@@ -1551,6 +1730,10 @@ void GreeterSurface::handleGreetdResponse(const GreetdResponse& response) {
+@@ -1589,6 +1768,10 @@ void GreeterSurface::handleGreetdResponse(const GreetdResponse& response) {
        }
      } else {
        // Auth finished; launch the session.
@@ -530,7 +530,7 @@ index 607820e..a9dde28 100644
        beginSessionStart();
      }
      return;
-@@ -1566,10 +1749,26 @@ void GreeterSurface::handleAuthMessage(const GreetdAuthMessage& message) {
+@@ -1604,10 +1787,26 @@ void GreeterSurface::handleAuthMessage(const GreetdAuthMessage& message) {
  
    if (message.type == GreetdAuthMessageType::Info || message.type == GreetdAuthMessageType::Error) {
      const bool isError = message.type == GreetdAuthMessageType::Error;
@@ -559,7 +559,7 @@ index 607820e..a9dde28 100644
        clearPasswordInput();
      }
      // Ack without a credential to resume PAM; paint now so the message shows.
-@@ -1596,7 +1795,12 @@ void GreeterSurface::handleAuthMessage(const GreetdAuthMessage& message) {
+@@ -1634,7 +1833,12 @@ void GreeterSurface::handleAuthMessage(const GreetdAuthMessage& message) {
    }
  
    m_secretPromptWaiting = true;
@@ -573,28 +573,29 @@ index 607820e..a9dde28 100644
      updateStatus(message.message, false);
    }
    syncAuthInteractivity();
-@@ -1619,7 +1823,11 @@ void GreeterSurface::postAuthResponse(const std::string& data) {
+@@ -1657,7 +1861,12 @@ void GreeterSurface::postAuthResponse(const std::string& data) {
  }
  
  void GreeterSurface::syncAuthInteractivity() {
--  const bool busy = m_greetdUnavailable || m_sharedAuthBlocked || awaitingReply();
+-  const bool busy = m_greetdUnavailable || m_sharedAuthBlocked || m_authCancelRequested || awaitingReply();
 +  // start_on_select: while the greeter's own conversation waits on PAM (a
 +  // fingerprint reader) and the user has not submitted, the field stays open
 +  // so a password can be typed meanwhile.
 +  const bool listening = m_startOnSelect && m_authSessionStarted && !m_authenticating && !startSessionPending();
-+  const bool busy = m_greetdUnavailable || m_sharedAuthBlocked || (awaitingReply() && !listening);
++  const bool busy =
++      m_greetdUnavailable || m_sharedAuthBlocked || m_authCancelRequested || (awaitingReply() && !listening);
    if (m_passwordField != nullptr) {
      m_passwordField->setEnabled(!busy);
    }
-@@ -1641,6 +1849,7 @@ void GreeterSurface::setGreetdUnavailable(const std::string_view reason) {
-   m_greetdUnavailable = true;
+@@ -1680,6 +1889,7 @@ void GreeterSurface::setGreetdUnavailable(const std::string_view reason) {
+   m_authCancelRequested = false;
    m_authenticating = false;
    m_authSessionStarted = false;
 +  m_cancelWanted = false;
    m_secretPromptWaiting = false;
    m_hasPendingResponse = false;
    m_pendingResponse.clear();
-@@ -1742,6 +1951,15 @@ void GreeterSurface::clearPasswordInput() {
+@@ -1803,6 +2013,15 @@ void GreeterSurface::clearPasswordInput() {
  }
  
  void GreeterSurface::onAuthError(const GreetdError& error) {
@@ -610,7 +611,7 @@ index 607820e..a9dde28 100644
    m_authenticating = false;
    m_secretPromptWaiting = false;
    m_hasPendingResponse = false;
-@@ -1749,6 +1967,7 @@ void GreeterSurface::onAuthError(const GreetdError& error) {
+@@ -1810,6 +2029,7 @@ void GreeterSurface::onAuthError(const GreetdError& error) {
    m_pendingReplies.clear();
    clearPasswordInput();
    updateStatus(authErrorText(error.description), true);
@@ -618,7 +619,7 @@ index 607820e..a9dde28 100644
    kLog.warn("authentication failed: {}", error.description);
    if (!resetAuthSession()) {
      return;
-@@ -2133,6 +2352,7 @@ void GreeterSurface::syncWallpaperTexture() {
+@@ -2198,6 +2418,7 @@ void GreeterSurface::syncWallpaperTexture() {
  void GreeterSurface::loadPreferences() {
    const auto prefs = greeter::loadGreeterPreferences();
    m_allowEmptyPassword = prefs.allowEmptyPassword;
@@ -627,10 +628,10 @@ index 607820e..a9dde28 100644
  
    if (initialSession.has_value()) {
 diff --git a/src/greeter/greeter_surface.h b/src/greeter/greeter_surface.h
-index e418d10..0352d69 100644
+index c2ad6b9..05637de 100644
 --- a/src/greeter/greeter_surface.h
 +++ b/src/greeter/greeter_surface.h
-@@ -69,6 +69,22 @@ public:
+@@ -73,6 +73,22 @@ public:
    // True while this surface is mid-conversation with greetd.
    [[nodiscard]] bool authInProgress() const noexcept { return m_authenticating; }
  
@@ -653,7 +654,7 @@ index e418d10..0352d69 100644
    void onPointerLeave();
    void onPointerEvent(float x, float y, std::uint32_t button, bool pressed);
    void onPointerMotion(float x, float y);
-@@ -241,6 +257,7 @@ private:
+@@ -244,6 +260,7 @@ private:
    bool m_canRebootToFirmware = false;
  
    bool m_allowEmptyPassword = false;
@@ -661,7 +662,7 @@ index e418d10..0352d69 100644
  
    // greetd replies in request order, so m_pendingReplies (a FIFO of these) tells
    // which request each reply answers.
-@@ -265,6 +282,23 @@ private:
+@@ -269,6 +286,23 @@ private:
    bool m_hasPendingResponse = false;  // user-supplied input armed for next prompt
    std::string m_pendingResponse;
    std::deque<AuthRequest> m_pendingReplies;
@@ -683,5 +684,5 @@ index e418d10..0352d69 100644
 +  [[nodiscard]] bool startSessionPending() const;
 +  [[nodiscard]] bool startOnSelectSubmit();
    std::function<void()> m_onExitRequested;
+   std::function<bool()> m_onUserSelectionRequested;
    std::function<bool(GreeterSurface*)> m_onAuthBeginRequested;
-   std::function<void(GreeterSurface*)> m_onAuthEnded;

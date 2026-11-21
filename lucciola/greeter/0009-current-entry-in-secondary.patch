@@ -1,0 +1,37 @@
+Lucciola: write the menus' current entry in the secondary colour
+
+The session, scheme and user menus write the entry already chosen in the
+palette's primary colour, on the menu's surface_variant. Lucciola's login
+palette sets primary to the background colour (so that no focus border,
+button fill or avatar ring shows), and the chosen session, the one listed
+first after a login with another session, came out black on black. The
+current entry takes secondary instead (and the user menu's tint behind it),
+which stays readable with any palette that gives secondary a colour of its
+own; the entry under the pointer keeps its colours.
+
+Applied by lucciola/greeter/noctalia-greeter.spec to the v1.7.1 tag,
+after 0008.
+
+diff --git a/src/greeter/greeter_surface.cpp b/src/greeter/greeter_surface.cpp
+index a0790be..f9e8b77 100644
+--- a/src/greeter/greeter_surface.cpp
++++ b/src/greeter/greeter_surface.cpp
+@@ -3383,15 +3383,15 @@ void GreeterSurface::applyMenuHighlight() {
+         labelColor = colorForRole(ColorRole::OnPrimary);
+         iconColor = colorForRole(ColorRole::OnPrimary);
+       } else if (isSelected) {
+-        rowFill = colorForRole(ColorRole::Primary, 0.16f);
+-        labelColor = colorForRole(ColorRole::Primary);
++        rowFill = colorForRole(ColorRole::Secondary, 0.16f);
++        labelColor = colorForRole(ColorRole::Secondary);
+       } else {
+         rowFill = colorForRole(ColorRole::SurfaceVariant, 0.01f);
+       }
+     } else if (highlighted) {
+       labelColor = colorForRole(ColorRole::OnSecondary);
+     } else if (isSelected) {
+-      labelColor = colorForRole(ColorRole::Primary);
++      labelColor = colorForRole(ColorRole::Secondary);
+     }
+ 
+     row->setStyle(
