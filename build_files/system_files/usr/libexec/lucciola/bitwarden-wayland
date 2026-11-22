@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 # lucciola bitwarden-wayland: Bitwarden (Flatpak) on native Wayland with a
-# clipboard that works under niri.
+# clipboard that works under Umbriel.
 #
 #   bitwarden-wayland status    on, off or absent (Bitwarden not installed)
 #   bitwarden-wayland enable
@@ -8,9 +8,9 @@
 #
 # Why (2026-10-31): Bitwarden copies through a native module that needs the
 # ext/wlr data-control protocol. Flatpak gives apps a restricted Wayland
-# connection (security context), where niri hides it; the module then falls
-# back to X11, and its copies reach Wayland apps only through xwayland-
-# satellite with an X11 window focused: with Bitwarden on Wayland they never
+# connection (security context), where the compositor hides it; the module then falls
+# back to X11, and its copies reach Wayland apps only through the X11
+# bridge with an X11 window focused: with Bitwarden on Wayland they never
 # do, and on X11 they depend on that bridge. The workaround, from
 # bitwarden/clients#21288: the compositor socket under a second name
 # ($XDG_RUNTIME_DIR/bitwarden-wayland, made at each login by
@@ -18,7 +18,7 @@
 # user Flatpak override, which is the normal connection.
 #
 # The price: on that connection Bitwarden is not restricted, so it could also
-# use niri's other privileged protocols (screen capture, virtual keyboard and
+# use the compositor's other privileged protocols (screen capture, virtual keyboard and
 # pointer). Off by default; Lucciola System says so before turning it on.
 set -euo pipefail
 APP=com.bitwarden.desktop

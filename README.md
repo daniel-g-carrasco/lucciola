@@ -8,9 +8,9 @@
 
 <p align="center">A rock-solid, ready-to-use PC operating system built on Fedora Atomic.</p>
 
-Lucciola builds on Fedora Silverblue and adds a desktop made of niri and Noctalia, the speed-tuned CachyOS kernel and a set of everyday and creative apps. Lucciola is Italian for firefly.
+Lucciola builds on Fedora Silverblue and adds a desktop made of Umbriel and Noctalia, the speed-tuned CachyOS kernel and a set of everyday and creative apps. Lucciola is Italian for firefly.
 
-- **Your workspace.** niri places windows in columns on a strip wider than the screen. Noctalia draws the bar, the launcher, notifications and the lock screen. GNOME ships too, as a backup session on the login screen.
+- **Your workspace.** Umbriel places windows in columns on a strip wider than the screen. Noctalia draws the bar, the launcher, notifications and the lock screen. GNOME ships too, as a backup session on the login screen.
 - **Updates.** The whole system ships as one signed image. Updates download in the background and apply at your next restart; if one goes wrong, choose the previous version in the boot menu.
 - **Foundations.** The CachyOS kernel is signed with Lucciola's own key, so Secure Boot keeps working. The TPM can unlock the encrypted disk at boot, and your device checks every update's signature before installing it.
 - **Day one.** Zen Browser, Thunderbird, LibreOffice, GIMP, Inkscape, darktable and OBS Studio come installed, and Bazaar installs more from Flathub. For developers, `ujust lucciola-devmode` adds VS Code and Homebrew.
@@ -42,6 +42,6 @@ No x86-64-v3, or a CachyOS kernel update misbehaving on your PC? `ghcr.io/daniel
 
 Lucciola grew out of Margine OS, my earlier GNOME image. Its documents are kept in [`docs/history/margine/`](docs/history/margine/README.md).
 
-With thanks to [Fedora](https://fedoraproject.org/), [Universal Blue](https://universal-blue.org/), [niri](https://github.com/YaLTeR/niri), [Noctalia](https://github.com/noctalia-dev/noctalia), [Noctalia Greeter](https://github.com/noctalia-dev/noctalia-greeter), [greetd](https://git.sr.ht/~kennylevinsen/greetd) and [CachyOS](https://cachyos.org/); to [Bluefin](https://projectbluefin.io/), Margine's first base and the source of many ideas; to [Origami Linux](https://gitlab.com/origami-linux/images) for the kernel signing script, [MorrOS](https://github.com/morrolinux/morros) for CI patterns, and [coreos/chunkah](https://github.com/coreos/chunkah) for content-based image layers.
+With thanks to [Fedora](https://fedoraproject.org/), [Universal Blue](https://universal-blue.org/), [Umbriel](https://github.com/noctalia-dev/umbriel), [niri](https://github.com/YaLTeR/niri), [Noctalia](https://github.com/noctalia-dev/noctalia), [Noctalia Greeter](https://github.com/noctalia-dev/noctalia-greeter), [greetd](https://git.sr.ht/~kennylevinsen/greetd) and [CachyOS](https://cachyos.org/); to [Bluefin](https://projectbluefin.io/), Margine's first base and the source of many ideas; to [Origami Linux](https://gitlab.com/origami-linux/images) for the kernel signing script, [MorrOS](https://github.com/morrolinux/morros) for CI patterns, and [coreos/chunkah](https://github.com/coreos/chunkah) for content-based image layers.
 
 Apache-2.0.

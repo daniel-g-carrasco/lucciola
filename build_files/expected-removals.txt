@@ -19,3 +19,5 @@
 # packages are only reported, in the step summary.
 
 graphviz-libs  2026-11-20  ImageMagick 7.1.2.36 moved its Graphviz reader to the optional ImageMagick-dot package, so the library is no longer pulled in; nothing else in the image used it
+niri  2026-11-22  the Lucciola session moved to Umbriel (built from a pinned commit, lucciola/umbriel/); niri is no longer installed
+xwayland-satellite  2026-11-22  niri needed it for X11 applications; Umbriel starts Xwayland itself

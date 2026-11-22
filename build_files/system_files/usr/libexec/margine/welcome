@@ -1,6 +1,6 @@
 #!/usr/bin/gjs -m
 // Welcome to Lucciola: the first steps, in one short page, at the first login
-// of the Lucciola (niri) session.
+// of the Lucciola (Umbriel) session.
 //
 // /usr/libexec/lucciola/session-start starts it with --first-login for new
 // users (~/.local/state/lucciola/welcome-due, see there); "Lucciola Welcome"
@@ -17,7 +17,7 @@
 // which the data names by action (ACTIONS below), never by command.
 //
 // Every fact on the page comes from the image itself, so keep them in step:
-//   keys     /usr/share/lucciola/niri/config.kdl (binds)
+//   keys     /usr/share/lucciola/umbriel/config.toml ([keybinds])
 //   updates  uupd.timer (system image, daily, staged for the next boot),
 //            margine-flatpak-update.timer and margine-flatpak-user-update.timer
 //            (apps, skipped on a low battery or a metered connection),
@@ -26,6 +26,9 @@
 //            restarts only when asked), margine-brew-upgrade.timer (weekly,
 //            only where the user installed Homebrew)
 //   apps     flatpak-preinstall.service, margine-defaults.preinstall
+//   app-set  feature slim|naked status (shown while both say absent),
+//            admin apps-slim (feature slim install: waits for the first-boot
+//            install through flatpak-preinstall.service.d/20-lucciola-apps-profile.conf)
 //   guide    guide-open, lucciola-guide.desktop (pinned in the dock)
 //   secure   mok-enroll status (section shown only while enrollment is pending)
 // The look follows the website (site/index.html): the dark ground, the beige
@@ -45,6 +48,8 @@ const APP_ID = "dev.margine.Welcome";
 const STATE_DIR = GLib.build_filenamev([GLib.get_user_state_dir(), "lucciola"]);
 const MARKER = GLib.build_filenamev([STATE_DIR, "welcome-seen"]);
 const MOK_ENROLL = "/usr/libexec/margine/mok-enroll";
+const ADMIN = "/usr/libexec/lucciola/admin";
+const FEATURE = "/usr/libexec/lucciola/feature";
 const CONTENT = GLib.getenv("LUCCIOLA_WELCOME_CONTENT") ?? "/usr/share/lucciola/welcome/content.json";
 
 const FIRST_LOGIN = ARGV.includes("--first-login");
@@ -170,11 +175,65 @@ const cmd = (text) =>
 const markup = (text) =>
   GLib.markup_escape_text(text, -1).replace(/`([^`]+)`/g, (_, c) => cmd(c));
 
-// What a button in content.json may do, by name.
+// What a button in content.json may do, by name. Each gets the button.
 const ACTIONS = {
   "open-system": () => launch("dev.margine.System.desktop", "/usr/libexec/margine/system-gui"),
   "open-guide": () => launch("lucciola-guide.desktop", "/usr/libexec/margine/guide-open"),
+  "apps-slim": (button) => useSlimSet(button),
 };
+
+// The slim app set, through the same administrator verb as Lucciola System's
+// Apps page (pkexec asks for the password). While the first-boot install still
+// runs, feature records the choice and the install applies it as it ends.
+// The outcome is said under the button; a refusal or a failure gives the
+// button back.
+function useSlimSet(button) {
+  const box = button.get_parent();
+  let note = button._note;
+  if (!note) {
+    note = label("", ["body", "dim"]);
+    box.insert_child_after(note, button);
+    button._note = note;
+  }
+  const text = button.get_label();
+  button.set_sensitive(false);
+  button.set_label("Trimming the apps…");
+  note.set_label("");
+  let proc;
+  try {
+    proc = Gio.Subprocess.new(["pkexec", ADMIN, "apps-slim"],
+      Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_MERGE);
+  } catch (e) {
+    logError(e, "welcome: could not start pkexec");
+    button.set_label(text);
+    button.set_sensitive(true);
+    note.set_label(markup("Could not ask for the password. Lucciola System, Apps, does the same."));
+    return;
+  }
+  proc.communicate_utf8_async(null, null, (p, res) => {
+    let out = "";
+    try {
+      [, out] = p.communicate_utf8_finish(res);
+    } catch (e) {
+      logError(e, "welcome: apps-slim");
+    }
+    out = out ?? "";
+    if (p.get_successful()) {
+      button.set_label("Slim set chosen");
+      note.set_label(markup(out.includes("as soon as it finishes")
+        ? "The first install is still running: the larger apps go as soon as it finishes."
+        : "Done: the larger apps are gone. Lucciola System, Apps, brings them back."));
+    } else {
+      // pkexec exits 126 when the password dialog is dismissed.
+      button.set_label(text);
+      button.set_sensitive(true);
+      note.set_label(markup(p.get_exit_status() === 126
+        ? "Nothing changed."
+        : "That did not work. Lucciola System, Apps, says why and can try again."));
+      if (p.get_exit_status() !== 126) log(`welcome: apps-slim failed: ${out.trim().slice(-300)}`);
+    }
+  });
+}
 
 // Without its texts the window still says hello and opens the guide.
 const FALLBACK = {
@@ -288,6 +347,7 @@ const WelcomeWindow = GObject.registerClass(
         if (sec.show_if) {
           box.visible = false;
           if (sec.show_if === "mok-pending") this._whenMokPending(() => { box.visible = true; });
+          if (sec.show_if === "apps-stock") this._whenAppsStock(() => { box.visible = true; });
         }
         this._page.append(box);
       }
@@ -387,7 +447,7 @@ const WelcomeWindow = GObject.registerClass(
           log(`welcome: no action "${b.action}", button "${b.label}" left out`);
           return null;
         }
-        return this._button(b.label, b.style === "cta" ? "cta" : "plain", run);
+        return this._button(b.label, b.style === "cta" ? "cta" : "plain", (button) => run(button));
       }
       default:
         log(`welcome: unknown block type "${b.type}" left out`);
@@ -411,6 +471,32 @@ const WelcomeWindow = GObject.registerClass(
       row.append(close);
       box.append(row);
       return box;
+    }
+
+    // Only while the complete app set is in place and no smaller one is
+    // chosen: feature's slim and naked status both say "absent" then.
+    _whenAppsStock(show) {
+      if (!GLib.file_test(FEATURE, GLib.FileTest.IS_EXECUTABLE)) return;
+      const states = [];
+      for (const set of ["slim", "naked"]) {
+        let proc;
+        try {
+          proc = Gio.Subprocess.new([FEATURE, set, "status"],
+            Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
+        } catch (e) {
+          return;
+        }
+        proc.communicate_utf8_async(null, null, (p, res) => {
+          let out = "";
+          try {
+            [, out] = p.communicate_utf8_finish(res);
+          } catch (e) {
+            return;
+          }
+          states.push((out ?? "").split("\n")[0].trim());
+          if (states.length === 2 && states.every((st) => st === "state=absent")) show();
+        });
+      }
     }
 
     // Only while the key waits for the blue screen at the next restart

@@ -1,0 +1,11 @@
+# Lucciola: Umbriel's system configuration.
+#
+# Umbriel reads this file only while ~/.config/umbriel/config.toml does not
+# exist. The defaults live in the image and are updated with it; the
+# colours of the active Noctalia theme and personal settings
+# (~/.config/umbriel/lucciola.toml) come after them and win.
+[include]
+files = ["/usr/share/lucciola/umbriel/config.toml"]
+
+[include.optional]
+files = ["~/.config/umbriel/lucciola-colors.toml", "~/.config/umbriel/lucciola.toml"]

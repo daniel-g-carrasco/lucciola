@@ -226,7 +226,7 @@ jobs:
       # out, checks that the greeter comes back and logs in with the
       # password over greetd's IPC socket (the whole greetd PAM stack,
       # pam_oo7 included), then a oneshot that verifies that session is
-      # Lucciola's, the Login keyring is open, niri and Noctalia are alive
+      # Lucciola's, the Login keyring is open, Umbriel and Noctalia are alive
       # and answer on their sockets, Noctalia owns the notifications, the
       # portal answers and nothing dumped core, then prints
       # MARGINE-GUI-SMOKE: PASS/FAIL to the serial console and powers off.
@@ -323,7 +323,7 @@ jobs:
             echo "- ${SUMMARY:-SUMMARY: n/a}"
             echo "- ${VERDICT:-VERDICT: n/a}"
             if grep -qE 'MARGINE-USER-SMOKE: [A-Z_]+ WARN' serial.log; then
-              echo "::warning::User-smoke soft gate: one or more identity checks WARNed (kernel/session/os-name/default-session/niri-config/noctalia-look/gnome-stock/gaming-ujust/gschema). Soft gate: promotion NOT blocked. See the step summary + serial-log artifact."
+              echo "::warning::User-smoke soft gate: one or more identity checks WARNed (kernel/session/os-name/default-session/umbriel-config/noctalia-look/gnome-stock/gaming-ujust/gschema). Soft gate: promotion NOT blocked. See the step summary + serial-log artifact."
             fi
           } >> "$GITHUB_STEP_SUMMARY" || true
 

@@ -26,10 +26,12 @@ CONTENT = REPO / "lucciola/system_files/usr/share/lucciola/welcome/content.json"
 ACTIONS = {
     "open-guide": "opens the Lucciola Guide",
     "open-system": "opens Lucciola System",
+    "apps-slim": "trims the apps to the slim set (asks for the password; waits for the first-boot install)",
 }
 STYLES = ("cta", "plain")
 CONDITIONS = {
     "mok-pending": "shown only while the Secure Boot key waits for the blue screen",
+    "apps-stock": "shown only while the complete app set is installed and no smaller one is chosen",
 }
 BLOCK_NAMES = {"text": "paragraph", "items": "list", "keys": "keys", "button": "button"}
 EM_DASH = "\u2014"

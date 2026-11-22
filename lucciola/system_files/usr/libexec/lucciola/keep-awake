@@ -44,13 +44,13 @@
 set -euo pipefail
 
 # KEEP_AWAKE_TEST=1 runs on separate units and leaves the bar and
-# notifications alone; KEEP_AWAKE_GDBUS, KEEP_AWAKE_NIRI and KEEP_AWAKE_LOCK
+# notifications alone; KEEP_AWAKE_GDBUS, KEEP_AWAKE_UMBRIEL and KEEP_AWAKE_LOCK
 # stand in for the tools the lid watcher uses (tests/keep-awake.test.sh).
 t="${KEEP_AWAKE_TEST:+-test}"
 unit=lucciola-keep-awake$t.service
 sched=lucciola-keep-awake-scheduled$t
 GDBUS="${KEEP_AWAKE_GDBUS:-/usr/bin/gdbus}"
-NIRI="${KEEP_AWAKE_NIRI:-/usr/bin/niri}"
+UMBRIEL="${KEEP_AWAKE_UMBRIEL:-/usr/bin/umbriel}"
 LOCK="${KEEP_AWAKE_LOCK:-/usr/libexec/lucciola/lock}"
 LAPTOP_ONLY="${KEEP_AWAKE_LAPTOP_ONLY:-/usr/libexec/lucciola/laptop-only}"
 caffeine() { [[ -n "$t" ]] || /usr/bin/noctalia msg "caffeine-$1" >/dev/null 2>&1 || true; }
@@ -99,7 +99,7 @@ on() {
   if [[ -f "$schedfile" ]] && (( $(cut -d" " -f1 "$schedfile") <= now + 5 )); then rm -f "$schedfile"; fi
   systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
   local -a opts=()
-  for v in KEEP_AWAKE_TEST KEEP_AWAKE_GDBUS KEEP_AWAKE_NIRI KEEP_AWAKE_LOCK; do
+  for v in KEEP_AWAKE_TEST KEEP_AWAKE_GDBUS KEEP_AWAKE_UMBRIEL KEEP_AWAKE_LOCK; do
     if [[ -n "${!v:-}" ]]; then opts+=(--setenv="$v=${!v}"); fi
   done
   if [[ "$MODE" == screen ]]; then
@@ -204,10 +204,10 @@ lid_closed_now() {
   [[ "$out" == *true* ]]
 }
 docked() {  # another monitor is on: a closed lid is the desk, not the bag
-  "$NIRI" msg --json outputs 2>/dev/null | python3 -c '
+  "$UMBRIEL" outputs --json 2>/dev/null | python3 -c '
 import json, sys
 outs = json.load(sys.stdin)
-on = [n for n, o in outs.items() if o.get("logical") is not None and not n.startswith(("eDP", "LVDS", "DSI"))]
+on = [o["name"] for o in outs if o.get("name") and o.get("enabled") and not o["name"].startswith(("eDP", "LVDS", "DSI"))]
 sys.exit(0 if on else 1)' 2>/dev/null
 }
 lid_closed() {

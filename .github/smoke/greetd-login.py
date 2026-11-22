@@ -7,7 +7,7 @@ Three phases, each with its own marker on the serial console:
 
   MARGINE-GREETD: AUTOLOGIN PASS|FAIL|SKIP ...  greetd's [initial_session]
       (what `ujust lucciola-autologin on` writes) started the smoke user's
-      session: niri runs, logind has a wayland session from the greetd PAM
+      session: Umbriel runs, logind has a wayland session from the greetd PAM
       service, desktop lucciola.
   MARGINE-GREETD: GREETER PASS|FAIL ...  after that session logs out, greetd
       starts the greeter (Noctalia Greeter, as the greetd user, in a logind
@@ -20,7 +20,7 @@ Three phases, each with its own marker on the serial console:
       stops the greeter and starts the session through the full greetd PAM
       stack: pam_unix checks the password, pam_oo7 takes it for the keyring,
       pam_selinux, pam_loginuid and pam_systemd set the session up.
-  MARGINE-GREETD: SESSION PASS|FAIL ...  that session is a real one: niri
+  MARGINE-GREETD: SESSION PASS|FAIL ...  that session is a real one: Umbriel
       runs as the user, in a wayland logind session on seat0 opened by the
       greetd service, with the user's audit login uid and an unconfined
       SELinux context (pam_selinux open ran).
@@ -134,7 +134,7 @@ def graphical_greetd_session(user):
 
 
 def user_env(user, uid, name):
-    """A variable of the user manager's environment (niri-session imports the
+    """A variable of the user manager's environment (start-umbriel hands the
     session's XDG_* there), '' when the manager does not answer."""
     env = sh("runuser", "-u", user, "--", "env", f"XDG_RUNTIME_DIR=/run/user/{uid}",
              f"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{uid}/bus",
@@ -150,7 +150,7 @@ def session_command():
     session file's Exec split into words, and its DesktopNames, from which it
     derives XDG_CURRENT_DESKTOP (all of them, ':'-joined) and
     XDG_SESSION_DESKTOP (the first)."""
-    exec_line, names = "niri-session", ["niri"]
+    exec_line, names = "start-umbriel", ["Umbriel"]
     try:
         with open(SESSION_FILE) as f:
             for line in f:
@@ -312,18 +312,18 @@ def main():
         mark("AUTOLOGIN", "FAIL", f"{GREETD_CONF} unreadable: {e}")
     if initial.get("user") == USER:
         # First boot is slow (Flatpak preinstall competes for I/O).
-        up = wait_for(lambda: user_pids(USER, "niri") and graphical_greetd_session(USER), 300, 5)
+        up = wait_for(lambda: user_pids(USER, "umbriel") and graphical_greetd_session(USER), 300, 5)
         sess = sessions_of(USER)
         desk = user_env(USER, uid, "XDG_SESSION_DESKTOP")
         s = graphical_greetd_session(USER) or {}
-        # The launcher names the session as the greeter does (niri); GDM
-        # used the file name (lucciola).
-        if up and s.get("Type") == "wayland" and desk in ("niri", "lucciola"):
-            mark("AUTOLOGIN", "PASS", f"niri up, desktop={desk}, {describe(sess)}")
+        # The launcher names the session as the greeter does (Umbriel, which
+        # start-umbriel writes lower case); GDM used the file name (lucciola).
+        if up and s.get("Type") == "wayland" and desk.lower() in ("umbriel", "lucciola"):
+            mark("AUTOLOGIN", "PASS", f"Umbriel up, desktop={desk}, {describe(sess)}")
         elif up:
-            mark("AUTOLOGIN", "FAIL", f"niri up but type={s.get('Type') or '?'} desktop={desk or '?'}: {describe(sess)}")
+            mark("AUTOLOGIN", "FAIL", f"Umbriel up but type={s.get('Type') or '?'} desktop={desk or '?'}: {describe(sess)}")
         else:
-            mark("AUTOLOGIN", "FAIL", f"no niri for {USER} within 300 s; sessions: {describe(sess)}; greetd log: "
+            mark("AUTOLOGIN", "FAIL", f"no Umbriel for {USER} within 300 s; sessions: {describe(sess)}; greetd log: "
                  + sh("journalctl", "-b", "-u", "greetd.service", "-o", "cat", "-n", "4", "--no-pager").replace("\n", " | "))
     else:
         mark("AUTOLOGIN", "SKIP", f"no [initial_session] for {USER} in {GREETD_CONF}")
@@ -386,11 +386,11 @@ def main():
     # ---- 4. The session it started ------------------------------------------
     # greetd gives the greeter 5 s to exit, then terminates it, then starts
     # the session (greetd context.rs, alarm()).
-    up = wait_for(lambda: user_pids(USER, "niri") and graphical_greetd_session(USER), 180, 3)
+    up = wait_for(lambda: user_pids(USER, "umbriel") and graphical_greetd_session(USER), 180, 3)
     s = graphical_greetd_session(USER) or {}
     problems = []
     if not up:
-        problems.append(f"no niri in a greetd session within 180 s ({describe(sessions_of(USER))})")
+        problems.append(f"no Umbriel in a greetd session within 180 s ({describe(sessions_of(USER))})")
     else:
         if s.get("Type") != "wayland":
             problems.append(f"type={s.get('Type')}")
@@ -398,16 +398,16 @@ def main():
             problems.append(f"seat={s.get('Seat') or 'none'}")
         if s.get("Remote") != "no":
             problems.append(f"remote={s.get('Remote')}")
-        pid = user_pids(USER, "niri")[0]
+        pid = user_pids(USER, "umbriel")[0]
         try:
             loginuid = open(f"/proc/{pid}/loginuid").read().strip()
             context = open(f"/proc/{pid}/attr/current").read().strip("\0\n ")
         except OSError as e:
             loginuid, context = "?", f"? ({e})"
         if loginuid != str(uid):
-            problems.append(f"niri loginuid={loginuid}, not {uid} (pam_loginuid)")
+            problems.append(f"umbriel loginuid={loginuid}, not {uid} (pam_loginuid)")
         if ":unconfined_t:" not in context:
-            problems.append(f"niri runs as {context}, not unconfined_t (pam_selinux open)")
+            problems.append(f"umbriel runs as {context}, not unconfined_t (pam_selinux open)")
     detail = f"{describe([s] if s else sessions_of(USER))}"
     mark("SESSION", "FAIL" if problems else "PASS", ("; ".join(problems) + " | " if problems else "") + detail)
     write_result(login="pass" if not problems else "fail", since=since, session=s.get("Id", ""),

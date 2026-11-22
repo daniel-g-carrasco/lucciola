@@ -174,7 +174,7 @@ check("welcome: the Secure Boot section keeps its condition",
       any(s.get("show_if") == "mok-pending" for s in data["sections"]))
 
 program = (ROOT / "build_files/system_files/usr/libexec/margine/welcome").read_text(encoding="utf-8")
-wired = set(re.findall(r'^\s+"([a-z-]+)": \(\) => launch', program, re.M))
+wired = set(re.findall(r'^\s+"([a-z-]+)": \((?:button)?\) => ', program, re.M))
 check("welcome: the program and the check know the same button actions", wired == set(wc.ACTIONS), wired)
 check("welcome: the program reads the shipped path",
       '"/usr/share/lucciola/welcome/content.json"' in program)

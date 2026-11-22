@@ -54,7 +54,7 @@ if grep -Eiq '<image[[:space:]>]|data:image/' "$ROOTFS/usr/share/icons/Adwaita/s
   echo "::error::A.2 start-here-symbolic.svg embeds a raster image; GTK4 symbolic icons require path/circle/rect primitives"; fail=1
 fi
 
-# A.3: Lucciola, niri + Noctalia, and GNOME as a STOCK fallback session.
+# A.3: Lucciola, Umbriel + Noctalia, and GNOME as a STOCK fallback session.
 # Since 2026-10-18 the build adds no GNOME extensions, Shell dconf defaults
 # or GNOME first-login bootstrap at all (until then lucciola/build.sh
 # removed what the Margine steps added; the Margine checks that used to sit
@@ -82,15 +82,19 @@ for f in margine-first-boot.desktop margine-first-boot-status.desktop; do
     || { echo "::error::A.3 GNOME first-login autostart etc/xdg/autostart/$f survived"; fail=1; }
 done
 check_file "usr/share/wayland-sessions/lucciola.desktop" "A.3"
-[[ ! -e "$ROOTFS/usr/share/wayland-sessions/niri.desktop" ]] \
-  || { echo "::error::A.3 the plain Niri session entry is back next to Lucciola's"; fail=1; }
-grep -qx 'Exec=niri-session' "$ROOTFS/usr/share/wayland-sessions/lucciola.desktop" 2>/dev/null \
-  || { echo "::error::A.3 lucciola.desktop does not run niri-session"; fail=1; }
+[[ ! -e "$ROOTFS/usr/share/wayland-sessions/umbriel.desktop" ]] \
+  || { echo "::error::A.3 the plain Umbriel session entry is back next to Lucciola's"; fail=1; }
+[[ ! -e "$ROOTFS/usr/share/wayland-sessions/niri.desktop" && ! -e "$ROOTFS/usr/bin/niri" ]] \
+  || { echo "::error::A.3 niri is back in the image next to Umbriel"; fail=1; }
+grep -qx 'Exec=start-umbriel' "$ROOTFS/usr/share/wayland-sessions/lucciola.desktop" 2>/dev/null \
+  || { echo "::error::A.3 lucciola.desktop does not run start-umbriel"; fail=1; }
 for t in standard administrator; do
   grep -qx 'Session=lucciola' "$ROOTFS/usr/share/accountsservice/user-templates/$t" 2>/dev/null \
     || { echo "::error::A.3 AccountsService template $t does not preselect the Lucciola session"; fail=1; }
 done
-check_file "etc/niri/config.kdl" "A.3"
+check_file "etc/xdg/umbriel/config.toml" "A.3"
+check_file "usr/share/lucciola/umbriel/config.toml" "A.3"
+check_exec "usr/bin/umbriel" "A.3"
 for f in session-start lock bar-widths color-calibration; do
   check_exec "usr/libexec/lucciola/$f" "A.3"
 done

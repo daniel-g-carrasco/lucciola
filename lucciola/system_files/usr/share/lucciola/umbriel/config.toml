@@ -1,0 +1,247 @@
+# Lucciola: the Umbriel configuration shipped with the image.
+#
+# /etc/xdg/umbriel/config.toml includes this file, then the colours Noctalia
+# writes from the active theme (~/.config/umbriel/lucciola-colors.toml) and,
+# if it exists, ~/.config/umbriel/lucciola.toml: put personal settings
+# there, they win. A ~/.config/umbriel/config.toml replaces all of this
+# (Umbriel reads the first configuration it finds), so start one with
+#   [include]
+#   files = ["/etc/xdg/umbriel/config.toml"]
+# to keep Lucciola's and change a part.
+#
+# Check edits with `umbriel config validate`. Reference:
+# https://docs.noctalia.dev/umbriel/
+
+# The look before Noctalia has applied its theme: a beige border on the
+# focused window, the others' in the bar background, a soft shadow.
+[colors]
+shadow = "#1A1A1AB8"
+
+[colors.border]
+focused = "#E6D5BFFF"
+unfocused = "#121212FF"
+
+[general]
+# Noctalia is the shell: bar, notifications, lock screen, launcher, OSD,
+# polkit agent, clipboard, night light, wallpaper. session-start seeds the
+# Lucciola defaults for Noctalia once per user, then starts it. bar-widths
+# keeps the bar at a fixed width on large monitors, following hot-plugs.
+# color-calibration loads the calibration curves of the screens' ICC
+# profiles (~/.local/share/icc), as GNOME does.
+autostart = ["/usr/libexec/lucciola/session-start", "/usr/libexec/lucciola/bar-widths",
+             "/usr/libexec/lucciola/color-calibration"]
+# The welcome window explains the keys; Super+Shift+H shows the full list.
+show_cheatsheet = false
+
+# ---- Input ---------------------------------------------------------------------
+# The keyboard layout is the system's (systemd-localed), as in GNOME.
+# Touchpad as in GNOME: tap to click, natural scrolling, two fingers pressed
+# for a right click. scroll_factor: libinput's raw speed is fast on this
+# hardware; the window rules below keep every toolkit at the same pace.
+[input.keyboard]
+numlock_toggle = true
+
+[input.touchpad]
+tap = true
+natural_scroll = true
+disable_while_typing = true
+click_method = "clickfinger"
+scroll_factor = 0.15
+
+[input.cursor]
+follows_focus = true
+hide_timeout_ms = 2000
+
+# ---- Layout: scrolling, columns at a third, a half, two thirds ----------------
+[layout]
+mode = "scrolling"
+gap = 6
+extent_presets = [0.33333, 0.5, 0.66667]
+
+[layout.scrolling]
+default_extent_fraction = 0.5
+center_focused = "never"
+# A single column stays at the left (Umbriel centres it by default).
+center_underfull_strip = false
+
+# ---- Look: Lucciola's border, shadow and corners ------------------------------
+[appearance]
+border_width = 3
+corner_radius = 15
+
+[appearance.shadow]
+enabled = true
+softness = 24
+offset_x = 0
+offset_y = 4
+
+
+# ---- Window rules --------------------------------------------------------------
+# Noctalia's settings window and the share picker: as Umbriel ships them.
+[[window_rule]]
+match.app_id = "^dev.noctalia.Noctalia$"
+default_floating = true
+default_floating_size_px = { width = 1080, height = 900 }
+
+[[window_rule]]
+match.app_id = "^dev.noctalia.UmbrielSharePicker$"
+default_floating = true
+default_floating_size_px = { width = 800, height = 600 }
+
+[[window_rule]]
+match.title = "^(Picture-in-Picture|Picture in picture)$"
+default_floating = true
+default_maximize = false
+default_position = { x = 20, y = 20, anchor = "bottom_right" }
+
+# Touchpad scrolling per application: browsers and Electron scroll further per
+# step than GTK; the factors multiply with the touchpad's 0.15.
+[[window_rule]]
+match.app_id = '^(app\.zen_browser\.zen|org\.mozilla\.(firefox|Thunderbird)|firefox(-esr)?|thunderbird|zen(-browser)?)$'
+touchpad_scroll_factor = 0.625
+
+[[window_rule]]
+match.app_id = '^(com\.microsoft\.VSCode|[Cc]ode|code-url-handler|org\.chromium\.Chromium|[Cc]hromium(-browser)?|google-chrome|brave-browser|microsoft-edge(-stable|-beta|-dev)?|msedge|com\.microsoft\.Edge|[Bb]itwarden|com\.bitwarden\.desktop|discord|com\.discordapp\.Discord)$'
+touchpad_scroll_factor = 0.47
+
+# The keyring's password prompt: under the bar, not in the middle.
+[[window_rule]]
+match.app_id = "^gcr-prompter$"
+default_floating = true
+default_position = { x = 0, y = 12, anchor = "top" }
+
+# ---- Layer rules ---------------------------------------------------------------
+# Noctalia's surfaces without blur behind them: they draw their own background.
+[[layer_rule]]
+match.namespace = "^noctalia"
+blur = false
+
+# ---- Keybinds -------------------------------------------------------------------
+# Umbriel's own set (Mod is Super), the terminal changed to Ptyxis, with
+# Lucciola's additions below. Umbriel's starting configuration
+# (/usr/share/umbriel/config.toml) is not read while this one is, so every
+# bind is listed here. A bind in ~/.config/umbriel/lucciola.toml adds to
+# these or replaces the one on the same keys (tables merge by key).
+[keybinds]
+
+# Applications and session
+"Mod+Return" = { action = "spawn ptyxis --new-window", repeat = false }
+"Mod" = "spawn noctalia msg panel-toggle launcher"
+"Mod+Q" = { action = "window-close", repeat = false }
+"Mod+Escape" = { action = "spawn noctalia msg panel-toggle session", repeat = false }
+"Mod+Shift+Escape" = { action = "shortcuts-inhibit-toggle", allow_when_inhibited = true, repeat = false }
+
+# Media, volume and brightness keys from any input device, routed through the
+# Noctalia shell so its OSDs show. Safe while the session is locked.
+# https://docs.noctalia.dev/noctalia/compositor-settings/umbriel
+"XF86AudioRaiseVolume" = { action = "spawn noctalia msg volume-up", allow_when_locked = true }
+"XF86AudioLowerVolume" = { action = "spawn noctalia msg volume-down", allow_when_locked = true }
+"XF86AudioMute" = { action = "spawn noctalia msg volume-mute", allow_when_locked = true, repeat = false }
+"XF86AudioPlay" = { action = "spawn noctalia msg media toggle", allow_when_locked = true, repeat = false }
+"XF86AudioNext" = { action = "spawn noctalia msg media next", allow_when_locked = true }
+"XF86AudioPrev" = { action = "spawn noctalia msg media previous", allow_when_locked = true }
+"XF86MonBrightnessUp" = { action = "spawn noctalia msg brightness-up", allow_when_locked = true }
+"XF86MonBrightnessDown" = { action = "spawn noctalia msg brightness-down", allow_when_locked = true }
+
+# Focus and movement
+"Mod+Left" = "window-focus-left"
+"Mod+Down" = "window-focus-down"
+"Mod+Up" = "window-focus-up"
+"Mod+Right" = "window-focus-right"
+"Mod+H" = "window-focus-left"
+"Mod+J" = "window-focus-down"
+"Mod+K" = "window-focus-up"
+"Mod+L" = "window-focus-right"
+"Mod+F1" = "window-focus-next"
+"Mod+Shift+Left" = "column-move-left"
+"Mod+Shift+Down" = "window-move-down"
+"Mod+Shift+Up" = "window-move-up"
+"Mod+Shift+Right" = "column-move-right"
+
+# Window state and layout
+"Mod+T" = { action = "window-toggle-floating", repeat = false }
+"Mod+Shift+T" = { action = "window-focus-switch-floating", repeat = false }
+"Mod+P" = { action = "window-toggle-pinned", repeat = false }
+# Super+M widens to the full width, keeping bar, gaps and borders;
+# Super+Ctrl+M fills the screen to its edges (Umbriel's own Super+M).
+"Mod+M" = { action = "window-toggle-maximize", repeat = false }
+"Mod+Ctrl+M" = { action = "window-toggle-maximize-to-edges", repeat = false }
+"Mod+F" = { action = "window-toggle-fullscreen", repeat = false }
+"Mod+Ctrl+F" = { action = "window-toggle-maximize", repeat = false }
+"Mod+R" = "window-cycle-primary-extent"
+"Mod+Shift+R" = "window-cycle-primary-extent-back"
+"Mod+Minus" = "window-modify-primary-extent -0.02"
+"Mod+Equal" = "window-modify-primary-extent +0.02"
+"Mod+Ctrl+Minus" = "window-modify-secondary-extent -0.02"
+"Mod+Ctrl+Equal" = "window-modify-secondary-extent +0.02"
+"Mod+Comma" = "window-consume-left"
+"Mod+Period" = "window-consume-right"
+"Mod+Ctrl+Comma" = "window-consume-from-left"
+"Mod+Ctrl+Period" = "window-consume-from-right"
+# Needs layout.mode = "dwindle".
+# "Mod+Alt+T" = "layout-toggle-split"
+"Mod+W" = { action = "column-toggle-tabbed", repeat = false }
+"Mod+Alt+Right" = "column-focus-tab-next"
+"Mod+Alt+Left" = "column-focus-tab-previous"
+"Mod+WheelUp" = "window-focus-left"
+"Mod+WheelDown" = "window-focus-right"
+"Mod+O" = { action = "overview-toggle", repeat = false }
+
+# Workspaces
+# Move the whole workspace, retaining its name, layout, and windows.
+# "Mod+Ctrl+Page_Down" = "workspace-move-to-output-next"
+# "Mod+Ctrl+Page_Up" = "workspace-move-to-output-previous"
+# "Mod+Ctrl+W" = "workspace-move-to-output current WEB --output DP-1"
+"Mod+1" = "workspace-switch 1"
+"Mod+2" = "workspace-switch 2"
+"Mod+3" = "workspace-switch 3"
+"Mod+4" = "workspace-switch 4"
+"Mod+5" = "workspace-switch 5"
+"Mod+6" = "workspace-switch 6"
+"Mod+7" = "workspace-switch 7"
+"Mod+8" = "workspace-switch 8"
+"Mod+9" = "workspace-switch 9"
+"Mod+Shift+1" = "window-move-to-workspace 1"
+"Mod+Shift+2" = "window-move-to-workspace 2"
+"Mod+Shift+3" = "window-move-to-workspace 3"
+"Mod+Shift+4" = "window-move-to-workspace 4"
+"Mod+Shift+5" = "window-move-to-workspace 5"
+"Mod+Shift+6" = "window-move-to-workspace 6"
+"Mod+Shift+7" = "window-move-to-workspace 7"
+"Mod+Shift+8" = "window-move-to-workspace 8"
+"Mod+Shift+9" = "window-move-to-workspace 9"
+
+# Scratchpad
+"Mod+Shift+Space" = { action = "window-move-to-scratchpad", repeat = false }
+"Mod+S" = "scratchpad-toggle"
+"Mod+Ctrl+Space" = { action = "window-restore-from-scratchpad", repeat = false }
+"Mod+Tab" = "scratchpad-focus-next"
+
+# Added to the native set, which has no key for these (Lucciola's keys).
+# Captures go through Noctalia (folder and name set at login by session-start).
+"Print" = { action = "spawn noctalia msg screenshot-region", repeat = false }
+"Ctrl+Print" = { action = "spawn noctalia msg screenshot-window", repeat = false }
+"Mod+Ctrl+L" = { action = "spawn /usr/libexec/lucciola/lock", allow_when_locked = true, repeat = false }
+
+# Lucciola's keys (2026-11-21): free keys in Umbriel, plus Super+Space
+# for the launcher (the scratchpad moved to Super+S) and Super+Esc for
+# Noctalia's session panel (log out, restart, power off).
+"Mod+Space" = { action = "spawn noctalia msg panel-toggle launcher", repeat = false }
+"Mod+E" = { action = "spawn nautilus --new-window", repeat = false }
+"Mod+Shift+Return" = { action = "spawn flatpak run app.zen_browser.zen", repeat = false }
+"Mod+Ctrl+T" = { action = "spawn ptyxis -- btop", repeat = false }
+"Mod+N" = { action = "spawn noctalia msg panel-toggle control-center", repeat = false }
+"Mod+V" = { action = "spawn noctalia msg panel-toggle clipboard", repeat = false }
+"Alt+Tab" = { action = "spawn noctalia msg window-switcher hold", repeat = false }
+"Mod+Shift+H" = { action = "cheatsheet-toggle", repeat = false }
+"Mod+Shift+C" = { action = "spawn /usr/libexec/lucciola/color-calibration --toggle", repeat = false }
+"XF86AudioMicMute" = { action = "spawn wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle", allow_when_locked = true, repeat = false }
+"Shift+Print" = { action = "spawn flatpak run be.alexandervanhee.gradia --screenshot=INTERACTIVE", repeat = false }
+"Mod+Shift+P" = { action = "spawn noctalia msg screenshot-region", repeat = false }
+"Mod+Shift+W" = { action = "spawn noctalia msg screenshot-window", repeat = false }
+"Mod+Shift+A" = { action = "spawn flatpak run be.alexandervanhee.gradia --screenshot=INTERACTIVE", repeat = false }
+"Mod+Home" = "column-focus-first"
+"Mod+End" = "column-focus-last"
+# Vim-like, one level up from Super+J/K (windows in the column): workspaces.
+"Mod+Ctrl+J" = "workspace-next"
+"Mod+Ctrl+K" = "workspace-previous"

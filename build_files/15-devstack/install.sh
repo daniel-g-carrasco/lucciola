@@ -100,7 +100,7 @@ DECLARED_PKGS=(
   # Koofr Desktop's GUI used it, and Spola replaced Koofr Desktop.
   jetbrains-mono-fonts cascadia-code-fonts # fonts
   tmux                                     # core_cli (the base ships it)
-  btop                                     # Lucciola's system monitor: Mod+Ctrl+T in the niri config
+  btop                                     # Lucciola's system monitor: Mod+Ctrl+T in the Umbriel config
   # zenity: Noctalia, distrobox-export and gnome-session call it, and the
   # validator's desktop list expects it. silverblue-main lacks it; until
   # 2026-10-18 it was in the image only as a dependency of steam left behind

@@ -74,7 +74,7 @@ HINTS="{'image-path': <'${ICON}'>, 'urgency': <byte ${URGENCY}>"
 HINTS+="}"
 
 # Under GNOME the shell owns the name before the session's services start.
-# Under niri the daemon is Noctalia, which the compositor spawns, and it comes up
+# Under niri and Umbriel the daemon is Noctalia, which the compositor spawns, and it comes up
 # after them: a notice sent in that gap is refused as "not activatable". Every
 # login notice was lost that way from the move off GNOME until 2026-11-04.
 name_owned() {

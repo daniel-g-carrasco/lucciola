@@ -230,7 +230,7 @@ if [[ -n "$BOOT_OK" ]]; then
     emit "gui=${GUI_RESULT:-none}"
     case "$GUI_RESULT" in
       pass) echo "✓ Layer C GUI probe: PASS" ;;
-      fail) echo "::warning::Layer C GUI probe FAILED: login or Lucciola session unhealthy (greetd login/keyring/niri/Noctalia/notifications/portal/coredump). See the MARGINE-GREETD lines above and the serial log artifact. This will become gating." ;;
+      fail) echo "::warning::Layer C GUI probe FAILED: login or Lucciola session unhealthy (greetd login/keyring/Umbriel/Noctalia/notifications/portal/coredump). See the MARGINE-GREETD lines above and the serial log artifact. This will become gating." ;;
       *)    echo "::warning::Layer C GUI probe gave no verdict (injection skipped or probe stuck) — see inject step + serial log." ;;
     esac
 

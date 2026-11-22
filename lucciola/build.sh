@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Lucciola image build: runs once inside the main Containerfile, after every
-# Margine step (build_files/) and before 99-cleanup.sh. Adds niri and Noctalia
+# Margine step (build_files/) and before 99-cleanup.sh. Adds Umbriel (built
+# from a pinned commit by the Containerfile's umbriel-rpm stage) and Noctalia
 # from the official Fedora repositories, makes "Lucciola" the session and the
 # system name, puts greetd with Noctalia Greeter in place of GDM as the login
 # screen (step 5), and checks the result.
@@ -28,15 +29,18 @@ err() { echo "[lucciola-build] ERROR: $*" >&2; }
 : "${NOCTALIA_VR:?NOCTALIA_VR must be set (the pinned noctalia version-release)}"
 : "${NOCTALIA_GREETER_VERSION:?NOCTALIA_GREETER_VERSION must be set (the Noctalia Greeter tag the greeter-rpm stage built)}"
 : "${LUMINOUS_VERSION:?LUMINOUS_VERSION must be set (the xdg-desktop-portal-luminous tag the luminous-rpm stage built)}"
+: "${UMBRIEL_COMMIT:?UMBRIEL_COMMIT must be set (the umbriel commit the umbriel-rpm stage built)}"
 # The Fedora tag comes from the base, so the pin holds across a Fedora
 # release: the same version-release, built for the release underneath.
 noctalia_vr="${NOCTALIA_VR}.fc${FEDORA_VER}"
 
-# 1. Packages. Weak dependencies off: niri's package recommends waybar,
-#    fuzzel, alacritty and swaylock, a second bar, launcher, terminal and
-#    locker next to Noctalia, which owns those jobs. Its other recommendations
-#    are covered by the Margine image: wireplumber, the GNOME/GTK portals, and
-#    gnome-keyring, whose job (the Secret Service) oo7 does from Fedora 45.
+# 1. Packages. Umbriel and its portal backend come from the umbriel-rpm
+#    stage (pinned commits, Lucciola's colour patches; see the spec), their
+#    dependencies from Fedora; Xwayland, which Umbriel starts on demand for
+#    X11 applications, comes with them. Weak dependencies off: nothing else
+#    should come along next to Noctalia, which owns the bar, launcher,
+#    notifications and lock screen; the Margine image covers the rest
+#    (wireplumber, the GNOME/GTK portals, oo7 for the Secret Service).
 #    Noctalia is pinned: upstream supports only its latest release and Fedora
 #    ships every one within a day, so a new version arrives only through a
 #    reviewed change of NOCTALIA_VR, never by itself. The other side of the
@@ -56,9 +60,15 @@ noctalia_vr="${NOCTALIA_VR}.fc${FEDORA_VER}"
 #    does not carry it). The Fedora package brings the udev rule that
 #    opens /dev/i2c-* to the logged-in user and the modules-load entry
 #    for i2c-dev.
-log "installing niri, xwayland-satellite, noctalia-${noctalia_vr}, ddcutil, dbus-tools"
+shopt -s nullglob
+umbriel_rpms=(/ctx/umbriel-rpm/umbriel-0.1.0-*.git"${UMBRIEL_COMMIT:0:12}".*.rpm
+              /ctx/umbriel-rpm/xdg-desktop-portal-umbriel-0.1.0-*.rpm)
+shopt -u nullglob
+(( ${#umbriel_rpms[@]} == 2 )) \
+  || { echo "ERROR: expected the umbriel (${UMBRIEL_COMMIT:0:12}) and xdg-desktop-portal-umbriel RPMs in /ctx/umbriel-rpm, found ${#umbriel_rpms[@]}" >&2; exit 1; }
+log "installing ${umbriel_rpms[*]##*/}, noctalia-${noctalia_vr}, ddcutil, dbus-tools"
 dnf_install_pinned noctalia "$noctalia_vr" "$(rpm -E %_arch)" \
-  --setopt=install_weak_deps=False niri xwayland-satellite ddcutil dbus-tools
+  --setopt=install_weak_deps=False "${umbriel_rpms[@]}" ddcutil dbus-tools
 installed_vr="$(rpm -q --qf '%{VERSION}-%{RELEASE}\n' noctalia)"
 [[ "$installed_vr" == "$noctalia_vr" ]] \
   || { echo "ERROR: noctalia is ${installed_vr}, not the pinned ${noctalia_vr}" >&2; exit 1; }
@@ -73,47 +83,25 @@ for p in waybar mako fuzzel alacritty swaylock; do
 done
 
 # 2. Session. The login screen lists wayland-sessions/*.desktop by their
-#    Name=; Lucciola replaces the plain "Niri" entry with its own (same
-#    niri-session underneath), so the login screen offers "Lucciola" next to
-#    GNOME.
-src=/usr/share/wayland-sessions/niri.desktop
-[[ -f "$src" ]] || { echo "ERROR: $src missing: niri package layout changed" >&2; exit 1; }
-grep -q '^Exec=niri-session' "$src" || { echo "ERROR: niri.desktop no longer runs niri-session" >&2; exit 1; }
+#    Name=; Lucciola replaces the plain "Umbriel" entry with its own (same
+#    start-umbriel underneath), so the login screen offers "Lucciola" next to
+#    GNOME. DesktopNames stays Umbriel: XDG_CURRENT_DESKTOP picks the
+#    portals (umbriel-portals.conf) and Umbriel's own UseIn= files.
+#    start-umbriel hands the session's environment to the user manager by
+#    name (no blanket import-environment, so no systemd 258 warning on the
+#    login screen's terminal, which niri-session gave), then runs
+#    umbriel.service.
+src=/usr/share/wayland-sessions/umbriel.desktop
+[[ -f "$src" ]] || { echo "ERROR: $src missing: umbriel package layout changed" >&2; exit 1; }
+grep -q '^Exec=start-umbriel$' "$src" || { echo "ERROR: umbriel.desktop no longer runs start-umbriel" >&2; exit 1; }
+grep -q '^DesktopNames=Umbriel$' "$src" || { echo "ERROR: umbriel.desktop no longer says DesktopNames=Umbriel (portals)" >&2; exit 1; }
 sed -e 's/^Name=.*/Name=Lucciola/' \
-    -e 's/^Comment=.*/Comment=Lucciola: niri with the Noctalia shell/' \
+    -e 's/^Comment=.*/Comment=Lucciola: Umbriel with the Noctalia shell/' \
     "$src" > /usr/share/wayland-sessions/lucciola.desktop
 rm -f "$src"
 log "session entry: $(grep -E '^(Name|Exec|DesktopNames)=' /usr/share/wayland-sessions/lucciola.desktop | tr '\n' ' ')"
-
-# 2a. niri-session hands the session's environment to the user manager with
-#     a blanket `systemctl --user import-environment`, which systemd 258+
-#     answers with "Calling import-environment without a list of variable
-#     names is deprecated" on the login screen's terminal, in red, at every
-#     login. Upstream niri (resources/niri-session) now does it through
-#     dbus-update-activation-environment --systemd --all, which sets the
-#     variables for D-Bus activation and the user manager in one go, with
-#     no warning; Fedora's niri 26.04-2 still ships the old sequence. The
-#     tool comes with dbus-tools (installed above). Patched by content, so
-#     a niri package that already carries upstream's shape passes untouched.
-ns=/usr/bin/niri-session
-if ! grep -q 'dbus-update-activation-environment --systemd --all' "$ns"; then
-  python3 - "$ns" <<'PY'
-import sys
-p = sys.argv[1]; s = open(p).read()
-blanket = "    systemctl --user import-environment\n"
-dbus = "        dbus-update-activation-environment --all\n"
-if s.count(blanket) != 1 or s.count(dbus) != 1:
-    sys.exit("niri-session: not the import-environment sequence this patch knows")
-s = s.replace(blanket, "    if ! hash dbus-update-activation-environment 2>/dev/null; then\n    " + blanket + "    fi\n")
-s = s.replace(dbus, "        dbus-update-activation-environment --systemd --all\n")
-open(p, "w").write(s)
-PY
-fi
-grep -q 'dbus-update-activation-environment --systemd --all' "$ns" \
-  || { echo "ERROR: niri-session does not hand the environment over through dbus-update-activation-environment" >&2; exit 1; }
 [[ -x /usr/bin/dbus-update-activation-environment ]] \
-  || { echo "ERROR: dbus-update-activation-environment missing (dbus-tools)" >&2; exit 1; }
-log "niri-session: environment handed over without the import-environment warning"
+  || { echo "ERROR: dbus-update-activation-environment missing (dbus-tools): start-umbriel uses it for D-Bus activation" >&2; exit 1; }
 
 # 2b. GNOME stays stock. Lucciola keeps GNOME as a fallback session only,
 #     and stock: no Shell extension besides the GNOME Classic set Fedora's
@@ -197,9 +185,9 @@ grep -qx 'LOGO=lucciola-logo' /usr/lib/os-release || { echo "ERROR: os-release L
 [[ -s /usr/share/icons/hicolor/scalable/apps/lucciola-logo.svg ]] \
   || { echo "ERROR: os-release names lucciola-logo, but the icon is not installed (50-branding)" >&2; exit 1; }
 
-# 4. Checks: the shipped niri config must parse (includes resolved), and the
-#    helpers must be there and executable.
-niri validate -c /etc/niri/config.kdl
+# 4. Checks: the shipped Umbriel config must load (includes resolved; no
+#    session needed), and the helpers must be there and executable.
+umbriel config validate -c /etc/xdg/umbriel/config.toml
 # Noctalia's own validator; it only warns on bad values, so any warning fails.
 out="$(noctalia config validate /usr/share/lucciola/noctalia/ 2>&1)" || { echo "$out" >&2; exit 1; }
 if grep -q WARN <<<"$out"; then echo "$out" >&2; echo "ERROR: Noctalia defaults have warnings" >&2; exit 1; fi
@@ -230,10 +218,10 @@ done
 for f in /usr/libexec/lucciola/{bar-widths,color-calibration}; do
   python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read(), sys.argv[1])' "$f"
 done
-rpm -q niri noctalia xwayland-satellite
+rpm -q umbriel xdg-desktop-portal-umbriel noctalia
 
 # 5. Login screen: greetd running Noctalia Greeter, in place of GDM.
-#    GDM drew a GNOME login screen in front of a niri desktop; Noctalia
+#    GDM drew a GNOME login screen in front of a Noctalia desktop; Noctalia
 #    Greeter has the Noctalia look and offers the same sessions. GDM stays
 #    installed, disabled: it is the fallback greetd.service starts when the
 #    greeter cannot come up (greetd.service.d/50-lucciola.conf), the GNOME
@@ -337,20 +325,24 @@ grep -q '^-\?session.*pam_systemd\.so' /etc/pam.d/system-auth \
 [[ ! -e /etc/pam.d/greetd && ! -e /etc/pam.d/greetd-greeter ]] \
   || { echo "ERROR: an /etc/pam.d copy of greetd's PAM files would shadow Fedora's" >&2; exit 1; }
 log "greetd PAM stack: $(grep -cvE '^[[:space:]]*(#|$)' /usr/lib/pam.d/greetd) lines, pam_oo7 in auth/password/session"
-# The Secret portal in niri sessions must reach oo7 (Flatpak apps' keyrings):
-# niri's own portals.conf names gnome-keyring, gone in Fedora 45.
-grep -qx 'org.freedesktop.impl.portal.Secret=oo7-portal;' /etc/xdg-desktop-portal/niri-portals.conf \
+# The Secret portal in the Lucciola session must reach oo7 (Flatpak apps'
+# keyrings): Fedora 45 has no gnome-keyring.
+grep -qx 'org.freedesktop.impl.portal.Secret=oo7-portal;' /etc/xdg-desktop-portal/umbriel-portals.conf \
   && [[ -f /usr/share/xdg-desktop-portal/portals/oo7-portal.portal ]] \
-  || { echo "ERROR: niri sessions would have no Secret portal (oo7-portal)" >&2; exit 1; }
-# "Set as Background" in niri sessions goes to Lucciola's own Wallpaper
+  || { echo "ERROR: the Lucciola session would have no Secret portal (oo7-portal)" >&2; exit 1; }
+# Screen sharing, screenshots and global shortcuts go to Umbriel's backend.
+grep -qx 'default=umbriel;gnome;gtk;' /etc/xdg-desktop-portal/umbriel-portals.conf \
+  && grep -q 'org.freedesktop.impl.portal.ScreenCast' /usr/share/xdg-desktop-portal/portals/umbriel.portal \
+  || { echo "ERROR: the Lucciola session would not share the screen through Umbriel's portal" >&2; exit 1; }
+# "Set as Background" in the Lucciola session goes to Lucciola's own Wallpaper
 # backend, which hands the picture to Noctalia (GNOME's sets a GNOME Shell
 # setting, and nothing happened).
-grep -qx 'org.freedesktop.impl.portal.Wallpaper=lucciola;' /etc/xdg-desktop-portal/niri-portals.conf \
+grep -qx 'org.freedesktop.impl.portal.Wallpaper=lucciola;' /etc/xdg-desktop-portal/umbriel-portals.conf \
   && [[ -x /usr/libexec/lucciola/wallpaper-portal ]] \
   && [[ -f /usr/share/xdg-desktop-portal/portals/lucciola.portal ]] \
   && [[ -f /usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.lucciola.service ]] \
   && python3 -c 'import gi; gi.require_version("Gio", "2.0")' \
-  || { echo "ERROR: niri sessions would have no working Wallpaper portal" >&2; exit 1; }
+  || { echo "ERROR: the Lucciola session would have no working Wallpaper portal" >&2; exit 1; }
 
 # 5d. greetd's configuration (the template says what each line is for). The
 #     package's own file is %config(noreplace); written over here, in the
@@ -430,22 +422,21 @@ grep -qx 'OnFailure=gdm.service' /usr/lib/systemd/system/greetd.service.d/50-luc
 grep -q '^After=.*plymouth-quit-wait\.service' /usr/lib/systemd/system/greetd.service \
   || { echo "ERROR: greetd.service no longer waits for Plymouth to quit" >&2; exit 1; }
 
-# 5g. Mouse and keyboard from the phone: the RemoteDesktop portal under niri.
+# 5g. Mouse and keyboard from the phone: the RemoteDesktop portal.
 #     KDE Connect's remote input, and anything else that moves the pointer
 #     or types through the portal, asks org.freedesktop.portal.RemoteDesktop;
-#     the GNOME backend serves it only on Mutter's D-Bus, which niri does not
-#     implement, so under niri it offered no device (AvailableDeviceTypes 0).
-#     xdg-desktop-portal-luminous, built from its pinned tag by the
-#     Containerfile's luminous-rpm stage, serves it through niri's virtual
-#     pointer and keyboard protocols; niri-portals.conf sends RemoteDesktop,
-#     and only that, to it (AvailableDeviceTypes 7, checked on a laptop on
-#     2026-10-23: the phone's keyboard typed on the laptop). D-Bus starts it
-#     on demand through its user unit.
+#     the GNOME backend serves it only on Mutter's D-Bus, and Umbriel's
+#     backend does not offer it. xdg-desktop-portal-luminous, built from its
+#     pinned tag by the Containerfile's luminous-rpm stage, serves it through
+#     the virtual pointer and keyboard protocols Umbriel offers (as niri did:
+#     AvailableDeviceTypes 7, checked under niri on 2026-10-23);
+#     umbriel-portals.conf sends RemoteDesktop, and only that, to it. D-Bus
+#     starts it on demand through its user unit.
 shopt -s nullglob
 luminous_rpms=(/ctx/luminous-rpm/xdg-desktop-portal-luminous-"${LUMINOUS_VERSION}"-*.rpm)
 shopt -u nullglob
 (( ${#luminous_rpms[@]} == 1 )) || { echo "ERROR: expected one xdg-desktop-portal-luminous-${LUMINOUS_VERSION} RPM in /ctx/luminous-rpm, found ${#luminous_rpms[@]}" >&2; exit 1; }
-log "installing ${luminous_rpms[0]##*/} (RemoteDesktop portal for niri)"
+log "installing ${luminous_rpms[0]##*/} (RemoteDesktop portal)"
 dnf5 -y --setopt=install_weak_deps=False install "${luminous_rpms[0]}"
 for f in /usr/libexec/xdg-desktop-portal-luminous /usr/share/xdg-desktop-portal/portals/luminous.portal \
          /usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.luminous.service \
@@ -454,15 +445,15 @@ for f in /usr/libexec/xdg-desktop-portal-luminous /usr/share/xdg-desktop-portal/
 done
 grep -q 'RemoteDesktop' /usr/share/xdg-desktop-portal/portals/luminous.portal \
   || { echo "ERROR: luminous.portal no longer lists RemoteDesktop" >&2; exit 1; }
-grep -qx 'org.freedesktop.impl.portal.RemoteDesktop=luminous;' /etc/xdg-desktop-portal/niri-portals.conf \
-  || { echo "ERROR: niri-portals.conf does not send RemoteDesktop to luminous" >&2; exit 1; }
-log "remote desktop under niri: $(rpm -q xdg-desktop-portal-luminous)"
+grep -qx 'org.freedesktop.impl.portal.RemoteDesktop=luminous;' /etc/xdg-desktop-portal/umbriel-portals.conf \
+  || { echo "ERROR: umbriel-portals.conf does not send RemoteDesktop to luminous" >&2; exit 1; }
+log "remote desktop: $(rpm -q xdg-desktop-portal-luminous)"
 
 # An SSH agent in every session: GNOME's gcr-ssh-agent, socket-activated
 # for all users. It offers the keys in ~/.ssh, asks a passphrase in a dialog
 # the first time a key is used and can keep it in the keyring (oo7, open
 # since the login). The socket unit sets SSH_AUTH_SOCK in the user manager,
-# so niri (a user service) and everything it starts see it. Without an agent
+# so Umbriel (a user service) and everything it starts see it. Without an agent
 # a passphrase is asked at every connection, and keys stay unprotected on
 # disk (2026-10-20).
 systemctl --global enable gcr-ssh-agent.socket

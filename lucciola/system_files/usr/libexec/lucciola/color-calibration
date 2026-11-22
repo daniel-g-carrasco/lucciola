@@ -1,15 +1,17 @@
 #!/usr/bin/python3
-"""Lucciola: load display calibration curves (ICC vcgt) into niri.
+"""Lucciola: load display calibration curves (ICC vcgt) into the compositor.
 
 GNOME loads the calibration of a profiled screen (the vcgt curves that
 GNOME's calibration, DisplayCAL or ArgyllCMS write into the ICC profile)
-into the display hardware. niri has no colour management yet, so under
-Lucciola the curves were simply dropped. This helper puts them back through
-wlr-gamma-control, the protocol niri offers for gamma ramps.
+into the display hardware. This helper does the same in the Lucciola session
+through wlr-gamma-control, the protocol Umbriel offers for gamma ramps (and
+niri before it).
 
-What comes back is the calibration: white point and grey balance. Full
-profile conversions stay the job of colour-managed applications (darktable,
-GIMP), which can be pointed at the same profile.
+What comes back is the calibration: white point and grey balance. The
+conversion of the whole screen to the panel's profile is Umbriel's job when
+a color_profile is set for the screen; otherwise it stays with
+colour-managed applications (darktable, GIMP), which can be pointed at the
+same profile.
 
 Profiles come from ~/.local/share/icc, where GNOME Settings keeps them. Each
 screen gets the newest profile with calibration curves whose device or

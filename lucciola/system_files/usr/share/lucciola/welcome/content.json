@@ -17,13 +17,13 @@
           "rows": [
             {"keys": [["Super", "Space"]], "label": "open an app"},
             {"keys": [["Super", "Return"]], "label": "terminal"},
-            {"keys": [["Super", "W"]], "label": "close the window"},
+            {"keys": [["Super", "Q"]], "label": "close the window"},
             {"keys": [["Super", "H"], ["Super", "L"]], "label": "the column on the left, on the right"},
-            {"keys": [["Super", "←"], ["Super", "→"]], "label": "move the column left, right"},
-            {"keys": [["Super", "Ctrl", "R"]], "label": "column width: a third, half, two thirds"},
-            {"keys": [["Super", "F"]], "label": "maximize; Super Ctrl F for full screen"},
+            {"keys": [["Super", "Shift", "←"], ["Super", "Shift", "→"]], "label": "move the column left, right"},
+            {"keys": [["Super", "R"]], "label": "column width: a third, half, two thirds"},
+            {"keys": [["Super", "M"]], "label": "full width; Super F for full screen"},
             {"keys": [["Super", "1"], ["Super", "2"]], "label": "workspace one, two"},
-            {"keys": [["Super", "Shift", "Space"]], "label": "overview"},
+            {"keys": [["Super", "O"]], "label": "overview"},
             {"keys": [["Print"]], "label": "screenshot; Ctrl Print takes the window"},
             {"keys": [["Super", "Ctrl", "L"]], "label": "lock the screen"},
             {"keys": [["Super", "Escape"]], "label": "log out, restart, power off"},
@@ -65,6 +65,23 @@
         {
           "type": "text",
           "text": "On the first start the apps that come with Lucciola download in the background, so some may be missing for a few minutes. GIMP, Inkscape, darktable and OBS Studio are the largest and arrive last.",
+          "dim": true
+        }
+      ]
+    },
+    {
+      "id": "app-set",
+      "title": "how many apps",
+      "show_if": "apps-stock",
+      "blocks": [
+        {
+          "type": "text",
+          "text": "Lucciola comes with a complete set of apps, the creative ones included. For a lighter system, the slim set leaves out the largest (GIMP, Inkscape, darktable, OBS Studio) and the tinkerer apps; the browser, mail, office and the everyday apps stay."
+        },
+        {"type": "button", "action": "apps-slim", "label": "Use the slim set", "style": "plain"},
+        {
+          "type": "text",
+          "text": "To keep everything, do nothing. Lucciola System, on its Apps page, changes this any time.",
           "dim": true
         }
       ]
