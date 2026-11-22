@@ -195,6 +195,7 @@ want = {"Print": "spawn noctalia msg screenshot-region --annotate", "Mod+Shift+A
 bad = [f"{key}: {act(key) if key in k else 'unbound'}" for key, a in want.items() if key not in k or act(key) != a]
 sys.exit("; ".join(bad) if bad else 0)
 PY
+check "the validator (set -u) reads XDG_CURRENT_DESKTOP only with a default: the smoke boot runs it without one" bash -c "! grep -nE '\\\$\\{XDG_CURRENT_DESKTOP(,,|\\})' '$ROOT/build_files/40-spec-scripts/scripts/validate-margine-system'"
 check "umbriel: no path of a personal folder in the shipped configuration" bash -c "! grep -qE '/var/home|/home/|lucciola-personal' '$UMB'"
 check "session-start no longer seeds named workspaces" bash -c "! grep -qE '^workspace \"[12]\"' '$ROOT/lucciola/system_files/usr/libexec/lucciola/session-start'"
 check "the Desktop folder is not the home (Flatpak would share the whole home)" grep -q 'DESKTOP: "\$HOME/scratch/desktop"' "$ROOT/build_files/40-spec-scripts/declarations/margine-atomic.yaml"

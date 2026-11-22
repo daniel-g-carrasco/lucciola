@@ -600,7 +600,7 @@ else
   rpm -q xdg-desktop-portal-luminous >/dev/null 2>&1 && ok "xdg-desktop-portal-luminous installed" || bad "xdg-desktop-portal-luminous missing"
   grep -qx 'org.freedesktop.impl.portal.RemoteDesktop=luminous;' /etc/xdg-desktop-portal/umbriel-portals.conf 2>/dev/null \
     && ok "umbriel-portals.conf sends RemoteDesktop to luminous" || bad "umbriel-portals.conf does not send RemoteDesktop to luminous"
-  if (( IS_LIVE )) && [[ "${XDG_CURRENT_DESKTOP,,}" == umbriel ]] && command -v busctl >/dev/null; then
+  if (( IS_LIVE )) && [[ "$(tr "[:upper:]" "[:lower:]" <<<"${XDG_CURRENT_DESKTOP:-}")" == umbriel ]] && command -v busctl >/dev/null; then
     dev="$(busctl --user get-property org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop org.freedesktop.portal.RemoteDesktop AvailableDeviceTypes 2>/dev/null | awk '{print $2}')"
     [[ "$dev" == 7 ]] && ok "the RemoteDesktop portal offers keyboard, pointer and touch" || warn "the RemoteDesktop portal offers device types '${dev:-none}' (7 expected; a user portals.conf in ~/.config may differ)"
   fi
@@ -625,7 +625,7 @@ else
   else
     bad "/usr/share/applications/umbriel-mimeapps.list is not a link to gnome-mimeapps.list: folders open in the first registered app"
   fi
-  if (( IS_LIVE )) && [[ "${XDG_CURRENT_DESKTOP,,}" == umbriel ]]; then
+  if (( IS_LIVE )) && [[ "$(tr "[:upper:]" "[:lower:]" <<<"${XDG_CURRENT_DESKTOP:-}")" == umbriel ]]; then
     h="$(gio mime inode/directory 2>/dev/null | sed -n 's/.*: //p' | head -1)"
     [[ "$h" == org.gnome.Nautilus.desktop ]] && ok "a folder opens in Files under Umbriel" || warn "a folder opens in '${h:-nothing}' under Umbriel (a user override in ~/.config/mimeapps.list?)"
   fi
