@@ -371,8 +371,17 @@ as_user busctl --user --timeout=10 call org.freedesktop.Notifications /org/freed
 # a notification went through, and Noctalia's own history must hold it.
 NOTICE_STATE="$SMOKE_HOME/.local/state/margine/last-booted-digest"
 NOTICE_HISTORY="$SMOKE_HOME/.local/state/noctalia/notification_history.json"
+# Noctalia 5.6 keeps the history encrypted (notification_history.enc), with
+# no command to read it: there, a history written since the password login
+# is what can be checked. The state above moves only after the notice went
+# through to Noctalia, so the two together still say it arrived.
+NOTICE_HISTORY_ENC="$SMOKE_HOME/.local/state/noctalia/notification_history.enc"
 notice_moved() { [[ -s "$NOTICE_STATE" && "$(cat "$NOTICE_STATE" 2>/dev/null)" != sha256:smoke-previous-image ]]; }
-notice_held() { grep -q 'Update applied' "$NOTICE_HISTORY" 2>/dev/null; }
+notice_held() {
+  grep -q 'Update applied' "$NOTICE_HISTORY" 2>/dev/null && return 0
+  [[ -s "$NOTICE_HISTORY_ENC" ]] || return 1
+  [[ -z "$LOGIN_SINCE" ]] || (( $(stat -c %Y "$NOTICE_HISTORY_ENC") >= LOGIN_SINCE ))
+}
 notice_log() {
   journalctl -b -q --no-pager -o cat _UID="$SMOKE_UID" _SYSTEMD_USER_UNIT=margine-upgrade-notify.service 2>/dev/null \
     | tail -n 3 | tr '\n' ' ' | cut -c1-240
