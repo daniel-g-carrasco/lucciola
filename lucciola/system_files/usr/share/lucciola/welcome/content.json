@@ -24,7 +24,10 @@
             {"keys": [["Super", "M"]], "label": "full width; Super F for full screen"},
             {"keys": [["Super", "1"], ["Super", "2"]], "label": "workspace one, two"},
             {"keys": [["Super", "O"]], "label": "overview"},
-            {"keys": [["Print"]], "label": "screenshot; Ctrl Print takes the window"},
+            {
+              "keys": [["Print"]],
+              "label": "screenshot with the editor's tools; Shift Print saves it at once, Ctrl Print takes the window"
+            },
             {"keys": [["Super", "Ctrl", "L"]], "label": "lock the screen"},
             {"keys": [["Super", "Escape"]], "label": "log out, restart, power off"},
             {"keys": [["Super", "Shift", "H"]], "label": "every shortcut"}

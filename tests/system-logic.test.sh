@@ -185,6 +185,16 @@ for section in json.load(open(sys.argv[1]))["sections"]:
                     missing.append(key)
 sys.exit("not bound: " + ", ".join(missing) if missing else 0)
 PY
+check "umbriel: Print and Super+Shift+A annotate an area, Shift+Print and Super+Shift+P save it at once, Ctrl+Print and Super+Shift+W take the window" python3 - "$UMB" <<'PY'
+import sys, tomllib
+k = tomllib.load(open(sys.argv[1], "rb"))["keybinds"]
+act = lambda key: (k[key]["action"] if isinstance(k[key], dict) else k[key])
+want = {"Print": "spawn noctalia msg screenshot-region --annotate", "Mod+Shift+A": "spawn noctalia msg screenshot-region --annotate",
+        "Shift+Print": "spawn noctalia msg screenshot-region", "Mod+Shift+P": "spawn noctalia msg screenshot-region",
+        "Ctrl+Print": "spawn noctalia msg screenshot-window", "Mod+Shift+W": "spawn noctalia msg screenshot-window"}
+bad = [f"{key}: {act(key) if key in k else 'unbound'}" for key, a in want.items() if key not in k or act(key) != a]
+sys.exit("; ".join(bad) if bad else 0)
+PY
 check "umbriel: no path of a personal folder in the shipped configuration" bash -c "! grep -qE '/var/home|/home/|lucciola-personal' '$UMB'"
 check "session-start no longer seeds named workspaces" bash -c "! grep -qE '^workspace \"[12]\"' '$ROOT/lucciola/system_files/usr/libexec/lucciola/session-start'"
 check "the Desktop folder is not the home (Flatpak would share the whole home)" grep -q 'DESKTOP: "\$HOME/scratch/desktop"' "$ROOT/build_files/40-spec-scripts/declarations/margine-atomic.yaml"

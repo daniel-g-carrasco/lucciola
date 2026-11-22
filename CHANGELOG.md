@@ -25,6 +25,10 @@ stable release is cut.
   monitors, the lock screen's arrangement and Log Out follow Umbriel; every
   screen keeps its own workspaces. Screenshots keep GNOME's folder and
   names, now through Noctalia.
+- **Print annotates:** pick an area and Noctalia's editor opens on it, its
+  tools over the screen (arrows, text, blur, numbers, crop, a backdrop),
+  to copy or save. Shift+Print saves and copies the area at once, Ctrl+Print takes the
+  window (Super+Shift+A, P and W on keyboards without Print).
 
 ### Changed (2026-11-21, Noctalia 5.6.0, login screen 1.7.1)
 - **Noctalia 5.6.0** (from 5.5.0): a font scale for all of the shell's

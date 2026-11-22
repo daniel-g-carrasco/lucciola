@@ -218,8 +218,13 @@ blur = false
 "Mod+Tab" = "scratchpad-focus-next"
 
 # Added to the native set, which has no key for these (Lucciola's keys).
-# Captures go through Noctalia (folder and name set at login by session-start).
-"Print" = { action = "spawn noctalia msg screenshot-region", repeat = false }
+# Screenshots, taken by Noctalia (folder and name set at login by
+# session-start). Print: pick an area, then Noctalia's editor opens on it,
+# its tools over the screen (arrows, text, blur, numbers, crop, a backdrop),
+# to copy or save. Shift+Print: the area saved and copied at once, no
+# editor. Ctrl+Print: the focused window.
+"Print" = { action = "spawn noctalia msg screenshot-region --annotate", repeat = false }
+"Shift+Print" = { action = "spawn noctalia msg screenshot-region", repeat = false }
 "Ctrl+Print" = { action = "spawn noctalia msg screenshot-window", repeat = false }
 "Mod+Ctrl+L" = { action = "spawn /usr/libexec/lucciola/lock", allow_when_locked = true, repeat = false }
 
@@ -236,10 +241,11 @@ blur = false
 "Mod+Shift+H" = { action = "cheatsheet-toggle", repeat = false }
 "Mod+Shift+C" = { action = "spawn /usr/libexec/lucciola/color-calibration --toggle", repeat = false }
 "XF86AudioMicMute" = { action = "spawn wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle", allow_when_locked = true, repeat = false }
-"Shift+Print" = { action = "spawn flatpak run be.alexandervanhee.gradia --screenshot=INTERACTIVE", repeat = false }
+# The same three for keyboards without Print: A annotates, P is the plain
+# area, W the window.
+"Mod+Shift+A" = { action = "spawn noctalia msg screenshot-region --annotate", repeat = false }
 "Mod+Shift+P" = { action = "spawn noctalia msg screenshot-region", repeat = false }
 "Mod+Shift+W" = { action = "spawn noctalia msg screenshot-window", repeat = false }
-"Mod+Shift+A" = { action = "spawn flatpak run be.alexandervanhee.gradia --screenshot=INTERACTIVE", repeat = false }
 "Mod+Home" = "column-focus-first"
 "Mod+End" = "column-focus-last"
 # Vim-like, one level up from Super+J/K (windows in the column): workspaces.
