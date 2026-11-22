@@ -7,6 +7,29 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (2026-11-22, the Lucciola session runs on Umbriel)
+- **The compositor is Umbriel** (in place of niri), with the Noctalia shell
+  on top as before and GNOME still the stock fallback on the login screen.
+  Umbriel comes from the team behind Noctalia: scrolling columns like
+  niri's, colour management that converts the screen to a profiled panel,
+  blur and shadows. It has no releases yet, so the image builds it from a
+  pinned commit, with two colour fixes of Lucciola's (proposed upstream).
+- **Keys:** Umbriel's own, plus Lucciola's for the launcher (Super+Space),
+  files, browser, screenshots and lock. Super+Q closes a window, Super+M
+  widens a column to the full width (Super+Ctrl+M to the screen's edges),
+  Super+O shows the overview. The welcome window and Super+Shift+H list
+  them.
+- **Personal settings** move to `~/.config/umbriel/lucciola.toml`; niri's
+  `~/.config/niri/lucciola.kdl` is no longer read.
+- Ignore External Screens, Keep Awake's lid, the bar width on large
+  monitors, the lock screen's arrangement and Log Out follow Umbriel; every
+  screen keeps its own workspaces. Screenshots keep GNOME's folder and
+  names, now through Noctalia.
+- **Print annotates:** pick an area and Noctalia's editor opens on it, its
+  tools over the screen (arrows, text, blur, numbers, crop, a backdrop),
+  to copy or save. Shift+Print saves and copies the area at once, Ctrl+Print takes the
+  window (Super+Shift+A, P and W on keyboards without Print).
+
 ### Changed (2026-11-21, Noctalia 5.6.0, login screen 1.7.1)
 - **Noctalia 5.6.0** (from 5.5.0): a font scale for all of the shell's
   text, "Screenshot saved" notifications with Open and Show in folder, the

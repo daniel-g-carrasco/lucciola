@@ -5,10 +5,12 @@
 #   laptop-only off          stop, and turn back on the ones it turned off
 #   laptop-only toggle | status [--json]
 #
-# niri has no way to ignore a monitor by rule across docks: a dock's connectors
-# get new names (DP-2, DP-9, DP-13) as it comes and goes. So a transient user unit
-# looks every two seconds and turns off whatever external output is on, and an
-# external screen may light up for that long. Windows stay on the laptop's screen.
+# A rule in Umbriel's configuration cannot follow a dock: its connectors get new
+# names (DP-2, DP-9, DP-13) as it comes and goes. So a transient user unit looks
+# every two seconds and turns off whatever external output is on, through an
+# in-memory override (`umbriel config set output."DP-9".enabled false`, never
+# written to a file), and an external screen may light up for that long. Windows
+# stay on the laptop's screen.
 # UNTIL is anything `date -d` reads. The unit ends with the session, and the outputs
 # with it: at the next login every monitor counts again.
 #
@@ -16,28 +18,29 @@
 # Keep Screen On and that screen.
 set -euo pipefail
 
-# LAPTOP_ONLY_TEST=1 runs on a separate unit; LAPTOP_ONLY_NIRI stands in for niri
-# (tests/laptop-only.test.sh).
+# LAPTOP_ONLY_TEST=1 runs on a separate unit; LAPTOP_ONLY_UMBRIEL stands in for
+# umbriel (tests/laptop-only.test.sh).
 t="${LAPTOP_ONLY_TEST:+-test}"
 unit=lucciola-laptop-only$t.service
-NIRI="${LAPTOP_ONLY_NIRI:-/usr/bin/niri}"
+UMBRIEL="${LAPTOP_ONLY_UMBRIEL:-/usr/bin/umbriel}"
 self="$(readlink -f "$0")"
 state="${XDG_STATE_HOME:-$HOME/.local/state}/lucciola"
 offfile="$state/laptop-only-off$t"
 endfile="$state/laptop-only-until$t"
 
 externals() {  # the external outputs that are on, one per line
-  "$NIRI" msg --json outputs 2>/dev/null | /usr/bin/python3 -c '
+  "$UMBRIEL" outputs --json 2>/dev/null | /usr/bin/python3 -c '
 import json, sys
-for name, output in json.load(sys.stdin).items():
-    if output.get("logical") is not None and not name.startswith(("eDP", "LVDS", "DSI")):
+for output in json.load(sys.stdin):
+    name = output.get("name") or ""
+    if name and output.get("enabled") and not name.startswith(("eDP", "LVDS", "DSI")):
         print(name)' 2>/dev/null || true
 }
 sweep() {  # one pass; every step returns 0: the watcher must outlive a failed call
   local name
   while IFS= read -r name; do
     [[ -n "$name" ]] || continue
-    if "$NIRI" msg output "$name" off >/dev/null 2>&1; then
+    if "$UMBRIEL" config set "output.\"$name\".enabled" false >/dev/null 2>&1; then
       mkdir -p "$state"
       grep -qxF -- "$name" "$offfile" 2>/dev/null || echo "$name" >> "$offfile"
       echo "laptop-only: $name turned off"
@@ -50,7 +53,7 @@ restore() {
   local name
   if [[ -f "$offfile" ]]; then
     while IFS= read -r name; do
-      if [[ -n "$name" ]]; then "$NIRI" msg output "$name" on >/dev/null 2>&1 || true; fi
+      if [[ -n "$name" ]]; then "$UMBRIEL" config unset "output.\"$name\".enabled" >/dev/null 2>&1 || true; fi
     done < "$offfile"
   fi
   rm -f "$offfile" "$endfile"
@@ -72,7 +75,7 @@ on() {
   systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
   mkdir -p "$state"; echo "$end" > "$endfile"
   local -a opts=()
-  for v in LAPTOP_ONLY_TEST LAPTOP_ONLY_NIRI; do
+  for v in LAPTOP_ONLY_TEST LAPTOP_ONLY_UMBRIEL; do
     if [[ -n "${!v:-}" ]]; then opts+=(--setenv="$v=${!v}"); fi
   done
   systemd-run --user --quiet --collect --unit="$unit" \

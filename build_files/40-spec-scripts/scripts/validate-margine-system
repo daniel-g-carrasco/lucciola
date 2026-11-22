@@ -587,20 +587,20 @@ PY
     info "account, directories and running units: checked on a booted system"
   fi
 fi
-
 # ---------------------------------------------------------------------------
-hdr "6b3. Mouse and keyboard from the phone: RemoteDesktop under niri (Lucciola)"
+hdr "6b3. Mouse and keyboard from the phone: RemoteDesktop (Lucciola)"
 # ---------------------------------------------------------------------------
-# xdg-desktop-portal-luminous serves the RemoteDesktop portal under niri
-# (lucciola/build.sh 5g); niri-portals.conf sends that portal, and only
-# that, to it. Without it the GNOME backend offers no device under niri.
+# xdg-desktop-portal-luminous serves the RemoteDesktop portal in the Umbriel
+# session (lucciola/build.sh 5g); umbriel-portals.conf sends that portal, and
+# only that, to it. Without it neither the GNOME backend nor Umbriel's offers
+# a device.
 if [[ "$EXPECTED_OS_NAME" != "Lucciola" ]]; then
   info "skipped: Margine runs GNOME"
 else
   rpm -q xdg-desktop-portal-luminous >/dev/null 2>&1 && ok "xdg-desktop-portal-luminous installed" || bad "xdg-desktop-portal-luminous missing"
-  grep -qx 'org.freedesktop.impl.portal.RemoteDesktop=luminous;' /etc/xdg-desktop-portal/niri-portals.conf 2>/dev/null \
-    && ok "niri-portals.conf sends RemoteDesktop to luminous" || bad "niri-portals.conf does not send RemoteDesktop to luminous"
-  if (( IS_LIVE )) && [[ "${XDG_CURRENT_DESKTOP:-}" == niri ]] && command -v busctl >/dev/null; then
+  grep -qx 'org.freedesktop.impl.portal.RemoteDesktop=luminous;' /etc/xdg-desktop-portal/umbriel-portals.conf 2>/dev/null \
+    && ok "umbriel-portals.conf sends RemoteDesktop to luminous" || bad "umbriel-portals.conf does not send RemoteDesktop to luminous"
+  if (( IS_LIVE )) && [[ "$(tr "[:upper:]" "[:lower:]" <<<"${XDG_CURRENT_DESKTOP:-}")" == umbriel ]] && command -v busctl >/dev/null; then
     dev="$(busctl --user get-property org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop org.freedesktop.portal.RemoteDesktop AvailableDeviceTypes 2>/dev/null | awk '{print $2}')"
     [[ "$dev" == 7 ]] && ok "the RemoteDesktop portal offers keyboard, pointer and touch" || warn "the RemoteDesktop portal offers device types '${dev:-none}' (7 expected; a user portals.conf in ~/.config may differ)"
   fi
@@ -609,35 +609,35 @@ fi
 # ---------------------------------------------------------------------------
 hdr "6b2. The session's first seconds (Lucciola)"
 # ---------------------------------------------------------------------------
-# niri-session hands the environment over through dbus-update-activation-
-# environment (lucciola/build.sh 2a): no deprecation warning on the login
-# screen. Under niri the default app for a folder comes from
-# niri-mimeapps.list, a link to GNOME's: without it, the first registered
+# The Lucciola session is Umbriel (lucciola/build.sh 2): start-umbriel hands
+# the environment over by name, with dbus-update-activation-environment for
+# D-Bus activation. The default app for a folder comes from
+# umbriel-mimeapps.list, a link to GNOME's: without it, the first registered
 # handler won (Disk Usage Analyzer opened the phone's folder, 2026-10-23).
 if [[ "$EXPECTED_OS_NAME" != "Lucciola" ]]; then
   info "skipped: Margine runs GNOME"
 else
-  grep -q 'dbus-update-activation-environment --systemd --all' /usr/bin/niri-session 2>/dev/null \
-    && ok "niri-session hands the environment over without import-environment" \
-    || bad "niri-session still calls import-environment without variables (red warning at login)"
+  grep -qx 'Exec=start-umbriel' /usr/share/wayland-sessions/lucciola.desktop 2>/dev/null \
+    && ok "the Lucciola session runs start-umbriel" || bad "lucciola.desktop does not run start-umbriel"
   [[ -x /usr/bin/dbus-update-activation-environment ]] && ok "dbus-update-activation-environment present (dbus-tools)" || bad "dbus-update-activation-environment missing"
-  if [[ "$(readlink /usr/share/applications/niri-mimeapps.list 2>/dev/null)" == gnome-mimeapps.list ]]; then
-    ok "niri takes GNOME's default applications (niri-mimeapps.list)"
+  if [[ "$(readlink /usr/share/applications/umbriel-mimeapps.list 2>/dev/null)" == gnome-mimeapps.list ]]; then
+    ok "the Umbriel session takes GNOME's default applications (umbriel-mimeapps.list)"
   else
-    bad "/usr/share/applications/niri-mimeapps.list is not a link to gnome-mimeapps.list: folders open in the first registered app"
+    bad "/usr/share/applications/umbriel-mimeapps.list is not a link to gnome-mimeapps.list: folders open in the first registered app"
   fi
-  if (( IS_LIVE )) && [[ "${XDG_CURRENT_DESKTOP:-}" == niri ]]; then
-    h="$(XDG_CURRENT_DESKTOP=niri gio mime inode/directory 2>/dev/null | sed -n 's/.*: //p' | head -1)"
-    [[ "$h" == org.gnome.Nautilus.desktop ]] && ok "a folder opens in Files under niri" || warn "a folder opens in '${h:-nothing}' under niri (a user override in ~/.config/mimeapps.list?)"
+  if (( IS_LIVE )) && [[ "$(tr "[:upper:]" "[:lower:]" <<<"${XDG_CURRENT_DESKTOP:-}")" == umbriel ]]; then
+    h="$(gio mime inode/directory 2>/dev/null | sed -n 's/.*: //p' | head -1)"
+    [[ "$h" == org.gnome.Nautilus.desktop ]] && ok "a folder opens in Files under Umbriel" || warn "a folder opens in '${h:-nothing}' under Umbriel (a user override in ~/.config/mimeapps.list?)"
   fi
 fi
+
 
 # ---------------------------------------------------------------------------
 hdr "6c. SSH agent for every session (Lucciola)"
 # ---------------------------------------------------------------------------
 # gcr-ssh-agent.socket is enabled for all users by lucciola/build.sh: it
 # offers the keys in ~/.ssh and asks their passphrases in a dialog, keeping
-# them in the keyring; its socket unit sets SSH_AUTH_SOCK for niri. Without
+# them in the keyring; its socket unit sets SSH_AUTH_SOCK for Umbriel. Without
 # it a passphrase is asked at every connection and keys stay unprotected.
 if [[ -L /etc/systemd/user/sockets.target.wants/gcr-ssh-agent.socket ]]; then
   ok "gcr-ssh-agent.socket enabled for every user"

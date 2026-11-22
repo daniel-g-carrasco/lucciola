@@ -2,11 +2,11 @@
 # Lucciola USER-SMOKE probe: runs INSIDE the smoke-boot VM as a root
 # oneshot (margine-user-smoke.service), injected offline into the qcow2
 # by .github/scripts/inject-gui-probe.sh. Where the Layer C gui-probe.sh
-# asks "is the graphical session HEALTHY?" (niri and Noctalia alive and
+# asks "is the graphical session HEALTHY?" (Umbriel and Noctalia alive and
 # answering, nothing crashed), this probe asks the user-facing question
 # "is this image still LUCCIOLA?": the identity assertions a person would
 # notice if they regressed: the CachyOS/BORE kernel booted, the session
-# is Lucciola's and new users get it, the public name, the niri defaults
+# is Lucciola's and new users get it, the public name, the Umbriel defaults
 # load for a user, the Margine look of Noctalia, GNOME left stock as the
 # fallback, the gaming recipe shipped, and the Margine accent colour GTK
 # applications keep.
@@ -61,7 +61,7 @@ RUN_DIR="/run/user/${SMOKE_UID}"
 
 # Run a command AS THE SMOKE USER with its runtime dir and session bus, so
 # gsettings resolves the distro dconf db and the gschema overrides through
-# the user's profile exactly as a real first login would, and the niri
+# the user's profile exactly as a real first login would, and the Umbriel
 # and Noctalia clients find the session (extra VAR=value words go first).
 as_user() {
   runuser -u "$SMOKE_USER" -- env \
@@ -75,10 +75,10 @@ usettings() {  # usettings <schema> <key>; empty string on failure
 }
 
 # Give the autologin session a bounded moment to settle so the per-user
-# bus and niri are up (this unit is After=graphical.target but the user
+# bus and Umbriel are up (this unit is After=graphical.target but the user
 # session may lag the target). Bounded: never an unbounded wait.
 for _ in $(seq 1 24); do
-  [[ -S "${RUN_DIR}/bus" ]] && pgrep -u "$SMOKE_USER" -x niri >/dev/null && break
+  [[ -S "${RUN_DIR}/bus" ]] && pgrep -u "$SMOKE_USER" -x umbriel >/dev/null && break
   sleep 5
 done
 
@@ -97,11 +97,11 @@ else check KERNEL 1 "expected *cachyos*, got uname=$KREL"; fi
 # 2. The user-facing "did I get the desktop": greetd is the login screen
 #    (GDM, its fallback, not running) and the smoke user's graphical
 #    session, which greetd-login.py started with a password login, is
-#    Lucciola's, on Wayland, opened by the greetd PAM service, with niri
+#    Lucciola's, on Wayland, opened by the greetd PAM service, with Umbriel
 #    running. The session name is the XDG_SESSION_DESKTOP the login screen
-#    gave the session (Noctalia Greeter: niri, the first DesktopNames entry;
-#    GDM: lucciola, the file's name), which niri-session imports into the
-#    user manager.
+#    gave the session (Noctalia Greeter: umbriel, from DesktopNames; GDM:
+#    lucciola, the file's name), which start-umbriel hands to the user
+#    manager.
 DM_OK=1
 DM="$(readlink /etc/systemd/system/display-manager.service 2>/dev/null)"
 if [[ "${DM##*/}" == greetd.service ]] && systemctl is-active --quiet greetd.service 2>/dev/null \
@@ -116,10 +116,10 @@ if [[ -n "$SID" ]]; then
   S_SERVICE="$(loginctl show-session "$SID" -p Service --value 2>/dev/null)"
   [[ -n "$S_DESK" ]] || S_DESK="$(loginctl show-session "$SID" -p Desktop --value 2>/dev/null)"
 fi
-NIRI_UP=no
-pgrep -u "$SMOKE_USER" -x niri >/dev/null 2>&1 && NIRI_UP=yes
-SESSION_DETAIL="session=${SID:-none} service=${S_SERVICE:-?} desktop=${S_DESK:-?} type=${S_TYPE:-?} niri=$NIRI_UP"
-if [[ "$DM_OK" -eq 0 && "${S_DESK,,}" =~ ^(lucciola|niri)$ && "$S_TYPE" == wayland && "$S_SERVICE" == greetd && "$NIRI_UP" == yes ]]; then
+UMB_UP=no
+pgrep -u "$SMOKE_USER" -x umbriel >/dev/null 2>&1 && UMB_UP=yes
+SESSION_DETAIL="session=${SID:-none} service=${S_SERVICE:-?} desktop=${S_DESK:-?} type=${S_TYPE:-?} umbriel=$UMB_UP"
+if [[ "$DM_OK" -eq 0 && "${S_DESK,,}" =~ ^(lucciola|umbriel)$ && "$S_TYPE" == wayland && "$S_SERVICE" == greetd && "$UMB_UP" == yes ]]; then
   check SESSION 0 "greetd active, $SESSION_DETAIL"
 elif [[ "$DM_OK" -eq 0 ]]; then
   check SESSION 1 "greetd active but not a Lucciola session from it: $SESSION_DETAIL"
@@ -156,34 +156,33 @@ for t in standard administrator; do
   grep -qx 'Session=lucciola' "${f:-/dev/null}" 2>/dev/null || DS_BAD+=" $t:${f:-missing}"
 done
 SESSION_FILE=/usr/share/wayland-sessions/lucciola.desktop
-grep -qx 'Exec=niri-session' "$SESSION_FILE" 2>/dev/null || DS_BAD+=" $SESSION_FILE"
+grep -qx 'Exec=start-umbriel' "$SESSION_FILE" 2>/dev/null || DS_BAD+=" $SESSION_FILE"
 GREETER_LAST="$(sed -n 's/^last *= *"\(.*\)"$/\1/p' /var/lib/noctalia-greeter/sync.toml 2>/dev/null | head -n 1)"
 [[ "$GREETER_LAST" == Lucciola ]] || DS_BAD+=" greeter-last-session:${GREETER_LAST:-none}"
 if [[ -z "$DS_BAD" ]]; then
-  check DEFAULT_SESSION 0 "user templates Session=lucciola, greeter preselects Lucciola, $SESSION_FILE runs niri-session"
+  check DEFAULT_SESSION 0 "user templates Session=lucciola, greeter preselects Lucciola, $SESSION_FILE runs start-umbriel"
 else
   check DEFAULT_SESSION 1 "not Lucciola:$DS_BAD"
 fi
 
-# 5. The niri defaults load for a user. niri reads ~/.config/niri/config.kdl
-#    INSTEAD of /etc/niri/config.kdl, so session-start makes it start with
-#    an include of the system one; `niri validate` then parses the whole
-#    chain the compositor uses (Lucciola defaults, lucciola.kdl, the colours
-#    Noctalia renders, the screenshot path), as the user, so ~ resolves.
-UCFG="$SMOKE_HOME/.config/niri/config.kdl"
-if [[ ! -f "$UCFG" ]]; then
-  check NIRI_CONFIG 1 "$UCFG missing (session-start did not run?)"
-elif ! grep -qE '^[[:space:]]*include[[:space:]]+"/etc/niri/config\.kdl"' "$UCFG"; then
-  check NIRI_CONFIG 1 "$UCFG does not include /etc/niri/config.kdl: Lucciola defaults and keybindings are off"
-elif VALID="$(as_user timeout 30 niri validate -c "$UCFG" 2>&1)"; then
-  check NIRI_CONFIG 0 "$UCFG includes the system config and validates"
+# 5. The Umbriel defaults load for a user. Umbriel reads
+#    ~/.config/umbriel/config.toml INSTEAD of Lucciola's
+#    /etc/xdg/umbriel/config.toml, so a new account must have none; then
+#    `umbriel config validate` loads the whole chain the compositor uses
+#    (Lucciola defaults, the colours Noctalia renders, lucciola.toml), as
+#    the user, so ~ resolves.
+UCFG="$SMOKE_HOME/.config/umbriel/config.toml"
+if [[ -e "$UCFG" ]]; then
+  check UMBRIEL_CONFIG 1 "$UCFG exists on a new account: Lucciola defaults and keybindings are off"
+elif VALID="$(as_user timeout 30 umbriel config validate 2>&1)"; then
+  check UMBRIEL_CONFIG 0 "no user config.toml, /etc/xdg/umbriel/config.toml validates: $(printf '%s\n' "$VALID" | tail -n 1 | cut -c1-120)"
 else
-  check NIRI_CONFIG 1 "niri validate: $(printf '%s\n' "$VALID" | tail -n 2 | sed 's/\x1b\[[0-9;]*m//g' | tr '\n' ' ' | cut -c1-200)"
+  check UMBRIEL_CONFIG 1 "umbriel config validate: $(printf '%s\n' "$VALID" | tail -n 2 | sed 's/\x1b\[[0-9;]*m//g' | tr '\n' ' ' | cut -c1-200)"
 fi
 
 # 6. Noctalia has the Margine look: dark, custom palette "Margine"
 #    (noctalia/20-margine-style.toml). Asked from Noctalia itself, whose
-#    IPC socket is named after the session's Wayland display, which niri
+#    IPC socket is named after the session's Wayland display, which Umbriel
 #    publishes in the user manager's environment.
 WL="$(as_user systemctl --user show-environment 2>/dev/null | sed -n 's/^WAYLAND_DISPLAY=//p' | head -n 1)"
 SCHEME="$(as_user WAYLAND_DISPLAY="${WL:-wayland-1}" timeout 10 noctalia msg color-scheme-get 2>/dev/null)"
@@ -236,7 +235,7 @@ else
 fi
 
 # 9. zz1-margine gschema applied: accent-color=yellow (not a GNOME default)
-#    serves the GTK applications of the niri session. num-workspaces,
+#    serves the GTK applications of the Umbriel session. num-workspaces,
 #    checked here on Margine, went with the Shell and window-manager
 #    defaults Lucciola does not ship.
 ACCENT="$(usettings org.gnome.desktop.interface accent-color)"

@@ -4,7 +4,7 @@
 # qcow2 by .github/scripts/inject-gui-probe.sh. Verdict goes to the
 # serial console; the CI watcher greps for MARGINE-GUI-SMOKE: PASS/FAIL.
 #
-# The product under test is the Lucciola session: niri with the Noctalia
+# The product under test is the Lucciola session: Umbriel with the Noctalia
 # shell, started by greetd from a password login. margine-greetd-login.service
 # (greetd-login.py) runs first: greetd's autologin, a logout, the greeter, then
 # a password login over greetd's IPC socket, which goes through the whole
@@ -206,59 +206,58 @@ SMOKE_UID="$(id -u "$SMOKE_USER" 2>/dev/null || echo 1010)"
 SMOKE_HOME="$(getent passwd "$SMOKE_USER" 2>/dev/null | cut -d: -f6)"
 [[ -n "$SMOKE_HOME" ]] || SMOKE_HOME="/var/home/$SMOKE_USER"
 RUN_DIR="/run/user/${SMOKE_UID}"
-NIRI_PID="" NIRI_SOCK="" WL_DISPLAY=""
+UMB_PID="" UMB_SOCK="" WL_DISPLAY=""
 
 # Run a command as the user, inside its session: runtime dir and session
-# bus by path, and niri's IPC and Wayland sockets once they are known.
-# Clients find niri through NIRI_SOCKET, and Noctalia's IPC socket is
+# bus by path, and Umbriel's IPC and Wayland sockets once they are known.
+# Clients find Umbriel through UMBRIEL_SOCKET, and Noctalia's IPC socket is
 # named after the Wayland display ($XDG_RUNTIME_DIR/noctalia-<display>.sock,
 # wayland-0 when unset), so both must be the session's own.
 as_user() {
   local envs=(HOME="$SMOKE_HOME" XDG_RUNTIME_DIR="$RUN_DIR"
               DBUS_SESSION_BUS_ADDRESS="unix:path=${RUN_DIR}/bus")
-  [[ -n "$NIRI_SOCK" ]] && envs+=(NIRI_SOCKET="$NIRI_SOCK")
+  [[ -n "$UMB_SOCK" ]] && envs+=(UMBRIEL_SOCKET="$UMB_SOCK")
   [[ -n "$WL_DISPLAY" ]] && envs+=(WAYLAND_DISPLAY="$WL_DISPLAY")
   runuser -u "$SMOKE_USER" -- env "${envs[@]}" "$@"
 }
 
-# niri runs as the user unit niri.service (greetd -> niri-session ->
-# systemctl --user start niri.service), so its MainPID is the compositor:
-# `pgrep niri` alone also matches the long-lived `niri msg event-stream`
-# client of /usr/libexec/lucciola/bar-widths. At startup niri publishes
-# NIRI_SOCKET and WAYLAND_DISPLAY in the user manager's environment
-# (import-environment, which is how D-Bus-activated services such as the
-# portal reach the session); the socket file, named
-# niri.<wayland display>.<pid>.sock, is the fallback.
-find_niri() {
+# Umbriel runs as the user unit umbriel.service (greetd -> start-umbriel ->
+# systemctl --user start umbriel.service), so its MainPID is the compositor:
+# `pgrep umbriel` alone also matches the long-lived `umbriel subscribe`
+# client of /usr/libexec/lucciola/bar-widths. At startup Umbriel publishes
+# UMBRIEL_SOCKET and WAYLAND_DISPLAY in the user manager's environment
+# (which is how D-Bus-activated services such as the portal reach the
+# session); the socket file, umbriel-<wayland display>.sock, is the fallback.
+find_umbriel() {
   local env_dump s
-  NIRI_PID="$(as_user systemctl --user show -p MainPID --value niri.service 2>/dev/null)"
-  [[ "$NIRI_PID" =~ ^[1-9][0-9]*$ ]] || NIRI_PID=""
+  UMB_PID="$(as_user systemctl --user show -p MainPID --value umbriel.service 2>/dev/null)"
+  [[ "$UMB_PID" =~ ^[1-9][0-9]*$ ]] || UMB_PID=""
   env_dump="$(as_user systemctl --user show-environment 2>/dev/null)"
-  NIRI_SOCK="$(sed -n 's/^NIRI_SOCKET=//p' <<<"$env_dump" | head -n 1)"
+  UMB_SOCK="$(sed -n 's/^UMBRIEL_SOCKET=//p' <<<"$env_dump" | head -n 1)"
   WL_DISPLAY="$(sed -n 's/^WAYLAND_DISPLAY=//p' <<<"$env_dump" | head -n 1)"
-  if [[ ! -S "$NIRI_SOCK" && -n "$NIRI_PID" ]]; then
-    NIRI_SOCK=""
-    for s in "$RUN_DIR"/niri.*."$NIRI_PID".sock; do [[ -S "$s" ]] && NIRI_SOCK="$s"; done
+  if [[ ! -S "$UMB_SOCK" ]]; then
+    UMB_SOCK=""
+    for s in "$RUN_DIR"/umbriel-*.sock; do [[ -S "$s" ]] && UMB_SOCK="$s"; done
   fi
-  if [[ -z "$WL_DISPLAY" && -n "$NIRI_SOCK" && -n "$NIRI_PID" ]]; then
-    WL_DISPLAY="${NIRI_SOCK##*/niri.}"
-    WL_DISPLAY="${WL_DISPLAY%."$NIRI_PID".sock}"
+  if [[ -z "$WL_DISPLAY" && -n "$UMB_SOCK" ]]; then
+    WL_DISPLAY="${UMB_SOCK##*/umbriel-}"
+    WL_DISPLAY="${WL_DISPLAY%.sock}"
   fi
 }
 
-# The last lines niri (and everything it spawned: session-start, Noctalia)
+# The last lines Umbriel (and everything it spawned: session-start, Noctalia)
 # wrote to its journal stream, for FAIL messages that explain themselves.
-niri_log() {
-  journalctl -b -q --no-pager -o cat _SYSTEMD_USER_UNIT=niri.service _UID="$SMOKE_UID" 2>/dev/null \
+umbriel_log() {
+  journalctl -b -q --no-pager -o cat _SYSTEMD_USER_UNIT=umbriel.service _UID="$SMOKE_UID" 2>/dev/null \
     | sed 's/\x1b\[[0-9;]*m//g' | tail -n 3 | tr '\n' ' ' | cut -c1-300
 }
 
 # The user's graphical session: logind has its id, type and the PAM service
 # that opened it. The session name comes from the environment the login
-# screen gave the session, which niri-session imports into the user manager:
-# Noctalia Greeter sets XDG_SESSION_DESKTOP to the session file's first
-# DesktopNames entry (niri), GDM set it to the file's name (lucciola), and
-# XDG_CURRENT_DESKTOP is DesktopNames (niri). logind's Desktop is the
+# screen gave the session, which start-umbriel hands to the user manager:
+# Noctalia Greeter sets XDG_SESSION_DESKTOP from the session file's
+# DesktopNames (Umbriel; start-umbriel writes it lower case), GDM set it to
+# the file's name (lucciola). logind's Desktop is the
 # fallback (it stayed EMPTY for a GDM-started session, 2026-10-17).
 session_info() {
   SID="$(loginctl show-user "$SMOKE_USER" -p Display --value 2>/dev/null)"
@@ -282,23 +281,23 @@ else
   [[ "${PROBE_STDOUT:-0}" == 1 ]] || fail "no verdict from the greetd login driver ($LOGIN_RESULT missing: margine-greetd-login.service did not run?)"
 fi
 
-# ---- 1. niri started for the autologin user ---------------------------------
+# ---- 1. Umbriel started for the autologin user ------------------------------
 # First boot is slow (flatpak preinstall etc. competes for I/O).
 for _ in $(seq 1 60); do
-  pgrep -u "$SMOKE_USER" -x niri >/dev/null && break
+  pgrep -u "$SMOKE_USER" -x umbriel >/dev/null && break
   sleep 5
 done
-if ! pgrep -u "$SMOKE_USER" -x niri >/dev/null; then
+if ! pgrep -u "$SMOKE_USER" -x umbriel >/dev/null; then
   # Say whether the login landed in GNOME instead.
   session_info
   if pgrep -u "$SMOKE_USER" -x gnome-shell >/dev/null; then
-    fail "niri never started: the login went to GNOME (session ${SID:-?} desktop=${S_DESK:-?}), not to the Lucciola session"
+    fail "Umbriel never started: the login went to GNOME (session ${SID:-?} desktop=${S_DESK:-?}), not to the Lucciola session"
   fi
-  fail "niri never started for $SMOKE_USER (session ${SID:-none} desktop=${S_DESK:-?} type=${S_TYPE:-?}); niri log: $(niri_log)"
+  fail "Umbriel never started for $SMOKE_USER (session ${SID:-none} desktop=${S_DESK:-?} type=${S_TYPE:-?}); Umbriel log: $(umbriel_log)"
 fi
 
 # ---- 2. The session is Lucciola's, on Wayland -------------------------------
-# niri (Noctalia Greeter's name for the Lucciola session, from its
+# umbriel (Noctalia Greeter's name for the Lucciola session, from its
 # DesktopNames) or lucciola (the session file's name, GDM's); gnome is the
 # fallback taking over. The PAM service that opened it is greetd's: a GDM
 # session here would mean greetd failed and its fallback took over.
@@ -307,23 +306,24 @@ session_info
 [[ "$S_TYPE" == wayland ]] || fail "session $SID is type=${S_TYPE:-?}, not wayland"
 [[ "$S_SERVICE" == greetd ]] || fail "session $SID was opened by PAM service '${S_SERVICE:-?}', not greetd"
 case "${S_DESK,,}" in
-  lucciola|niri) ;;
+  lucciola|umbriel) ;;
   *) fail "session $SID desktop=${S_DESK:-?}: not the Lucciola session" ;;
 esac
 
-# ---- 3. Settle: niri's IPC, session-start, Noctalia, notifications ----------
-# niri spawns /usr/libexec/lucciola/session-start at startup, which seeds
-# the user's Noctalia and niri files and then execs Noctalia; Noctalia
-# takes org.freedesktop.Notifications when it comes up. A bounded poll
-# (not a fixed sleep) until all of it answers, then each check on its own
-# so a FAIL names the first missing piece.
+# ---- 3. Settle: Umbriel's IPC, session-start, Noctalia, notifications -------
+# Umbriel spawns /usr/libexec/lucciola/session-start at startup (autostart in
+# /usr/share/lucciola/umbriel/config.toml), which seeds the user's Noctalia
+# files and then execs Noctalia; Noctalia takes
+# org.freedesktop.Notifications when it comes up. A bounded poll (not a
+# fixed sleep) until all of it answers, then each check on its own so a
+# FAIL names the first missing piece. Umbriel reads Lucciola's
+# /etc/xdg/umbriel/config.toml while the user has no config.toml of their
+# own: on a new account there must be none, and the configuration in use
+# must be the system one.
 NOCTALIA_TOML="$SMOKE_HOME/.config/noctalia/00-lucciola.toml"
-NIRI_USER_CFG="$SMOKE_HOME/.config/niri/config.kdl"
-niri_ipc_ok() { as_user timeout 10 niri msg version >/tmp/niri-version.out 2>&1; }
-seeded_ok() {
-  grep -qF '/usr/share/lucciola/noctalia/' "$NOCTALIA_TOML" 2>/dev/null \
-    && grep -qE '^[[:space:]]*include[[:space:]]+"/etc/niri/config\.kdl"' "$NIRI_USER_CFG" 2>/dev/null
-}
+UMB_USER_CFG="$SMOKE_HOME/.config/umbriel/config.toml"
+umbriel_ipc_ok() { as_user timeout 10 umbriel outputs --json >/tmp/umbriel-outputs.json 2>/tmp/umbriel-ipc.err; }
+seeded_ok() { grep -qF '/usr/share/lucciola/noctalia/' "$NOCTALIA_TOML" 2>/dev/null; }
 noctalia_ipc_ok() { as_user timeout 10 noctalia msg status >/tmp/noctalia-status.out 2>&1; }
 # PID of the connection owning org.freedesktop.Notifications. Asking the
 # bus about a name never activates it, so this sees who owns it now.
@@ -332,22 +332,24 @@ notif_pid() {
     GetConnectionUnixProcessID s org.freedesktop.Notifications 2>/dev/null | awk '{print $2}'
 }
 for _ in $(seq 1 18); do
-  find_niri
-  niri_ipc_ok && seeded_ok && noctalia_ipc_ok && [[ -n "$(notif_pid)" ]] && break
+  find_umbriel
+  umbriel_ipc_ok && seeded_ok && noctalia_ipc_ok && [[ -n "$(notif_pid)" ]] && break
   sleep 5
 done
 
-[[ -n "$NIRI_PID" ]] || fail "niri.service is not running for $SMOKE_USER (niri was not started by niri-session?)"
-[[ "$(cat "/proc/$NIRI_PID/comm" 2>/dev/null)" == niri ]] \
-  || fail "niri.service MainPID $NIRI_PID is not niri"
-niri_ipc_ok || fail "niri does not answer on its socket (NIRI_SOCKET=${NIRI_SOCK:-unset}): $(tail -n 2 /tmp/niri-version.out | tr '\n' ' ')"
-NIRI_VER="$(sed -n 's/^Compositor version: *//p' /tmp/niri-version.out | head -n 1)"
-NIRI_VER="${NIRI_VER%% *}"
+[[ -n "$UMB_PID" ]] || fail "umbriel.service is not running for $SMOKE_USER (Umbriel was not started by start-umbriel?)"
+[[ "$(cat "/proc/$UMB_PID/comm" 2>/dev/null)" == umbriel ]] \
+  || fail "umbriel.service MainPID $UMB_PID is not umbriel"
+umbriel_ipc_ok || fail "Umbriel does not answer on its socket (UMBRIEL_SOCKET=${UMB_SOCK:-unset}): $(tail -n 2 /tmp/umbriel-ipc.err | tr '\n' ' ')"
+UMB_VER="$(umbriel --version 2>/dev/null | awk '{print $2}')"
+[[ ! -e "$UMB_USER_CFG" ]] || fail "a new account has $UMB_USER_CFG: Umbriel would ignore Lucciola's configuration"
+UMB_CFG="$(as_user timeout 10 umbriel config validate 2>&1)" \
+  || fail "the configuration Umbriel loads does not validate: $(tail -n 2 <<<"$UMB_CFG" | tr '\n' ' ' | cut -c1-200)"
 
-[[ -f "$NOCTALIA_TOML" ]] || fail "session-start did not run: $NOCTALIA_TOML missing; niri log: $(niri_log)"
-seeded_ok || fail "session-start ran but left $NOCTALIA_TOML or $NIRI_USER_CFG without the Lucciola include"
+[[ -f "$NOCTALIA_TOML" ]] || fail "session-start did not run: $NOCTALIA_TOML missing; Umbriel log: $(umbriel_log)"
+seeded_ok || fail "session-start ran but left $NOCTALIA_TOML without the Lucciola include"
 
-pgrep -u "$SMOKE_USER" -x noctalia >/dev/null || fail "Noctalia is not running for $SMOKE_USER; niri log: $(niri_log)"
+pgrep -u "$SMOKE_USER" -x noctalia >/dev/null || fail "Noctalia is not running for $SMOKE_USER; Umbriel log: $(umbriel_log)"
 noctalia_ipc_ok || fail "Noctalia runs but does not answer on its IPC (WAYLAND_DISPLAY=${WL_DISPLAY:-unset}): $(tail -n 2 /tmp/noctalia-status.out | tr '\n' ' ')"
 
 # Noctalia is the notification server of the session (the bar's
@@ -361,7 +363,7 @@ as_user busctl --user --timeout=10 call org.freedesktop.Notifications /org/freed
   || fail "Noctalia owns org.freedesktop.Notifications but GetServerInformation got no answer"
 
 # ---- 3a. The login notice reached Noctalia ----------------------------------
-# margine-upgrade-notify runs as the session starts, and under niri that is
+# margine-upgrade-notify runs as the session starts, and under niri and Umbriel that is
 # before Noctalia owns the notification name: from 2026-10-08 to 2026-11-04 the
 # notice was lost at every login, with the unit reporting success and nothing
 # looking. greetd-login.py left a false previous image in the state file, so
@@ -369,8 +371,17 @@ as_user busctl --user --timeout=10 call org.freedesktop.Notifications /org/freed
 # a notification went through, and Noctalia's own history must hold it.
 NOTICE_STATE="$SMOKE_HOME/.local/state/margine/last-booted-digest"
 NOTICE_HISTORY="$SMOKE_HOME/.local/state/noctalia/notification_history.json"
+# Noctalia 5.6 keeps the history encrypted (notification_history.enc), with
+# no command to read it: there, a history written since the password login
+# is what can be checked. The state above moves only after the notice went
+# through to Noctalia, so the two together still say it arrived.
+NOTICE_HISTORY_ENC="$SMOKE_HOME/.local/state/noctalia/notification_history.enc"
 notice_moved() { [[ -s "$NOTICE_STATE" && "$(cat "$NOTICE_STATE" 2>/dev/null)" != sha256:smoke-previous-image ]]; }
-notice_held() { grep -q 'Update applied' "$NOTICE_HISTORY" 2>/dev/null; }
+notice_held() {
+  grep -q 'Update applied' "$NOTICE_HISTORY" 2>/dev/null && return 0
+  [[ -s "$NOTICE_HISTORY_ENC" ]] || return 1
+  [[ -z "$LOGIN_SINCE" ]] || (( $(stat -c %Y "$NOTICE_HISTORY_ENC") >= LOGIN_SINCE ))
+}
 notice_log() {
   journalctl -b -q --no-pager -o cat _UID="$SMOKE_UID" _SYSTEMD_USER_UNIT=margine-upgrade-notify.service 2>/dev/null \
     | tail -n 3 | tr '\n' ' ' | cut -c1-240
@@ -389,7 +400,7 @@ FAILED_UNITS="$(as_user systemctl --user --failed --no-legend --plain 2>/dev/nul
 
 # ---- 3b. The Login keyring: pam_oo7 opened it with the password -------------
 # The password login handed the password to oo7: pam_oo7 in greetd's PAM
-# stack keeps it, oo7-daemon (started with niri.service) receives it from
+# stack keeps it, oo7-daemon (started with umbriel.service) receives it from
 # pam_oo7's helper and opens the Login keyring. "Unlocked" alone proves too
 # little (oo7 can answer for a keyring that needed no password), so the
 # daemon's own line for the secret it received must be in its log since the
@@ -417,35 +428,32 @@ grep -q 'Received login secret from helper' <<<"$OO7_LOG" \
   || fail "the Login keyring answers unlocked, but oo7 logged no secret from pam_oo7 since the password login; oo7 log: $(oo7_tail)"
 
 # ---- 4. Outputs and the bar --------------------------------------------------
-# niri renders only on a hardware GPU: it skips software EGL renderers
-# (llvmpipe; src/backend/tty.rs, "software EGL renderers are skipped"),
-# so a VM without 3D acceleration, the CI one included, gets niri running
-# with no output at all. With an output, Noctalia must have put its bar
-# there (layer-shell namespace noctalia-bar-<name>); without one the bar
-# cannot exist and the PASS line says it was not checked.
-OUTPUTS="$(as_user timeout 10 niri msg -j outputs 2>/dev/null | python3 -c '
+# The CI VM has no 3D acceleration: Umbriel draws there with Mesa's software
+# renderer, which it accepts only with WLR_RENDERER_ALLOW_SOFTWARE=1, set for
+# the smoke account alone by inject-gui-probe.sh (a real machine renders on
+# its GPU). So the VM's screen is an output, and Noctalia must have put its
+# bar there (layer-shell namespace noctalia-bar-<name>).
+OUTPUTS="$(as_user timeout 10 umbriel outputs --json 2>/dev/null | python3 -c '
 import json, sys
-print(sum(1 for o in json.load(sys.stdin).values() if o.get("logical")))' 2>/dev/null)"
-[[ "$OUTPUTS" =~ ^[0-9]+$ ]] || fail "niri msg outputs gave no readable answer"
-BAR="not-checked(no-output)"
-if (( OUTPUTS > 0 )); then
-  BAR=""
-  for _ in $(seq 1 9); do
-    BAR="$(as_user timeout 10 niri msg -j layers 2>/dev/null | python3 -c '
+print(sum(1 for o in json.load(sys.stdin) if o.get("enabled")))' 2>/dev/null)"
+[[ "$OUTPUTS" =~ ^[0-9]+$ ]] || fail "umbriel outputs gave no readable answer"
+(( OUTPUTS > 0 )) || fail "Umbriel runs with no output enabled; Umbriel log: $(umbriel_log)"
+BAR=""
+for _ in $(seq 1 9); do
+  BAR="$(as_user timeout 10 umbriel layers --json 2>/dev/null | python3 -c '
 import json, sys
 for layer in json.load(sys.stdin):
     print(layer.get("namespace", ""))' 2>/dev/null | grep -m1 '^noctalia-bar')"
-    [[ -n "$BAR" ]] && break
-    sleep 5
-  done
-  [[ -n "$BAR" ]] || fail "niri has $OUTPUTS output(s) but no Noctalia bar on them (no noctalia-bar layer surface)"
-fi
+  [[ -n "$BAR" ]] && break
+  sleep 5
+done
+[[ -n "$BAR" ]] || fail "Umbriel has $OUTPUTS output(s) but no Noctalia bar on them (no noctalia-bar layer surface)"
 
 # ---- 5. xdg-desktop-portal ---------------------------------------------------
 # Called the way a Flatpak app reaches it: the call D-Bus-activates the
-# portal if nothing has yet, in the environment niri published. The
+# portal if nothing has yet, in the environment Umbriel published. The
 # FileChooser interface exists only when the portal found a backend for
-# this desktop (niri-portals.conf), so an XDG_CURRENT_DESKTOP that never
+# this desktop (umbriel-portals.conf), so an XDG_CURRENT_DESKTOP that never
 # reached the user manager fails here, not just a portal that is down.
 PORTAL="$(as_user timeout 90 busctl --user --timeout=80 get-property org.freedesktop.portal.Desktop \
   /org/freedesktop/portal/desktop org.freedesktop.portal.FileChooser version 2>&1)" \
@@ -453,18 +461,19 @@ PORTAL="$(as_user timeout 90 busctl --user --timeout=80 get-property org.freedes
 PORTAL_V="${PORTAL##* }"
 
 # ---- 6. Still alive, nothing crashed -----------------------------------------
-find_niri
-[[ -n "$NIRI_PID" && "$(cat "/proc/$NIRI_PID/comm" 2>/dev/null)" == niri ]] \
-  || fail "niri died during the probe window; niri log: $(niri_log)"
-noctalia_ipc_ok || fail "Noctalia stopped answering during the probe window; niri log: $(niri_log)"
+find_umbriel
+[[ -n "$UMB_PID" && "$(cat "/proc/$UMB_PID/comm" 2>/dev/null)" == umbriel ]] \
+  || fail "Umbriel died during the probe window; Umbriel log: $(umbriel_log)"
+noctalia_ipc_ok || fail "Noctalia stopped answering during the probe window; Umbriel log: $(umbriel_log)"
 CORES=$(coredumpctl --no-pager -q list 2>/dev/null \
-  | grep -cE '/(niri|noctalia|xwayland-satellite|xdg-desktop-portal[a-z-]*)([[:space:]]|$)' || true)
-[[ "$CORES" -eq 0 ]] || fail "niri, Noctalia or a portal dumped core ($CORES)"
-# A Rust panic in a niri thread is logged even when the compositor
-# survives it; Noctalia and session-start write to the same stream.
-PANIC="$(journalctl -b -q --no-pager -o cat _SYSTEMD_USER_UNIT=niri.service _UID="$SMOKE_UID" 2>/dev/null \
-  | grep -m1 'panicked at' || true)"
-[[ -z "$PANIC" ]] || fail "panic in the niri session: ${PANIC:0:200}"
+  | grep -cE '/(umbriel|noctalia|Xwayland|xdg-desktop-portal[a-z-]*|umbriel-share-picker)([[:space:]]|$)' || true)
+[[ "$CORES" -eq 0 ]] || fail "Umbriel, Noctalia, Xwayland or a portal dumped core ($CORES)"
+# A failed assertion in Umbriel or wlroots ends the compositor with this
+# line in its stream (2026-11-22, xdg_surface_role_commit), even when
+# systemd restarts it before the probe looks.
+ABORT="$(journalctl -b -q --no-pager -o cat _SYSTEMD_USER_UNIT=umbriel.service _UID="$SMOKE_UID" 2>/dev/null \
+  | grep -m1 -E "Assertion .* failed|terminate called" || true)"
+[[ -z "$ABORT" ]] || fail "Umbriel aborted during the session: ${ABORT:0:200}"
 
 # Branding validator (from margine-fedora-atomic): file checks plus,
 # when a display is reachable, a GTK icon lookup. (Headless-safe since
@@ -475,6 +484,6 @@ if [[ -x /usr/bin/lucciola-validate-branding ]]; then
     || fail "lucciola-validate-branding: $(tail -3 /tmp/branding.out | tr '\n' ' ')"
 fi
 
-out "MARGINE-GUI-SMOKE: PASS login=${S_SERVICE}/password keyring=unlocked session=${S_DESK,,}/${S_TYPE} niri=${NIRI_VER:-?} outputs=$OUTPUTS bar=$BAR notifications=$NCOMM portal=FileChooser.v${PORTAL_V}"
+out "MARGINE-GUI-SMOKE: PASS login=${S_SERVICE}/password keyring=unlocked session=${S_DESK,,}/${S_TYPE} umbriel=${UMB_VER:-?} outputs=$OUTPUTS bar=$BAR notifications=$NCOMM portal=FileChooser.v${PORTAL_V}"
 wait_gaming
 poweroff_vm

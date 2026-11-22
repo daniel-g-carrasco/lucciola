@@ -74,6 +74,11 @@ NAKED_APPS=(org.libreoffice.LibreOffice org.mozilla.thunderbird_esr com.bitwarde
   io.gitlab.adhami3310.Impression org.gnome.DejaDup)
 PREINSTALL_UNIT=flatpak-preinstall.service
 BROWSER=app.zen_browser.zen
+# A trimmed set chosen while the first-boot app install still runs (the
+# welcome window asks at the first login): the choice waits here, and
+# flatpak-preinstall.service applies it when it finishes
+# (flatpak-preinstall.service.d/20-lucciola-apps-profile.conf).
+APPS_PENDING="${LUCCIOLA_APPS_PENDING:-/var/lib/lucciola/apps-profile-pending}"
 
 die() { echo "feature: $*" >&2; exit 1; }
 need_root() { [[ $EUID -eq 0 ]] || die "$1: run as root (through /usr/libexec/lucciola/admin)"; }
@@ -468,8 +473,19 @@ profile_status() {  # profile_status NAME APPS...
     state absent "The stock app set is installed and kept"
   fi
 }
-slim_status() { profile_status slim "${SLIM_APPS[@]}"; }
+pending_profile() { [[ -s "$APPS_PENDING" ]] && head -n1 "$APPS_PENDING"; }
+slim_status() {
+  if [[ "$(pending_profile || true)" == slim ]]; then
+    state partial "Chosen: the slim set is applied when the first-boot app install finishes"
+    return
+  fi
+  profile_status slim "${SLIM_APPS[@]}"
+}
 naked_status() {
+  if [[ "$(pending_profile || true)" == naked ]]; then
+    state partial "Chosen: the naked set is applied when the first-boot app install finishes"
+    return
+  fi
   if preinstall_masked && (( $(flatpak_count "${SLIM_APPS[@]}") == 0 )); then
     profile_status naked "${NAKED_APPS[@]}"
   else
@@ -483,19 +499,46 @@ remove_apps() {
   done
   say flatpak uninstall --system --unused -y --noninteractive || true
 }
-slim_install() {
-  # Guard: without the browser the first-boot install has not finished (or
-  # failed); masking now could strand a half-set system.
-  has_flatpak "$BROWSER" || die "the browser is not installed yet: the first-boot app install is still running (or broken); wait for it"
-  say systemctl stop "$PREINSTALL_UNIT" 2>/dev/null || true
+trim() {  # trim slim|naked [from-preinstall]
+  # Without the browser the first-boot install has not finished: masking
+  # now would strand a half-set system. The choice waits for the install
+  # instead, which applies it as it ends (apps_apply_pending).
+  if ! has_flatpak "$BROWSER"; then
+    mkdir -p "${APPS_PENDING%/*}"
+    echo "$1" > "$APPS_PENDING"
+    echo "the first-boot app install is still running: the $1 set is applied as soon as it finishes"
+    return 0
+  fi
+  # From the service's own ExecStartPost a stop would wait on the job that
+  # is running it: there the unit is only masked.
+  [[ "${2:-}" == from-preinstall ]] || { say systemctl stop "$PREINSTALL_UNIT" 2>/dev/null || true; }
   say systemctl mask "$PREINSTALL_UNIT"
   remove_apps "${SLIM_APPS[@]}"
+  [[ "$1" != naked ]] || remove_apps "${NAKED_APPS[@]}"
+  rm -f "$APPS_PENDING"
 }
-naked_install() { slim_install; remove_apps "${NAKED_APPS[@]}"; }
+slim_install() { trim slim; }
+naked_install() { trim naked; }
+apps_apply_pending() {  # run by flatpak-preinstall.service after a run
+  local p
+  p="$(pending_profile || true)"
+  case "$p" in
+    "") return 0 ;;
+    slim|naked) ;;
+    *) echo "feature: ignoring an unknown pending app set '$p' in $APPS_PENDING" >&2; rm -f "$APPS_PENDING"; return 0 ;;
+  esac
+  if ! has_flatpak "$BROWSER"; then
+    echo "the $p set waits: the browser is still not installed"
+    return 0
+  fi
+  echo "applying the $p set chosen during the first-boot install"
+  trim "$p" from-preinstall
+}
 # Unmasking is not enough: Flatpak remembers a preinstalled app the user
 # removed and never installs it again. The keep helper forgets those
 # removals for the stock list, so the next run installs them.
 profile_remove() {
+  rm -f "$APPS_PENDING"
   say systemctl unmask "$PREINSTALL_UNIT"
   say "$PREINSTALL_KEEP" --restore
   say systemctl start "$PREINSTALL_UNIT" --no-block
@@ -517,5 +560,8 @@ case "$action" in
   status)  "${fn}_status" ;;
   install) need_root "$name install"; "${fn}_install" "${3:-}" ;;
   remove)  need_root "$name remove"; "${fn}_remove" ;;
+  apply-pending)
+    [[ "$name" == slim || "$name" == naked ]] || die "apply-pending is for slim and naked"
+    need_root "$name apply-pending"; apps_apply_pending ;;
   *) die "usage: feature $name status|install|remove" ;;
 esac

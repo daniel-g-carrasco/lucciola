@@ -7,7 +7,7 @@
 # set, and a wallpaper that is not ours is never removed; what is not a
 # local picture is refused with nothing copied; if Noctalia refuses,
 # nothing is left behind. And the image's files send the Wallpaper
-# interface, and only that, to this backend in niri sessions.
+# interface, and only that, to this backend in the Lucciola (Umbriel) session.
 # Needs python3.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -72,9 +72,9 @@ run bogus
 check "anything else on the command line is refused (rc $RC)" [ "$RC" = 2 ]
 
 # The image's wiring.
-check "niri sessions send Wallpaper to this backend" grep -qx 'org.freedesktop.impl.portal.Wallpaper=lucciola;' "$SF/etc/xdg-desktop-portal/niri-portals.conf"
-check "the portal file offers Wallpaper and nothing else, in niri" \
-  bash -c "grep -qx 'Interfaces=org.freedesktop.impl.portal.Wallpaper' '$SF/usr/share/xdg-desktop-portal/portals/lucciola.portal' && grep -qx 'UseIn=niri' '$SF/usr/share/xdg-desktop-portal/portals/lucciola.portal'"
+check "the Umbriel session sends Wallpaper to this backend" grep -qx 'org.freedesktop.impl.portal.Wallpaper=lucciola;' "$SF/etc/xdg-desktop-portal/umbriel-portals.conf"
+check "the portal file offers Wallpaper and nothing else, under Umbriel" \
+  bash -c "grep -qx 'Interfaces=org.freedesktop.impl.portal.Wallpaper' '$SF/usr/share/xdg-desktop-portal/portals/lucciola.portal' && grep -qx 'UseIn=umbriel' '$SF/usr/share/xdg-desktop-portal/portals/lucciola.portal'"
 check "the bus name is the same in the portal file, the service file and the program" \
   bash -c "grep -qx 'DBusName=org.freedesktop.impl.portal.desktop.lucciola' '$SF/usr/share/xdg-desktop-portal/portals/lucciola.portal' && grep -qx 'Name=org.freedesktop.impl.portal.desktop.lucciola' '$SF/usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.lucciola.service' && grep -q '^NAME = \"org.freedesktop.impl.portal.desktop.lucciola\"' '$WP'"
 check "the service file starts the program the image ships, executable" \

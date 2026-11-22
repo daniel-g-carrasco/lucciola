@@ -1,12 +1,12 @@
 # xdg-desktop-portal-luminous, packaged by Lucciola from a pinned upstream tag.
 #
-# The RemoteDesktop portal backend for niri: mouse and keyboard from the
+# The RemoteDesktop portal backend of the Lucciola session: mouse and keyboard from the
 # phone (KDE Connect's remote input goes through the RemoteDesktop portal
 # and libei), and anything else that asks the portal to move the pointer or
-# type. niri implements no org.gnome.Mutter.RemoteDesktop, so the GNOME
-# backend answers with no device at all under niri; luminous (waycrate's
+# type. Umbriel (like niri before it) implements no org.gnome.Mutter.RemoteDesktop,
+# so the GNOME backend answers with no device at all; luminous (waycrate's
 # backend for wlroots-style compositors, in Rust) serves it through the
-# virtual pointer and keyboard protocols niri exposes. Not in Fedora. Built
+# virtual pointer and keyboard protocols Umbriel exposes. Not in Fedora. Built
 # by lucciola/luminous/build-rpm.sh in the Containerfile's luminous-rpm
 # stage, installed by lucciola/build.sh; its portals.conf line sends only
 # RemoteDesktop to it (the GNOME backend keeps the rest).
@@ -22,7 +22,7 @@
 Name:           xdg-desktop-portal-luminous
 Version:        %{luminous_version}
 Release:        1%{?dist}
-Summary:        xdg-desktop-portal backend for wlroots-style compositors (RemoteDesktop under niri)
+Summary:        xdg-desktop-portal backend for wlroots-style compositors (RemoteDesktop in Lucciola)
 License:        MIT
 URL:            https://github.com/waycrate/xdg-desktop-portal-luminous
 Source0:        %{url}/archive/refs/tags/v%{version}.tar.gz
@@ -58,8 +58,8 @@ Requires:       pipewire-libs
 %description
 A backend for xdg-desktop-portal that serves Screenshot, ScreenCast,
 RemoteDesktop, InputCapture, Settings, Access, Background and Clipboard on
-wlroots-style Wayland compositors. Lucciola uses its RemoteDesktop for
-niri, where the GNOME backend has nothing to offer.
+wlroots-style Wayland compositors. Lucciola uses its RemoteDesktop under
+Umbriel, where the GNOME backend has nothing to offer.
 
 %prep
 %autosetup -n xdg-desktop-portal-luminous-%{version}

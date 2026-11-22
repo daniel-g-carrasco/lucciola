@@ -2,7 +2,7 @@
 # Lucciola: lock the session with Noctalia's lock screen.
 #
 # Bound to Mod+Ctrl+L with allow-when-locked=true, so it also works from the
-# red screen niri shows when a lock screen dies while the session is locked:
+# screen the compositor shows when a lock screen dies while the session is locked:
 # start Noctalia again if it is gone, then ask it to lock.
 if ! pgrep -x noctalia >/dev/null 2>&1; then
   noctalia >/dev/null 2>&1 &

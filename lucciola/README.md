@@ -14,49 +14,46 @@ Lucciola is one image, built by this repository from Universal Blue's
 
 This layer adds:
 
-- `niri` and `xwayland-satellite` from Fedora, and `noctalia` from Fedora at a
+- Umbriel and its portal backend, built from pinned commits by the
+  Containerfile's `umbriel-rpm` stage (`UMBRIEL_COMMIT`, `UMBRIEL_PORTAL_COMMIT`
+  and their sha256; specs and Lucciola's two colour patches in `umbriel/`:
+  Umbriel has no releases yet), and `noctalia` from Fedora at a
   pinned version (`NOCTALIA_VR` in the Containerfile, the Fedora tag comes
   from the base: bump it only together with a test boot, since upstream
   supports only its latest release; when the repositories no longer carry
   that build, the image takes Koji's copy of it, signed by Fedora and
   checked against the release key before dnf sees it);
-- the niri defaults in `/usr/share/lucciola/niri/config.kdl`, loaded through
-  `/etc/niri/config.kdl`, with the keybindings carried over from Margine; personal settings go in
-  `~/.config/niri/lucciola.kdl`;
+- the Umbriel defaults in `/usr/share/lucciola/umbriel/config.toml`, loaded
+  through `/etc/xdg/umbriel/config.toml`, with Umbriel's own keybindings plus
+  Lucciola's (launcher, files, browser, screenshots, lock); personal settings
+  go in `~/.config/umbriel/lucciola.toml`, which is read last and wins
+  (tables merge by key). A `~/.config/umbriel/config.toml` replaces all of
+  it, so it should start by including `/etc/xdg/umbriel/config.toml`;
 - Noctalia defaults in `/usr/share/lucciola/noctalia/`, seeded once per user
   by `/usr/libexec/lucciola/session-start`: idle lock on, polkit agent on, and
   a dark floating bar, monospace, windows rounded like libadwaita, and the
   palette `palettes/Margine.json` (named after Margine, where it was born;
   linked into the user's `palettes/` folder at login);
-- niri's border colours follow the Noctalia palette through Lucciola's own
-  Noctalia template (`noctalia/25-niri-colors.toml`, rendered to
-  `~/.config/niri/lucciola-colors.kdl`, which the system niri config
-  includes): the same colours as Noctalia's built-in "Niri" template (beige
-  focused border, unfocused ones in the bar background), without touching
-  any user niri file;
+- Umbriel's colours follow the Noctalia palette through Lucciola's own
+  Noctalia template (`noctalia/25-umbriel-colors.toml`, rendered to
+  `~/.config/umbriel/lucciola-colors.toml`, which the system config
+  includes): beige focused border, unfocused ones in the bar background,
+  the overview and tab bars in the same palette;
 - `/usr/libexec/lucciola/bar-widths`: the bar keeps a fixed width on large
-  monitors, and secondary screens get a single workspace, as in GNOME;
-- `/usr/libexec/lucciola/color-calibration`: niri has no colour management
-  yet, so this loads the calibration curves (vcgt) of the screens' ICC
+  monitors (every screen keeps its own workspaces);
+- `/usr/libexec/lucciola/color-calibration`: loads the calibration curves
+  (vcgt) of the screens' ICC
   profiles in `~/.local/share/icc`, as GNOME does. Per-screen choices go in
   `~/.config/lucciola/color-profiles`; `color-calibration --list` shows what
   each screen gets, and Super+Shift+C (`color-calibration --toggle`) switches
   the calibration off and on to compare. The curves and Noctalia's night light use the same
   mechanism, so the night light cannot change a calibrated screen;
-- `~/.config/niri/config.kdl`, created at login when missing, starting with
-  `include "/etc/niri/config.kdl"`: niri reads the user file *instead of* the
-  system one, and Noctalia's niri template (Templates > Built-in > Niri)
-  adds its include to that file: up to Noctalia 5.2.1 it created the file
-  holding nothing but that include, dropping every Lucciola default; from
-  5.3.0 it creates none while `/etc/niri/config.kdl` exists, so without
-  this file the template would do nothing. A file holding only Noctalia's
-  include is repaired;
 - one scroll speed for every application: toolkits turn a unit of touchpad
   scrolling into 2.5 (GTK 4), 4 (Firefox, Zen, Thunderbird) or 5.3
   (Chromium, Electron) logical pixels, so window rules scale the second
   and third families down to the first; the touchpad `scroll-factor`
-  (0.15) is the one value to change, in `~/.config/niri/lucciola.kdl`
-  (repeat the whole `touchpad` block: niri replaces it, it does not merge);
+  (0.15) is the one value to change, as `input.touchpad.scroll_factor` in
+  `~/.config/umbriel/lucciola.toml`;
 - Ptyxis in the Noctalia palette: a Noctalia template writes a Ptyxis palette
   (`noctalia.palette`) and selects it once in the default profile; another
   palette picked later in Ptyxis stays;
@@ -80,7 +77,7 @@ This layer adds:
 - an SSH agent in every session: GNOME's `gcr-ssh-agent`, enabled for all
   users. It offers the keys in `~/.ssh`, asks a passphrase in a dialog the
   first time a key is used and can keep it in the keyring, which the login
-  opens; `SSH_AUTH_SOCK` is set for niri and everything it starts;
+  opens; `SSH_AUTH_SOCK` is set for Umbriel and everything it starts;
 - `ddcutil`, so Noctalia's brightness slider also drives external monitors
   over DDC/CI (the package's udev rule opens the i2c devices to the
   logged-in user, its modules-load entry loads i2c-dev);
@@ -94,10 +91,10 @@ This layer adds:
   accounts with Lucciola sessions from before it never see it unasked, and
   "Lucciola Welcome" in the launcher opens it any time;
 - mouse and keyboard from the phone: xdg-desktop-portal-luminous serves the
-  RemoteDesktop portal under niri (the GNOME backend has nothing to offer
+  RemoteDesktop portal (neither the GNOME backend nor Umbriel's offers it
   there), built from its pinned tag (`LUMINOUS_VERSION` and its sha256 in
   the Containerfile, spec in `luminous/`) and chosen for that portal alone
-  in `etc/xdg-desktop-portal/niri-portals.conf`;
+  in `etc/xdg-desktop-portal/umbriel-portals.conf`;
 - the login screen: Noctalia Greeter on greetd, in place of GDM. Noctalia
   Greeter is built from its pinned tag (`NOCTALIA_GREETER_VERSION` and its
   sha256 in the Containerfile, spec in `greeter/`) with Lucciola's
@@ -131,7 +128,7 @@ This layer adds:
   Shell, window-manager or settings-daemon defaults and no GNOME
   first-login bootstrap (`build.sh` fails if one of them shows up), and
   no wayland-scroll-factor. The defaults that also serve GTK applications
-  under niri (accent colour, wallpaper, virt-manager connections) stay.
+  under Umbriel (accent colour, wallpaper, virt-manager connections) stay.
 
 ## Images
 

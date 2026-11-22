@@ -55,7 +55,7 @@ helpers and configuration this repository ships.
   signs with the same key: that is why MOK Manager shows "Margine MOK
   Signing Key".
 - Problems in upstream components shipped unchanged (Fedora, Universal
-  Blue, the CachyOS kernel, niri, Noctalia, greetd, Flatpak apps): please
+  Blue, the CachyOS kernel, Umbriel, Noctalia, greetd, Flatpak apps): please
   report them upstream. Lucciola picks up their fixes on the next build.
 
 ## Verify the image signature

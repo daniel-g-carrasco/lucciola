@@ -69,8 +69,8 @@ concurrency:
 
 env:
   IMAGE_NAME: lucciola
-  IMAGE_DESC: "Lucciola kernel reserve: niri with the Noctalia shell on Fedora Silverblue (Universal Blue main), Fedora's own kernel instead of the CachyOS one"
-  IMAGE_KEYWORDS: "bootc,ublue,silverblue,fedora-kernel,niri,noctalia,lucciola"
+  IMAGE_DESC: "Lucciola kernel reserve: Umbriel with the Noctalia shell on Fedora Silverblue (Universal Blue main), Fedora's own kernel instead of the CachyOS one"
+  IMAGE_KEYWORDS: "bootc,ublue,silverblue,fedora-kernel,umbriel,noctalia,lucciola"
   TAG_FILE: build_files/system_files/usr/share/margine/kernel-reserve-tag
 
 jobs:

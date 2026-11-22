@@ -1,0 +1,215 @@
+From a931e92b0f4ca2e6ad99f2930e15f69f1f07c404 Mon Sep 17 00:00:00 2001
+From: Daniel Grasso <code@danielgrasso.com>
+Date: Sat, 21 Nov 2026 13:47:22 +0100
+Subject: [PATCH 2/2] fix(color): sRGB-tagged SDR decodes like untagged SDR
+ under a staged SDR gamut mapping
+
+With untagged SDR decoded by the sdr_transfer curve, a client that tags
+its surface as sRGB (Chromium and Electron do) was still decoded with
+the piecewise curve: the same color came out as two values, 9 against
+14 for code 16 on a gamma 1.8 panel. Under a staged SDR gamut mapping,
+sRGB-tagged content in sRGB primaries now takes the pass's SDR curve
+too. Content tagged with the output's own description is unchanged.
+
+Harness: color_profile_srgb expects the gamma 2.2 decode, the new
+color_profile_srgb_transfer pins sdr_transfer = "srgb", and
+color_profile_srgb_tagged pins tagged equal to untagged.
+---
+ docs/user/outputs.md                          |  2 +-
+ .../checks/protocol/color_profile_srgb.sh     | 17 +++++-----
+ .../protocol/color_profile_srgb_tagged.sh     | 34 +++++++++++++++++++
+ .../protocol/color_profile_srgb_transfer.sh   | 28 +++++++++++++++
+ umbrielfx/include/umbrielfx/render/pass.h     |  3 ++
+ umbrielfx/render/fx_renderer/fx_pass.c        | 11 +++++-
+ 6 files changed, 85 insertions(+), 10 deletions(-)
+ create mode 100755 tests/harness/checks/protocol/color_profile_srgb_tagged.sh
+ create mode 100755 tests/harness/checks/protocol/color_profile_srgb_transfer.sh
+
+diff --git a/docs/user/outputs.md b/docs/user/outputs.md
+index f5638871..ac454201 100644
+--- a/docs/user/outputs.md
++++ b/docs/user/outputs.md
+@@ -272,7 +272,7 @@ hdr = "on"
+ sdr_transfer = "srgb"
+ ```
+ 
+-The choice applies on reload, while that output uses HDR (PQ) and while an SDR gamut mapping is staged (`sdr_gamut = "srgb"` with a characterized panel): untagged SDR is then decoded with this curve before it is mapped into the panel, so a gamma 2.2 panel keeps its shadows. Without either, untagged SDR passes through encoded. It also keeps effect color controls and SDR capture encoding consistent with the chosen curve. Explicit client color descriptions keep their declared transfer function, including piecewise sRGB, gamma 2.2, PQ, and linear content. The display's PQ encoding and normal SDR rendering stay unchanged. Run `umbriel color` to inspect each output's configured `sdr_transfer` choice, which stays inert while the output renders SDR.
++The choice applies on reload, while that output uses HDR (PQ) and while an SDR gamut mapping is staged (`sdr_gamut = "srgb"` with a characterized panel): untagged SDR is then decoded with this curve before it is mapped into the panel, so a gamma 2.2 panel keeps its shadows. sRGB-tagged content in sRGB primaries is the same legacy SDR and takes the same curve there, so one color shown by a client that tags its surface and by one that does not reaches the panel as one value. Without either, untagged SDR passes through encoded. It also keeps effect color controls and SDR capture encoding consistent with the chosen curve. Explicit client color descriptions keep their declared transfer function, including piecewise sRGB, gamma 2.2, PQ, and linear content. The display's PQ encoding and normal SDR rendering stay unchanged. Run `umbriel color` to inspect each output's configured `sdr_transfer` choice, which stays inert while the output renders SDR.
+ 
+ `sdr_white` can also be selected for one running output without editing the configuration:
+ 
+diff --git a/tests/harness/checks/protocol/color_profile_srgb.sh b/tests/harness/checks/protocol/color_profile_srgb.sh
+index 309e97d9..754f9d2b 100644
+--- a/tests/harness/checks/protocol/color_profile_srgb.sh
++++ b/tests/harness/checks/protocol/color_profile_srgb.sh
+@@ -25,16 +25,17 @@ color_start_client srgb untagged output-desc
+ color_fill FFFF0000
+ color_assert_mapped
+ 
+-# Untagged SDR is sRGB, so the shadow end of the ramp is where a substituted
+-# decode shows: the panel encode of the sRGB-decoded value, not of the panel's
+-# (gamma 1.8 read as 2.2 lands on the code itself instead of 14 and 24).
+-for pair in 16:14 32:24; do
++# Untagged SDR decodes with the sdr_transfer curve, gamma 2.2 by default, and
++# the shadow end of the ramp is where a substituted decode shows: the panel
++# encode of the gamma 2.2 value (9 and 20 on this gamma 1.8 panel), not of the
++# piecewise sRGB one (14 and 24) and not the code itself.
++for pair in 16:9 32:20; do
+   code=${pair%%:*}
+   expected=${pair##*:}
+   color_fill "FF$(printf '%02X' "$code")$(printf '%02X' "$code")$(printf '%02X' "$code")"
+   measured=$(color_sample_center)
+   if ! color_pixels_close "$measured" "$expected $expected $expected"; then
+-    echo "untagged code $code decoded with the wrong curve: measured [$measured], the sRGB interpretation" \
++    echo "untagged code $code decoded with the wrong curve: measured [$measured], the gamma 2.2 interpretation" \
+       "gives $expected"
+     exit 1
+   fi
+@@ -58,9 +59,9 @@ if [[ ${untagged_gray%% *} -ge 120 ]]; then
+   echo "untagged gray was not converted into the panel encoding: [$untagged_gray]"
+   exit 1
+ fi
+-if ! color_pixels_close "$untagged_gray" "109 109 109"; then
+-  echo "untagged gray did not decode as sRGB before the panel encode:" \
+-    "measured [$untagged_gray], the sRGB interpretation gives 109 (a gamma 2.2 decode gives 110)"
++if ! color_pixels_close "$untagged_gray" "110 110 110"; then
++  echo "untagged gray did not decode as gamma 2.2 before the panel encode:" \
++    "measured [$untagged_gray], the gamma 2.2 interpretation gives 110 (a piecewise sRGB decode gives 109)"
+   exit 1
+ fi
+ 
+diff --git a/tests/harness/checks/protocol/color_profile_srgb_tagged.sh b/tests/harness/checks/protocol/color_profile_srgb_tagged.sh
+new file mode 100755
+index 00000000..cb7cf42e
+--- /dev/null
++++ b/tests/harness/checks/protocol/color_profile_srgb_tagged.sh
+@@ -0,0 +1,34 @@
++#!/usr/bin/env bash
++# While an SDR gamut mapping is staged, sRGB-tagged content in sRGB primaries is the same legacy SDR as untagged
++# content: both decode with the sdr_transfer curve, so one color shown by a tagging client and by an untagged one
++# reaches the panel as one value.
++set -euo pipefail
++source "$UMBRIEL_REPO/tests/harness/color_lib.sh"
++
++color_fixture
++color_config "color_profile = \"$PROFILE\"
++sdr_gamut = \"srgb\""
++if ! color_fields_are "$PROFILE" srgb true true; then
++  echo "srgb policy did not stage the gamut transform: $("$UMBRIEL" color --json)"
++  exit 1
++fi
++
++color_start_client tagged untagged compound
++declare -A untagged
++for code in 10 20 80; do
++  color_fill "FF$code$code$code"
++  untagged[$code]=$(color_sample_center)
++done
++printf 'tag\n' >&"$CLIENT_FD"
++await_lines "$CLIENT_LOG" '{"event":"snapshot","label":"tag"' 1
++"$UMBRIEL" settle > /dev/null
++for code in 10 20 80; do
++  color_fill "FF$code$code$code"
++  tagged=$(color_sample_center)
++  echo "code 0x$code: untagged [${untagged[$code]}] sRGB-tagged [$tagged]"
++  if ! color_pixels_close "$tagged" "${untagged[$code]}"; then
++    echo "sRGB-tagged content decoded with another curve than untagged content"
++    exit 1
++  fi
++done
++color_stop_client
+diff --git a/tests/harness/checks/protocol/color_profile_srgb_transfer.sh b/tests/harness/checks/protocol/color_profile_srgb_transfer.sh
+new file mode 100755
+index 00000000..33d5344c
+--- /dev/null
++++ b/tests/harness/checks/protocol/color_profile_srgb_transfer.sh
+@@ -0,0 +1,28 @@
++#!/usr/bin/env bash
++# sdr_transfer = "srgb" selects the piecewise sRGB decode for untagged SDR while an SDR gamut mapping is staged, the
++# way it does on an HDR output: the shadow end of the ramp lands where the sRGB interpretation puts it.
++set -euo pipefail
++source "$UMBRIEL_REPO/tests/harness/color_lib.sh"
++
++color_fixture
++color_config "color_profile = \"$PROFILE\"
++sdr_gamut = \"srgb\"
++sdr_transfer = \"srgb\""
++if ! color_fields_are "$PROFILE" srgb true true; then
++  echo "srgb policy did not stage the gamut transform: $("$UMBRIEL" color --json)"
++  exit 1
++fi
++
++color_start_client transfer untagged output-desc
++for pair in 16:14 32:24 128:109; do
++  code=${pair%%:*}
++  expected=${pair##*:}
++  color_fill "FF$(printf '%02X' "$code")$(printf '%02X' "$code")$(printf '%02X' "$code")"
++  measured=$(color_sample_center)
++  echo "code $code: [$measured]"
++  if ! color_pixels_close "$measured" "$expected $expected $expected"; then
++    echo "untagged code $code did not decode as piecewise sRGB: measured [$measured], expected $expected"
++    exit 1
++  fi
++done
++color_stop_client
+diff --git a/umbrielfx/include/umbrielfx/render/pass.h b/umbrielfx/include/umbrielfx/render/pass.h
+index c7d0d17a..979017b4 100644
+--- a/umbrielfx/include/umbrielfx/render/pass.h
++++ b/umbrielfx/include/umbrielfx/render/pass.h
+@@ -36,6 +36,9 @@ struct fx_gles_render_pass {
+   // SDR content is authored for; any other target keeps sRGB. Without a color
+   // transform it is also the target encoding.
+   enum wlr_color_transfer_function sdr_tf;
++  // An SDR gamut mapping is staged on this pass (a matrix into the panel's
++  // colorimetry, not a PQ target): sRGB-tagged SDR then decodes like untagged.
++  bool sdr_gamut_mapping;
+   GLuint output_lut;
+   float output_lut_dim;
+   pixman_region32_t updated_region;
+diff --git a/umbrielfx/render/fx_renderer/fx_pass.c b/umbrielfx/render/fx_renderer/fx_pass.c
+index 96c1d922..732341c1 100644
+--- a/umbrielfx/render/fx_renderer/fx_pass.c
++++ b/umbrielfx/render/fx_renderer/fx_pass.c
+@@ -2089,8 +2089,14 @@ void fx_render_pass_add_texture(struct fx_gles_render_pass* pass, const struct f
+       options->primaries == NULL || color_primaries_equal(options->primaries, &primaries_srgb);
+   // Only untagged content inherits the pass's SDR curve. Explicit sRGB is
+   // the piecewise curve requested by compound_power_2_4 in color-management-v1.
++  // The exception is a staged SDR gamut mapping: there sRGB-tagged content in
++  // sRGB primaries is the same legacy SDR as untagged content (a browser that
++  // tags its surface next to a toolkit that does not), and decoding the two
++  // with different curves would show one color as two. Both take the pass's
++  // curve, so the sdr_transfer setting decides for both.
+   enum wlr_color_transfer_function source_tf = options->transfer_function;
+-  if (source_tf == 0) {
++  if (source_tf == 0
++      || (pass->sdr_gamut_mapping && source_tf == WLR_COLOR_TRANSFER_FUNCTION_SRGB && primaries_passthrough)) {
+     source_tf = pass->sdr_tf;
+   }
+   const enum wlr_color_transfer_function target_tf =
+@@ -3338,6 +3344,7 @@ struct fx_gles_render_pass* fx_begin_buffer_pass(
+ 
+   struct fx_framebuffer* target = buffer;
+   enum wlr_color_transfer_function sdr_tf = WLR_COLOR_TRANSFER_FUNCTION_SRGB;
++  bool sdr_gamut_mapping = false;
+   if (has_color_transform) {
+     struct output_transform_state state = {
+         .tf = WLR_COLOR_TRANSFER_FUNCTION_EXT_LINEAR,
+@@ -3358,6 +3365,7 @@ struct fx_gles_render_pass* fx_begin_buffer_pass(
+     if (state.tf == WLR_COLOR_TRANSFER_FUNCTION_ST2084_PQ || state.has_matrix) {
+       sdr_tf = pq_sdr_transfer;
+     }
++    sdr_gamut_mapping = state.has_matrix && state.tf != WLR_COLOR_TRANSFER_FUNCTION_ST2084_PQ;
+     struct wlr_allocator* allocator = output_buffers != NULL ? output_buffers->allocator : renderer->allocator;
+     if (allocator == NULL) {
+       wlr_log(WLR_ERROR, "No allocator available for FP16 blend buffer");
+@@ -3424,6 +3432,7 @@ struct fx_gles_render_pass* fx_begin_buffer_pass(
+   pass->prev_ctx = *prev_ctx;
+   pass->has_color_transform = has_color_transform;
+   pass->sdr_tf = sdr_tf;
++  pass->sdr_gamut_mapping = sdr_gamut_mapping;
+   buffer->sdr_capture_tf = sdr_tf;
+   pass->color_transform = has_color_transform ? wlr_color_transform_ref(color_transform) : NULL;
+   pass->output_buffers = output_buffers;
+-- 
+2.56.1
+

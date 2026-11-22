@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# bar-widths' lock screen part, on a fake niri and fprintd and temp folders. What
+# bar-widths' lock screen part, on a fake umbriel and fprintd and temp folders. What
 # must hold: every monitor gets the arrangement at its own size, the account's
 # name and picture, the fingerprint line only with a print enrolled, weather only
 # with a location; saved widgets switched off are retired once, and widgets
@@ -14,11 +14,10 @@ check() {  # check <name> <condition...>
   if "$@"; then echo "ok   $name"; else echo "FAIL $name"; sed 's/^/     /' "$T/out" 2>/dev/null || true; fails=$((fails + 1)); fi
 }
 mkdir -p "$T/bin" "$T/pictures"
-cat > "$T/bin/niri" <<'SH'
+cat > "$T/bin/umbriel" <<'SH'
 #!/bin/sh
 case "$*" in
-  *outputs*) cat "$FAKE/outputs.json" ;;
-  *workspaces*) echo '[{"name": "1", "output": "eDP-1"}]' ;;
+  "outputs --json") cat "$FAKE/outputs.json" ;;
 esac
 SH
 cat > "$T/bin/fprintd-list" <<'SH'
@@ -28,9 +27,9 @@ SH
 chmod +x "$T/bin/"*
 export FAKE="$T/fake"; mkdir -p "$FAKE"
 cat > "$FAKE/outputs.json" <<'J'
-{"eDP-1": {"logical": {"width": 1440, "height": 960}},
- "DP-3": {"logical": {"width": 2560, "height": 1440}},
- "HDMI-A-1": {"logical": null}}
+[{"name": "eDP-1", "enabled": true, "logical_size": {"width": 1440, "height": 960}},
+ {"name": "DP-3", "enabled": true, "logical_size": {"width": 2560, "height": 1440}},
+ {"name": "HDMI-A-1", "enabled": false, "logical_size": {"width": 0, "height": 0}}]
 J
 ME="$(id -un)"
 fresh() { rm -rf "${T:?}/home"; mkdir -p "$T/home/.config/noctalia" "$T/home/.local/state/noctalia"; rm -f "$T/pictures/"*; }
@@ -123,16 +122,16 @@ check "an unreadable saved file stays" cmp -s "$T/before" "$SAVED"
 check "and the fragment is still written" [ -f "$FRAGMENT" ]
 
 # A lock step that fails says so and leaves the bar's file written.
-fresh; mkdir "$FRAGMENT.new"; printf '{"eDP-1": {"logical": {"width": 3000, "height": 2000}}}' > "$FAKE/one.json"; cp "$FAKE/outputs.json" "$T/outputs.keep"; cp "$FAKE/one.json" "$FAKE/outputs.json"; run; RC=$?
+fresh; mkdir "$FRAGMENT.new"; printf '[{"name": "eDP-1", "enabled": true, "logical_size": {"width": 3000, "height": 2000}}]' > "$FAKE/one.json"; cp "$FAKE/outputs.json" "$T/outputs.keep"; cp "$FAKE/one.json" "$FAKE/outputs.json"; run; RC=$?
 check "a failing lock step does not stop the script" [ "$RC" = 0 ]
 check "it says so" grep -q 'lock screen arrangement not updated' "$T/out"
 check "the bar's file is written all the same" grep -q 'margin_ends' "$T/home/.config/noctalia/30-lucciola-monitors.toml"
 cp "$T/outputs.keep" "$FAKE/outputs.json"
 
-# niri not answering: no fragment from nothing, no failure.
-fresh; mv "$T/bin/niri" "$T/niri.off"; run
-check "no niri: runs, writes nothing" [ ! -e "$FRAGMENT" ]
-mv "$T/niri.off" "$T/bin/niri"
+# umbriel not answering: no fragment from nothing, no failure.
+fresh; mv "$T/bin/umbriel" "$T/umbriel.off"; run
+check "no umbriel: runs, writes nothing" [ ! -e "$FRAGMENT" ]
+mv "$T/umbriel.off" "$T/bin/umbriel"
 
 # Noctalia's saved copies of this script's widgets (2026-11-10: the player of
 # 5 November stayed through two updates). The first time they all go, a

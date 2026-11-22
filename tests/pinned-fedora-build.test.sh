@@ -140,8 +140,8 @@ run_case() {
   fi
 }
 
-INSTALL='dnf_install_pinned noctalia 5.3.0-1.fc45 x86_64 --setopt=install_weak_deps=False niri xwayland-satellite ddcutil'
-TX='dnf5 -y install --setopt=install_weak_deps=False niri xwayland-satellite ddcutil'
+INSTALL='dnf_install_pinned noctalia 5.3.0-1.fc45 x86_64 --setopt=install_weak_deps=False umbriel ddcutil'
+TX='dnf5 -y install --setopt=install_weak_deps=False umbriel ddcutil'
 
 run_case "repositories have the build: installed from there, Koji never asked" 0 "$INSTALL" \
   have="5.2.1-1.fc45.x86_64 5.3.0-1.fc45.x86_64" \

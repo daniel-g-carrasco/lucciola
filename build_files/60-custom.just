@@ -1068,7 +1068,7 @@ lucciola-update-unblock APP="":
     fi
 
 # Bitwarden (Flatpak) on native Wayland with a clipboard that works under
-# niri: the compositor socket under a second name, given to Bitwarden alone.
+# Umbriel: the compositor socket under a second name, given to Bitwarden alone.
 # The why and the price are in /usr/libexec/lucciola/bitwarden-wayland.
 [group('Lucciola')]
 lucciola-bitwarden-wayland ACTION="status":
@@ -1247,8 +1247,8 @@ lucciola-phone ACTION="install":
     kde-connect-nautilus and fuse-sshfs with rpm-ostree (about 260 MB,
     active after a restart), adds an autostart entry for the tray indicator
     and the kdeconnect service to the firewall (ports 1714-1764).
-    Mouse and keyboard from the phone do not work under niri yet: the
-    RemoteDesktop portal it needs is not there.
+    Mouse and keyboard from the phone go through the RemoteDesktop portal
+    (xdg-desktop-portal-luminous, in the image).
     Layered packages are reapplied on every system update. To undo:
     ujust lucciola-phone remove (the pairings stay).
     EOF
@@ -1518,7 +1518,7 @@ install-koofr ACTION="install":
 
     if [ "{{ ACTION }}" = "remove" ] || [ "{{ ACTION }}" = "uninstall" ]; then
       echo "Removing Koofr Desktop…"
-      # the instances systemd started from the autostart folder (niri and the
+      # the instances systemd started from the autostart folder (Umbriel and the
       # other sessions without gnome-session), then any left
       systemctl --user stop 'app-koofr*@autostart.service' 2>/dev/null || true
       pkill -f "${DEST}/storage" 2>/dev/null || true
@@ -1595,7 +1595,7 @@ install-spola ACTION="install":
         pkill -x storagegui 2>/dev/null || true
         pkill -x storagesync 2>/dev/null || true
         # Out of the autostart folder, not renamed inside it: systemd's
-        # xdg-autostart generator (niri, and every session without
+        # xdg-autostart generator (Umbriel, and every session without
         # gnome-session) runs any file there, whatever its name. That is how
         # a renamed koofr.desktop.disabled-by-spola started Koofr Desktop again
         # next to Spola; it is moved away here too.

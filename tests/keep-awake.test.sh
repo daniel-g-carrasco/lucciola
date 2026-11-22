@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tests for /usr/libexec/lucciola/keep-awake on fakes: systemd-run and
 # systemctl record what they are asked, gdbus plays UPower (the lid) and the
-# power profiles daemon, niri answers `msg --json outputs`, and the lock
+# power profiles daemon, umbriel answers `outputs --json`, and the lock
 # helper only notes that it ran. KEEP_AWAKE_TEST=1 keeps notifications and
 # the bar out of it. Covered:
 #   - what the inhibitor holds in each mode, the two-hour default of
@@ -71,7 +71,7 @@ case " $* " in
 esac
 STUB
 # shellcheck disable=SC2016
-printf '#!/bin/sh\ncat "$FAKE/outputs.json"\n' > "$T/bin/niri"
+printf '#!/bin/sh\ncat "$FAKE/outputs.json"\n' > "$T/bin/umbriel"
 # shellcheck disable=SC2016
 printf '#!/bin/sh\necho lock >> "$FAKE/log"\n' > "$T/bin/lock"
 printf '#!/bin/sh\nexit 1\n' > "$T/bin/lock-fail"
@@ -80,13 +80,13 @@ chmod +x "$T/bin"/*
 reset() {  # lid open, profile balanced, the laptop screen alone, no events
   rm -rf "$FAKE" "$STATE"; mkdir -p "$FAKE"
   echo false > "$FAKE/lid"; echo balanced > "$FAKE/profile"
-  echo '{"eDP-1":{"name":"eDP-1","logical":{"x":0,"y":0}}}' > "$FAKE/outputs.json"
+  echo '[{"name":"eDP-1","enabled":true}]' > "$FAKE/outputs.json"
   : > "$FAKE/lid-events"; : > "$FAKE/log"
 }
 run() {  # run <args...>: output in $T/out, RC set; LOCKCMD/GDBUSCMD override the fakes
   RC=0
   env -i PATH="$T/bin:/usr/bin:/bin" HOME="$T/home" FAKE="$FAKE" KEEP_AWAKE_TEST=1 \
-      KEEP_AWAKE_GDBUS="${GDBUSCMD:-$T/bin/gdbus}" KEEP_AWAKE_NIRI="$T/bin/niri" KEEP_AWAKE_LOCK="${LOCKCMD:-$T/bin/lock}" \
+      KEEP_AWAKE_GDBUS="${GDBUSCMD:-$T/bin/gdbus}" KEEP_AWAKE_UMBRIEL="$T/bin/umbriel" KEEP_AWAKE_LOCK="${LOCKCMD:-$T/bin/lock}" \
       bash "$KA" "$@" > "$T/out" 2>&1 || RC=$?
 }
 until_file() { cat "$STATE/keep-awake-until-test"; }
@@ -163,7 +163,7 @@ reset; mkdir -p "$STATE"; echo awake > "$STATE/keep-awake-mode-test"; printf 'tr
 run _hold 1; check "awake: the lid still locks" bash -c "[ \"$(actions)\" = 'lock profile=power-saver ' ]"
 run _profile restore; rm -f "$STATE/keep-awake-mode-test"
 
-reset; echo '{"eDP-1":{"logical":null},"DP-1":{"logical":{"x":0,"y":0}}}' > "$FAKE/outputs.json"; printf 'true\n' > "$FAKE/lid-events"
+reset; echo '[{"name":"eDP-1","enabled":false},{"name":"DP-1","enabled":true}]' > "$FAKE/outputs.json"; printf 'true\n' > "$FAKE/lid-events"
 run _hold 1; check "lid closed at a desk (another monitor on): no lock, no profile change (rc $RC)" \
   bash -c "[ '$RC' = 0 ] && [ -z \"$(actions)\" ] && grep -q 'another monitor' '$T/out'"
 

@@ -8,7 +8,7 @@
 # the boot menu, the kernel), Login (fingerprint, keyring, automatic login)
 # and Hardware (the CPU scheduler, docks, printers, the home folders).
 # Noctalia keeps the look of the desktop, GNOME Settings the standard
-# panels that work under niri; this app never duplicates them, at most a
+# panels that work under Umbriel; this app never duplicates them, at most a
 # row opens the right one.
 #
 # Everything here already existed as CLI (lucciola-status, ujust
@@ -233,9 +233,9 @@ TWEAKS = {
         "title": "Bitwarden on Wayland", "on_label": "Turn On…", "off_label": "Turn Off…",
         "argv_on": [UJUST, "lucciola-bitwarden-wayland", "enable"], "argv_off": [UJUST, "lucciola-bitwarden-wayland", "disable"],
         "heading_on": "Bitwarden on Wayland?", "verb_on": "Turn On",
-        "explain_on": "Bitwarden runs on X11 by default, and under niri its copies reach other apps only through the X11 bridge; "
+        "explain_on": "Bitwarden runs on X11 by default, and then its copies reach other apps only through the X11 bridge; "
                       "on Wayland they cannot be pasted at all, because the protocol its copy needs is hidden from Flatpak apps. "
-                      "This gives Bitwarden the normal Wayland connection instead, and with it, in principle, niri's other privileged "
+                      "This gives Bitwarden the normal Wayland connection instead, and with it, in principle, the compositor's other privileged "
                       "protocols too: screen capture, virtual keyboard and pointer. Bitwarden is closed now and runs on Wayland from its next start.",
         "working_on": "Giving Bitwarden the Wayland connection.", "done_on": "Bitwarden runs on Wayland from its next start",
         "heading_off": "Bitwarden Back on X11?", "verb_off": "Turn Off",
@@ -3838,7 +3838,7 @@ class SystemWindow(Adw.ApplicationWindow):
         row.set_activatable(True)
         row.connect("activated", lambda *_: Gtk.UriLauncher.new(KDEC_DOWNLOAD).launch(self, None, None))
         more.add(row)
-        info_row(more, "Mouse and Keyboard From the Phone", "input-mouse-symbolic", "Not available under niri yet: it needs a RemoteDesktop portal")
+        info_row(more, "Mouse and Keyboard From the Phone", "input-mouse-symbolic", "In KDE Connect on the phone: Remote Input")
         row = Adw.ActionRow(title="KDE Connect's Own Settings", subtitle="Everything else, in KDE Connect's window")
         row.add_prefix(icon("preferences-system-symbolic"))
         row.add_suffix(icon("go-next-symbolic"))

@@ -1,6 +1,6 @@
 # =============================================================================
 # Lucciola: a bootc image on Fedora Silverblue (Universal Blue main), CachyOS
-# kernel, niri with the Noctalia shell
+# kernel, Umbriel with the Noctalia shell
 # =============================================================================
 #
 # This Containerfile composes the Lucciola image as:
@@ -10,7 +10,7 @@
 #     its own, the only place the private key is mounted)
 #   + the layer inherited from Margine OS (build_files/: update flow, Secure Boot and TPM
 #     tooling, branding, the GTK defaults, Flatpaks)
-#   + the Lucciola layer (lucciola/: niri, Noctalia, the Lucciola session;
+#   + the Lucciola layer (lucciola/: Umbriel, Noctalia, the Lucciola session;
 #     GNOME stays as a stock fallback session)
 #
 # Until 2026-10 Lucciola was a second build FROM the published Margine image
@@ -48,6 +48,12 @@ ARG NOCTALIA_GREETER_SHA256=79344d9629393ab3f4d605068eec94d2bfe8e12402618e1521f4
 # (see the luminous-rpm stage).
 ARG LUMINOUS_VERSION=0.1.21
 ARG LUMINOUS_SHA256=d6df0ac024409de9e38f0890799b0ef3eaf71156692cc48fc0fe9059f79e8b58
+# Umbriel (the compositor of the Lucciola session) and its portal backend:
+# pinned commits and the sha256 of their archives (see the umbriel-rpm stage).
+ARG UMBRIEL_COMMIT=bc10febde287a6430d6af9dd6bada478beeb0ae5
+ARG UMBRIEL_SHA256=a23937886ca45261d584e89ce0c8424c16477fcba9baaf84ae917e82eb67af0b
+ARG UMBRIEL_PORTAL_COMMIT=62030bb90784229f6fdc8b15bbb03bcd28867488
+ARG UMBRIEL_PORTAL_SHA256=26b896268a6fca5e5a237ad21e1bc21892ad8939ff27dbc480ac5d4adcb1efdf
 
 # ----- Build context: scripts that should NOT end up in the final image -----
 FROM scratch AS ctx
@@ -113,10 +119,10 @@ RUN --mount=type=cache,dst=/var/cache \
         bash /src/build-rpm.sh
 
 # ----- xdg-desktop-portal-luminous: an RPM built from its pinned tag -----
-# The RemoteDesktop portal backend for niri (lucciola/build.sh step 5g):
-# mouse and keyboard from the phone through KDE Connect, which needs the
-# RemoteDesktop portal, and niri's GNOME backend has no device to offer
-# there. Not in Fedora; built here like the greeter, from the tag's archive
+# The RemoteDesktop portal backend of the Lucciola session (lucciola/build.sh
+# step 5g): mouse and keyboard from the phone through KDE Connect, which
+# needs the RemoteDesktop portal, and neither the GNOME backend nor Umbriel's
+# offers it there. Not in Fedora; built here like the greeter, from the tag's archive
 # checked against its sha256, the crates at the versions Cargo.lock pins.
 # v0.1.21 is commit 5674aa3b89cc3456085909ce0c9a4d701d8e5981. To move the
 # tag: set the version and the sha256 of
@@ -131,6 +137,27 @@ RUN --mount=type=cache,dst=/var/cache \
     --mount=type=tmpfs,dst=/tmp \
     env LUMINOUS_VERSION="${LUMINOUS_VERSION}" \
         LUMINOUS_SHA256="${LUMINOUS_SHA256}" \
+        bash /src/build-rpm.sh
+
+# ----- Umbriel and its portal: RPMs built from their pinned commits -----
+# The compositor of the Lucciola session (lucciola/build.sh step 2) and its
+# xdg-desktop-portal backend. Umbriel has no releases yet, so commits are
+# pinned and each archive is checked against its sha256; Terra's nightly
+# builds cannot be pinned. Built on the image's own base, so they link
+# against the wlroots 0.20 the image ships. To move a commit: set it and the
+# sha256 of https://github.com/noctalia-dev/<repo>/archive/<commit>.tar.gz
+# (the ARGs at the top), check the specs' BuildRequires against meson.build
+# and that Lucciola's patches (lucciola/umbriel/*.patch) still apply.
+FROM ${BASE_IMAGE} AS umbriel-rpm
+ARG UMBRIEL_COMMIT
+ARG UMBRIEL_SHA256
+ARG UMBRIEL_PORTAL_COMMIT
+ARG UMBRIEL_PORTAL_SHA256
+COPY lucciola/umbriel/ /src/
+RUN --mount=type=cache,dst=/var/cache \
+    --mount=type=tmpfs,dst=/tmp \
+    env UMBRIEL_COMMIT="${UMBRIEL_COMMIT}" UMBRIEL_SHA256="${UMBRIEL_SHA256}" \
+        UMBRIEL_PORTAL_COMMIT="${UMBRIEL_PORTAL_COMMIT}" UMBRIEL_PORTAL_SHA256="${UMBRIEL_PORTAL_SHA256}" \
         bash /src/build-rpm.sh
 
 # ----- The build: Universal Blue silverblue-main:45 unless overridden -----
@@ -203,10 +230,10 @@ RUN --network=none \
 # ----- The image: the build above, then Lucciola, then the signed kernel -----
 FROM system
 
-# ----- Lucciola: niri + Noctalia, GNOME kept stock as the fallback session -----
+# ----- Lucciola: Umbriel + Noctalia, GNOME kept stock as the fallback session -----
 # What used to be the second build FROM the published Margine image
 # (lucciola/Containerfile until 2026-10), now a step of this one: the
-# Lucciola files, then lucciola/build.sh, which installs niri, Noctalia and
+# Lucciola files, then lucciola/build.sh, which installs Umbriel, Noctalia and
 # the greetd login screen and sets the public name. It still assumes it runs
 # on the finished Margine tree, so it stays after every Margine step.
 # Bump only together with a test boot: see the comment in lucciola/build.sh.
@@ -218,6 +245,7 @@ ARG NOCTALIA_VR=5.6.0-1
 # the version that stage built (the ARG at the top).
 ARG NOCTALIA_GREETER_VERSION
 ARG LUMINOUS_VERSION
+ARG UMBRIEL_COMMIT
 COPY lucciola/system_files/ /
 # The website's single page carries the guide; a copy ships so the Lucciola
 # Guide launcher opens it without a network (/usr/libexec/margine/guide-open).
@@ -228,11 +256,12 @@ RUN --mount=type=bind,from=lucciola-ctx,source=/build.sh,target=/ctx/lucciola/bu
     --mount=type=bind,from=ctx,source=/00-common.sh,target=/ctx/00-common.sh \
     --mount=type=bind,from=greeter-rpm,source=/out,target=/ctx/greeter-rpm \
     --mount=type=bind,from=luminous-rpm,source=/out,target=/ctx/luminous-rpm \
+    --mount=type=bind,from=umbriel-rpm,source=/out,target=/ctx/umbriel-rpm \
     --mount=type=cache,dst=/var/cache \
     --mount=type=cache,dst=/var/log \
     --mount=type=tmpfs,dst=/tmp \
     env NOCTALIA_VR="${NOCTALIA_VR}" NOCTALIA_GREETER_VERSION="${NOCTALIA_GREETER_VERSION}" \
-        LUMINOUS_VERSION="${LUMINOUS_VERSION}" \
+        LUMINOUS_VERSION="${LUMINOUS_VERSION}" UMBRIEL_COMMIT="${UMBRIEL_COMMIT}" \
         bash /ctx/lucciola/build.sh
 
 # ----- Signed kernel in place, initramfs, residue sweep, lint -----

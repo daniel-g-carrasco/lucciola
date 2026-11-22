@@ -148,8 +148,8 @@ on:
 env:
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
   IMAGE_NAME: lucciola
-  IMAGE_DESC: "Lucciola: Fedora Silverblue (Universal Blue main) with niri, the Noctalia shell and a signed CachyOS kernel"
-  IMAGE_KEYWORDS: "bootc,ublue,silverblue,cachyos,niri,noctalia,lucciola"
+  IMAGE_DESC: "Lucciola: Fedora Silverblue (Universal Blue main) with Umbriel, the Noctalia shell and a signed CachyOS kernel"
+  IMAGE_KEYWORDS: "bootc,ublue,silverblue,cachyos,umbriel,noctalia,lucciola"
   CANDIDATE_TAG: "candidate"
 
 # Least privilege (Scorecard Token-Permissions): nothing at the workflow

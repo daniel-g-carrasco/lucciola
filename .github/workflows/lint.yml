@@ -164,7 +164,7 @@ jobs:
         # tests/color-calibration.test.sh.
         run: bash tests/color-calibration.test.sh
       - name: Laptop screen only, for a dock that gives power
-        # laptop-only on a fake niri: which outputs go off, which come back. See
+        # laptop-only on a fake umbriel: which outputs go off, which come back. See
         # tests/laptop-only.test.sh.
         run: bash tests/laptop-only.test.sh
       - name: Keep Awake holds sleep, and the lid locks the session
@@ -174,7 +174,7 @@ jobs:
         # session, except with the screen kept on, and holds power-saver
         # unless another monitor is on, an
         # opened lid gives the profile back; on fake systemd-run, gdbus and
-        # niri. See tests/keep-awake.test.sh.
+        # umbriel. See tests/keep-awake.test.sh.
         run: bash tests/keep-awake.test.sh
       - name: Remote login lets in only your tunnels and chosen devices
         # remote-login on stateful fakes of firewall-cmd, nmcli and systemctl:
@@ -209,9 +209,14 @@ jobs:
         # well. See tests/update-notify.test.sh.
         run: bash tests/update-notify.test.sh
       - name: The lock screen arranged like the login, on every monitor
-        # bar-widths on a fake niri and fprintd: what it writes for Noctalia, and
+        # bar-widths on a fake umbriel and fprintd: what it writes for Noctalia, and
         # the saved settings it may and may not touch. See tests/lock-look.test.sh.
         run: bash tests/lock-look.test.sh
+      - name: A trimmed app set chosen during the first install waits for it
+        # feature's slim/naked choice while flatpak-preinstall still runs: it
+        # waits in a file and the service's end applies it. On fake flatpak
+        # and systemctl. See tests/apps-pending.test.sh.
+        run: bash tests/apps-pending.test.sh
       - name: The login notice waits for the notification daemon
         # margine-notify and margine-upgrade-notify on a fake gdbus that refuses
         # as the bus does until the daemon is up. See tests/login-notice.test.sh.
@@ -525,7 +530,7 @@ jobs:
       - name: Set as Background reaches Noctalia
         # The Wallpaper portal backend: the picture is copied under a name
         # made from its content, only local pictures are taken, nothing is
-        # left behind on a refusal, and niri sessions are sent to it. See
+        # left behind on a refusal, and the Umbriel session is sent to it. See
         # tests/wallpaper-portal.test.sh.
         run: bash tests/wallpaper-portal.test.sh
 

@@ -169,18 +169,45 @@ check "no terminal command in the window's strings" bash -c "! grep -E '\"[^\"]*
 check "no deprecated dim-label style" bash -c "! grep -q 'dim-label' '$GUI'"
 check "Help, shortcuts and Report a Problem are in the menu" bash -c "grep -q '\"win.help\"' '$GUI' && grep -q '\"win.shortcuts\"' '$GUI' && grep -q '\"win.report\"' '$GUI'"
 check "the pages exist" bash -c "grep -q '\"startup\"' '$GUI' && grep -q '\"login\"' '$GUI' && grep -q '\"hardware\"' '$GUI' && grep -q '\"features\"' '$GUI' && grep -q '\"apps\"' '$GUI' && grep -q '\"phone\"' '$GUI'"
-NIRI="$ROOT/lucciola/system_files/usr/share/lucciola/niri/config.kdl"
-check "niri: Mod+1 to Mod+9 go to the workspace at that position, Mod+Shift+N moves the window there" bash -c "for n in 1 2 3 4 5 6 7 8 9; do grep -qx \"    Mod+\$n { focus-workspace \$n; }\" '$NIRI' && grep -qx \"    Mod+Shift+\$n { move-column-to-workspace \$n; }\" '$NIRI' || exit 1; done; ! grep -q 'focus-workspace \"' '$NIRI'"
+UMB="$ROOT/lucciola/system_files/usr/share/lucciola/umbriel/config.toml"
+check "umbriel: Mod+1 to Mod+9 go to the workspace at that position, Mod+Shift+N moves the window there" bash -c "for n in 1 2 3 4 5 6 7 8 9; do grep -qx \"\\\"Mod+\$n\\\" = \\\"workspace-switch \$n\\\"\" '$UMB' && grep -qx \"\\\"Mod+Shift+\$n\\\" = \\\"window-move-to-workspace \$n\\\"\" '$UMB' || exit 1; done"
+check "every key the welcome window lists is bound in the Umbriel configuration" python3 - "$ROOT/lucciola/system_files/usr/share/lucciola/welcome/content.json" "$UMB" <<'PY'
+import json, sys, tomllib
+binds = tomllib.load(open(sys.argv[2], "rb"))["keybinds"]
+names = {"Super": "Mod", "\u2190": "Left", "\u2192": "Right"}
+missing = []
+for section in json.load(open(sys.argv[1]))["sections"]:
+    for block in section["blocks"]:
+        for row in block.get("rows", []) if block["type"] == "keys" else []:
+            for combo in row["keys"]:
+                key = "+".join(names.get(k, k) for k in combo)
+                if key not in binds:
+                    missing.append(key)
+sys.exit("not bound: " + ", ".join(missing) if missing else 0)
+PY
+check "umbriel: Print and Super+Shift+A annotate an area, Shift+Print and Super+Shift+P save it at once, Ctrl+Print and Super+Shift+W take the window" python3 - "$UMB" <<'PY'
+import sys, tomllib
+k = tomllib.load(open(sys.argv[1], "rb"))["keybinds"]
+act = lambda key: (k[key]["action"] if isinstance(k[key], dict) else k[key])
+want = {"Print": "spawn noctalia msg screenshot-region --annotate", "Mod+Shift+A": "spawn noctalia msg screenshot-region --annotate",
+        "Shift+Print": "spawn noctalia msg screenshot-region", "Mod+Shift+P": "spawn noctalia msg screenshot-region",
+        "Ctrl+Print": "spawn noctalia msg screenshot-window", "Mod+Shift+W": "spawn noctalia msg screenshot-window"}
+bad = [f"{key}: {act(key) if key in k else 'unbound'}" for key, a in want.items() if key not in k or act(key) != a]
+sys.exit("; ".join(bad) if bad else 0)
+PY
+check "the validator (set -u) reads XDG_CURRENT_DESKTOP only with a default: the smoke boot runs it without one" bash -c "! grep -nE '\\\$\\{XDG_CURRENT_DESKTOP(,,|\\})' '$ROOT/build_files/40-spec-scripts/scripts/validate-margine-system'"
+check "umbriel: no path of a personal folder in the shipped configuration" bash -c "! grep -qE '/var/home|/home/|lucciola-personal' '$UMB'"
 check "session-start no longer seeds named workspaces" bash -c "! grep -qE '^workspace \"[12]\"' '$ROOT/lucciola/system_files/usr/libexec/lucciola/session-start'"
 check "the Desktop folder is not the home (Flatpak would share the whole home)" grep -q 'DESKTOP: "\$HOME/scratch/desktop"' "$ROOT/build_files/40-spec-scripts/declarations/margine-atomic.yaml"
-check "RemoteDesktop under niri: luminous built from its pinned tag, installed by the build, chosen in niri-portals.conf" bash -c "grep -q '^FROM .* AS luminous-rpm' '$ROOT/Containerfile' && grep -qE '^ARG LUMINOUS_SHA256=[0-9a-f]{64}$' '$ROOT/Containerfile' && grep -q 'from=luminous-rpm' '$ROOT/Containerfile' && grep -q 'luminous_rpms=' '$ROOT/lucciola/build.sh' && grep -qx 'org.freedesktop.impl.portal.RemoteDesktop=luminous;' '$ROOT/lucciola/system_files/etc/xdg-desktop-portal/niri-portals.conf' && grep -q 'cargo build --release --locked' '$ROOT/lucciola/luminous/xdg-desktop-portal-luminous.spec'"
+check "RemoteDesktop: luminous built from its pinned tag, installed by the build, chosen in umbriel-portals.conf" bash -c "grep -q '^FROM .* AS luminous-rpm' '$ROOT/Containerfile' && grep -qE '^ARG LUMINOUS_SHA256=[0-9a-f]{64}$' '$ROOT/Containerfile' && grep -q 'from=luminous-rpm' '$ROOT/Containerfile' && grep -q 'luminous_rpms=' '$ROOT/lucciola/build.sh' && grep -qx 'org.freedesktop.impl.portal.RemoteDesktop=luminous;' '$ROOT/lucciola/system_files/etc/xdg-desktop-portal/umbriel-portals.conf' && grep -q 'cargo build --release --locked' '$ROOT/lucciola/luminous/xdg-desktop-portal-luminous.spec'"
 check "an operation waits only for one that holds the same, never on one flag for the whole window" bash -c "! awk '/^class SystemWindow/{w=1} w && /self\\._busy/' '$GUI' | grep -q . && grep -q 'ls.operation_lanes(argv)' '$GUI' && grep -q 'self._ops_banner' '$GUI' && ! grep -q 'Another operation is still running' '$GUI'"
 check "a night failure a newer image has overtaken is settled in the window and for the bar" bash -c "grep -q 'ls.settle_system_failure(channel, log, state, time.time())' '$GUI' && grep -q 'ls.settle_system_failure(channel, log, state, now)' '$SF/usr/libexec/lucciola/update-state'"
 check "a page shown again within half a minute keeps what it has" bash -c "grep -q '^PAGE_KEEPS_FOR = 30' '$GUI' && grep -q 'self._page_refreshed.get(page_id, 0.0) > PAGE_KEEPS_FOR' '$GUI'"
 check "a phone's card stays open across the refresh every action ends in" bash -c "grep -q 'row.set_expanded(device\\[\"id\"\\] in self._phone_expanded)' '$GUI' && grep -q 'def _on_phone_card_expanded' '$GUI'"
 check "the camera rows sit with the phone's actions, above the switches" bash -c "awk '/Browse the Phone in Files/{b=NR} /self._add_camera_rows\\(row, device\\)/{c=NR} /for plugin, title, blurb, enabled in device/{f=NR} END{exit !(b && c && f && b < c && c < f)}' '$GUI'"
-check "under niri a folder opens in Files: niri takes GNOME's default applications" bash -c "[ \"\$(readlink '$ROOT/lucciola/system_files/usr/share/applications/niri-mimeapps.list')\" = gnome-mimeapps.list ]"
-check "niri-session hands the environment over without the import-environment warning (build 2a)" bash -c "grep -q 'dbus-update-activation-environment --systemd --all' '$ROOT/lucciola/build.sh' && grep -q 'ddcutil dbus-tools' '$ROOT/lucciola/build.sh'"
+check "under Umbriel a folder opens in Files: the session takes GNOME's default applications" bash -c "[ \"\$(readlink '$ROOT/lucciola/system_files/usr/share/applications/umbriel-mimeapps.list')\" = gnome-mimeapps.list ]"
+check "Umbriel built from its pinned commit with Lucciola's patches, installed by the build" bash -c "grep -q '^FROM .* AS umbriel-rpm' '$ROOT/Containerfile' && grep -qE '^ARG UMBRIEL_COMMIT=[0-9a-f]{40}$' '$ROOT/Containerfile' && grep -qE '^ARG UMBRIEL_SHA256=[0-9a-f]{64}$' '$ROOT/Containerfile' && grep -qE '^ARG UMBRIEL_PORTAL_SHA256=[0-9a-f]{64}$' '$ROOT/Containerfile' && grep -q 'from=umbriel-rpm' '$ROOT/Containerfile' && grep -q 'umbriel_rpms=' '$ROOT/lucciola/build.sh' && for f in \$(grep -oE '^Patch[0-9]+: +[^ ]+' '$ROOT/lucciola/umbriel/umbriel.spec' | awk '{print \$2}'); do [ -s '$ROOT/lucciola/umbriel/'\$f ] && grep -q \$f '$ROOT/lucciola/umbriel/build-rpm.sh' || exit 1; done"
+check "the session entry is built from Umbriel's, and dbus-tools is installed for start-umbriel" bash -c "grep -q '^src=/usr/share/wayland-sessions/umbriel.desktop' '$ROOT/lucciola/build.sh' && grep -q 'ddcutil dbus-tools' '$ROOT/lucciola/build.sh'"
 check "the Phone page talks to the daemon by its bus name and never runs kdeconnect-cli" bash -c "grep -q 'KDEC_BUS = \"org.kde.kdeconnect\"' '$GUI' && ! grep -q 'kdeconnect-cli' '$GUI'"
 check "the Phone page writes Lucciola's default (notifications to the phone off) through the daemon" grep -q 'PHONE_DEFAULT_OFF' "$GUI"
 # The phone as a webcam lives in the Phone page now: the old window is gone,

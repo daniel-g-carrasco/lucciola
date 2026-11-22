@@ -2,7 +2,7 @@
 """Lucciola's Wallpaper portal backend: "Set as Background" in any app.
 
 An app (Loupe, a browser, a Flatpak) asks xdg-desktop-portal to set the
-wallpaper. The backend niri sessions had for that is GNOME's, which changes
+wallpaper. The backend the session had for that is GNOME's, which changes
 a GNOME Shell setting nobody reads here: nothing happened. This one hands
 the picture to Noctalia, which draws the wallpaper.
 
@@ -17,7 +17,7 @@ image types Noctalia reads, up to 64 MB. The copy that was the wallpaper
 before, if this program made it, is removed.
 
 Activated by D-Bus (org.freedesktop.impl.portal.desktop.lucciola) and gone
-after a minute of nothing to do. niri-portals.conf sends only the Wallpaper
+after a minute of nothing to do. umbriel-portals.conf sends only the Wallpaper
 interface here.
 """
 

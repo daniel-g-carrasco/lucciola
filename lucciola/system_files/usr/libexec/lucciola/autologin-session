@@ -11,7 +11,7 @@
 #   - XDG_CURRENT_DESKTOP and XDG_SESSION_DESKTOP come from the session
 #     file's DesktopNames, the way Noctalia Greeter derives them (all of
 #     them ':'-joined, and the first), so a session looks the same however
-#     it was started; niri-session imports them into the user manager,
+#     it was started; start-umbriel imports them into the user manager,
 #     where the portals look for the desktop's backends.
 # XDG_SESSION_TYPE=wayland is already in the PAM environment: the greetd PAM
 # service sets it before pam_systemd registers the session (lucciola/build.sh,
@@ -42,6 +42,6 @@ export XDG_SESSION_DESKTOP="${names%%;*}"
 read -r -a argv <<<"$exec_line"
 if (( ${#argv[@]} == 0 )); then
   echo "autologin-session: $file has no Exec line, starting Lucciola" >&2
-  argv=(niri-session)
+  argv=(start-umbriel)
 fi
 exec "${argv[@]}"

@@ -1,0 +1,9 @@
+# Lucciola: Umbriel's colours follow Noctalia's theme. At every theme change
+# Noctalia renders the template into ~/.config/umbriel/lucciola-colors.toml,
+# which /etc/xdg/umbriel/config.toml includes after Lucciola's defaults:
+# the focused window's border in the palette's primary colour, the others'
+# in the bar's background, so only the focused one stands out; the
+# overview, the tab bars and Umbriel's own panels in the same palette.
+[theme.templates.user.lucciola_umbriel]
+input_path = "/usr/share/lucciola/noctalia/templates/umbriel.toml"
+output_path = "$XDG_CONFIG_HOME/umbriel/lucciola-colors.toml"
