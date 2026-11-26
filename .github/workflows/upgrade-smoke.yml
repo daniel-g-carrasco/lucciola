@@ -270,25 +270,3 @@ jobs:
             driver.log
             qemu.err
           retention-days: 7
-
-      - name: Notify ntfy (this starting point failed)
-        if: failure()
-        env:
-          NTFY_URL: ${{ secrets.NTFY_TOPIC_URL }}
-          CELL: ${{ matrix.name }}
-          FROM_REF: ${{ matrix.from_ref }}
-          TO_REF: ${{ matrix.to_ref }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          if [[ -z "${NTFY_URL:-}" ]]; then
-            echo "NTFY_TOPIC_URL secret not set, skipping notification."
-            exit 0
-          fi
-          REASON="$(grep -oE 'MARGINE-UPGRADE: FAIL.*' driver.log 2>/dev/null | tail -n1 | cut -c1-400 || true)"
-          curl --silent --show-error --fail \
-            -H "Title: Upgrade smoke FAILED: ${CELL}" \
-            -H "Priority: high" \
-            -H "Tags: x,arrows_counterclockwise" \
-            -H "Click: ${RUN_URL}" \
-            -d "${FROM_REF} -> ${TO_REF}: ${REASON:-no verdict reached (the VM never got there, or an earlier step failed); see the run log}" \
-            "$NTFY_URL" >/dev/null || echo "ntfy notify failed (non-fatal)"
