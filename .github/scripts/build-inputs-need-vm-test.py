@@ -4,14 +4,9 @@
     build-inputs-need-vm-test.py --repo OWNER/NAME --pr NUMBER   (CI, through gh)
     build-inputs-need-vm-test.py --files LIST --labels a,b        (offline, tests)
 
-build.yml builds and publishes an image for a pull request only when it
-carries the `vm-test` label; every other pull request merges on the static
-checks alone. That is right for docs and CI edits and wrong for the files
-the image is made of: a change there that nobody built reached main more
-than once. This check fails, in plain words, when the pull request touches
-a build input and has no label; adding the label re-runs it (lint.yml
-listens to label events) and makes build.yml build :pr-N. It runs on every
-pull request, with no path filter, so it can be a required check.
+Image changes need a maintainer-reviewed lab build and boot test. The label
+marks those PRs for review, and label events re-run the static check.
+This job neither publishes a PR image nor checks the lab result.
 
 Exit 0: no build input changed, or the label is there. Exit 1: build inputs
 changed, no label. Exit 2: usage, or GitHub could not be read.
@@ -69,14 +64,12 @@ def verdict(files, labels):
     if not touched:
         return 0, "No build input changed: the image does not need to be built for this pull request."
     if LABEL in labels:
-        return 0, (f"Build inputs changed and the `{LABEL}` label is there: build.yml builds and "
-                   f"publishes :pr-N for this pull request.\n  " + "\n  ".join(touched))
+        return 0, (f"Build inputs changed and the `{LABEL}` label is there. "
+                   "Record the lab build and boot test in the pull request.\n  " + "\n  ".join(touched))
     return 1, (
         "This pull request changes files the image is built from:\n  " + "\n  ".join(touched) + "\n"
         f"A change there must be built and boot-tested before it merges. Add the label `{LABEL}` "
-        "to the pull request (Labels, in the right-hand column): build.yml then builds the image "
-        "and publishes it as :pr-N, and this check runs again and passes. Or move these changes "
-        "to a pull request of their own."
+        "to the pull request and record the lab build and boot test before merging."
     )
 
 

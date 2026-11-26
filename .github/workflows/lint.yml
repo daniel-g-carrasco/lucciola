@@ -343,6 +343,9 @@ jobs:
           python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml
           bash tests/scrcpy-signed-sha.test.sh
 
+      - name: Published advisory scans require the signed inventory for each digest
+        run: python3 tests/published-sbom.test.py
+
       - name: Security scan and SBOM read the image that ships
         # The chunked image, whose config the push checks, not the one
         # before chunking (review N3). See tests/scan-what-ships.test.sh.
@@ -443,10 +446,8 @@ jobs:
     # A pull request that changes what the image is built from (the
     # Containerfile, build_files, lucciola, the build workflow, the
     # validators, the security baseline, the disk layouts) must carry the
-    # vm-test label, so build.yml builds and boot-tests it as :pr-N before it
-    # merges; without the label nothing builds it, and such changes reached
-    # main unbuilt more than once. Fails in plain words until the label is
-    # there (label events re-run it); passes for every other pull request.
+    # vm-test label so reviewers know a lab build and boot test are needed.
+    # The label records the requirement. It grants no publishing access.
     # Required check (tools/repo-guard.sh): no name:, no path filter.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-26.04
@@ -456,6 +457,30 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: The scrcpy pin is what upstream signed
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          f=build_files/70-phone-cam/install.sh
+          pin() { grep -oP "^SCRCPY_$2=\\K[0-9a-f.]+" <(git show "$1:$f") | head -n1 || true; }
+          if [ "$(pin "$BASE" SHA256)" = "$(pin HEAD SHA256)" ] && [ "$(pin "$BASE" VERSION)" = "$(pin HEAD VERSION)" ]; then
+            echo "scrcpy pin unchanged"; exit 0
+          fi
+          ver="$(pin HEAD VERSION)"; sha="$(pin HEAD SHA256)"
+          mkdir -p "$RUNNER_TEMP/verify/scripts" "$RUNNER_TEMP/verify/keys"
+          git show "$BASE:.github/scripts/scrcpy-signed-sha.sh" > "$RUNNER_TEMP/verify/scripts/scrcpy-signed-sha.sh"
+          git show "$BASE:.github/keys/scrcpy-release-rom1v.asc" > "$RUNNER_TEMP/verify/keys/scrcpy-release-rom1v.asc"
+          signed="$(bash "$RUNNER_TEMP/verify/scripts/scrcpy-signed-sha.sh" "$ver")" || {
+            echo "::error::scrcpy v${ver}: no checksum signed by the pinned upstream key"; exit 1; }
+          if [ "$signed" != "$sha" ]; then
+            echo "::error::SCRCPY_SHA256 for v${ver} is ${sha}, upstream signed ${signed}"; exit 1
+          fi
+          echo "scrcpy v${ver}: SCRCPY_SHA256 matches upstream's signed SHA256SUMS.txt"
 
       - name: Build inputs changed without the vm-test label?
         env:

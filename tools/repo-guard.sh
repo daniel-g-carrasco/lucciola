@@ -19,7 +19,7 @@
 # not run on a pull request blocks its merge forever (GitHub waits for a
 # verdict that never comes). Only jobs that run on EVERY pull request may be
 # required: lint.yml's, which has no path filter and listens to label
-# events; never build.yml's jobs (vm-test pull requests only), never a job
+# events; never build.yml's jobs (trusted main builds), never a job
 # behind a `paths:` filter or an `if:` other than "this is a pull request".
 # GitHub names an Actions check by the job's `name:` or, without one, its
 # id; the names below are what the check-runs API reports on pull request

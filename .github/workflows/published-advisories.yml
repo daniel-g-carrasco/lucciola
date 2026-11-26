@@ -1,0 +1,56 @@
+name: Advisories for published Lucciola images
+
+on:
+  schedule:
+    - cron: '23 12 * * *'
+  workflow_dispatch:
+    inputs:
+      digest:
+        description: "One retained Lucciola SHA-256 digest (empty scans the scheduled set)"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: published-advisories
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oras-project/setup-oras@005458ad77f1c8facd38a094e4af2e69e5607ff4 # v2.0.2
+        with:
+          version: '1.4.0'
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Install Grype and refresh its advisory database
+        run: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/anchore/grype/ef8e65adb2dec760f1f923e635da4c7696d3c295/install.sh \
+            | sh -s -- -b "$RUNNER_TEMP" v0.114.0
+          "$RUNNER_TEMP/grype" db update
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Verify signed inventories and report advisories by image digest
+        env:
+          DIGEST: ${{ inputs.digest }}
+          GRYPE_DB_AUTO_UPDATE: 'false'
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/scan-published-sboms.py --digest "$DIGEST" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Notify ntfy if the scan found advisories or could not finish
+        if: failure() && github.event_name == 'schedule'
+        env:
+          NTFY_URL: ${{ secrets.NTFY_TOPIC_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [[ -n "$NTFY_URL" ]]; then
+            curl -fsS -o /dev/null -H "Title: Lucciola published image advisory scan" \
+              -H "Click: $RUN_URL" -d "High or Critical matches, or incomplete coverage. See the digest report." \
+              "$NTFY_URL" || echo "ntfy delivery failed"
+          fi

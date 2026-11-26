@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # The weekly upgrade matrix (.github/scripts/upgrade-matrix.py and its wiring
 # in upgrade-smoke.yml): a dispatch is one cell made of its inputs, an empty
-# layer stays empty; the weekly run has the four starting points, five once
+# layer stays empty; the weekly run has the four starting points, six once
 # :stable is promoted (steam layered on margine:lucciola only then), every
-# weekly cell targets :candidate over the unverified transport, with unique
+# migration cell targets :candidate over the unverified transport, with unique
 # names and slugs; and the workflow runs them one at a time, never cancels
 # the rest on a failed cell, keeps each cell's logs apart, keeps the dispatch
 # inputs, and notifies ntfy with the cell's name when one fails.
@@ -42,10 +42,11 @@ check "weekly: every cell targets :candidate, unverified"        [ "$(q 'set((c[
 check "weekly: names and slugs are unique"                       [ "$(q 'len({c["name"] for c in cells}) == len(cells) == len({c["slug"] for c in cells})')" = True ]
 check "weekly: the same cells in words, for the log"             bash -c "[ \"\$(grep -c '^- from ' '$T/err')\" = 4 ]"
 plan --event schedule --promote-stable true
-check "weekly, :stable promoted: five cells (rc $RC)"            [ "$(q 'len(cells)')" = 5 ]
+check "weekly, :stable promoted: six cells (rc $RC)"            [ "$(q 'len(cells)')" = 6 ]
 check "weekly: steam layered on margine:lucciola, then"          [ "$(q '[(c["from_ref"].rsplit("/",1)[1], c["layer"]) for c in cells if c["layer"] == "steam"]')" = "[('margine:lucciola', 'steam')]" ]
 plan --event schedule --promote-stable TRUE
-check "weekly: the variable's case does not matter"              [ "$(q 'len(cells)')" = 5 ]
+check "weekly: stable to candidate exercises signed upgrades" [ "$(q '[(c["from_ref"], c["to_ref"], c["transport"]) for c in cells if c["transport"] == "ostree-image-signed"]')" = "[('ghcr.io/daniel-g-carrasco/lucciola:stable', 'ghcr.io/daniel-g-carrasco/lucciola:candidate', 'ostree-image-signed')]" ]
+check "weekly: the variable's case does not matter"              [ "$(q 'len(cells)')" = 6 ]
 
 # --- the workflow -----------------------------------------------------------
 python3 - "$WF" > "$T/out" 2>&1 <<'PY' && RC=0 || RC=$?

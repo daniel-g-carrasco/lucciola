@@ -12,7 +12,7 @@
 
 <!-- For CI changes: which events were reasoned through or exercised
      (pull_request, push to main, schedule, workflow_dispatch). For image
-     changes: PR build with vm-test, or why not. -->
+     changes: label vm-test and record the isolated lab build and boot test, or explain why testing is unnecessary. -->
 
 ## Security impact
 

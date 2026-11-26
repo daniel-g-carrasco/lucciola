@@ -25,6 +25,7 @@ or MARGINE-UPGRADE: FAIL <reasons> and exits 0 or 1.
 import argparse
 import os
 import re
+import shlex
 import shutil
 import socket
 import subprocess
@@ -62,6 +63,21 @@ def failed_unit_names(listing):
         if re.fullmatch(r"[A-Za-z0-9@:._\\-]+\.(service|socket|mount|timer|path|target|swap|scope)", field):
             names.append(field)
     return names
+
+
+def signature_policy_command(repo):
+    """The VM must use an explicit signature policy for the target repository."""
+    script = """import json, os, sys
+with open('/etc/containers/policy.json') as source:
+    rules = json.load(source)['transports']['docker'].get(sys.argv[1], [])
+if any(rule.get('type') == 'sigstoreSigned' and os.path.isfile(rule.get('keyPath', ''))
+       for rule in rules):
+    print('SCOPE=sigstoreSigned')
+else:
+    raise SystemExit('target repository has no sigstoreSigned rule with a readable key')
+"""
+    # The serial capture protocol sends one shell command per line.
+    return "python3 -c " + shlex.quote(f"exec({script!r})") + " " + shlex.quote(repo)
 
 
 def gaming_dry_run(sudo, lst=GAMING_LIST):
@@ -237,6 +253,17 @@ def main():
     say("old deployment:\n" + (out or ""))
     if out and "SecureBoot enabled" not in out:
         fail("old image not booted with Secure Boot enabled")
+    repo = a.to.split("@")[0]
+    if ":" in repo.rsplit("/", 1)[-1]:
+        repo = repo.rsplit(":", 1)[0]
+    if a.transport == "ostree-image-signed":
+        rc, out = capture(signature_policy_command(repo), 60)
+        say(f"old deployment policy for {repo}: " + (out or "").strip())
+        if rc != 0 or not out or "SCOPE=sigstoreSigned" not in out:
+            print("MARGINE-UPGRADE: FAIL the old deployment cannot verify the target repository")
+            s.send(sudo + "systemctl poweroff\n")
+            vm.wait(timeout=120)
+            return 1
     if a.layer:
         say(f"layering {a.layer} on the old image")
         # rpm-ostree fetches the metadata of every enabled repository first,
@@ -250,7 +277,7 @@ def main():
         capture(sudo + "sed -i 's/^enabled=1$/enabled=0/' /etc/yum.repos.d/fedora-cisco-openh264.repo 2>/dev/null; true", 60)
         rc, out = None, None
         for attempt in range(1, 4):
-            rc, out = capture(keep_status(sudo + f"rpm-ostree install -y --idempotent {a.layer}", 5), 1200)
+            rc, out = capture(keep_status(sudo + f"rpm-ostree install -y --idempotent -- {shlex.quote(a.layer)}", 5), 1200)
             if rc == 0:
                 break
             say(f"layering attempt {attempt} failed (rc {rc}): {(out or '').strip()[-400:]}")
@@ -267,7 +294,7 @@ def main():
         target = f"ostree-unverified-registry:{a.to}"
     say(f"rebasing to {target}")
     t_rebase = time.monotonic()
-    rc, out = capture(keep_status(sudo + f"rpm-ostree rebase {target}", 8), 2400)
+    rc, out = capture(keep_status(sudo + f"rpm-ostree rebase {shlex.quote(target)}", 8), 2400)
     say(f"rebase took {int(time.monotonic() - t_rebase)}s, rc={rc}")
     if rc != 0:
         say(out or "")
@@ -291,14 +318,9 @@ def main():
     # Whatever transport brought it here, the next update must be verified:
     # the new deployment's policy (its /etc merged with the old one's) needs
     # a signature-required scope for the repository it follows now.
-    repo = a.to.split("@")[0]
-    if ":" in repo.rsplit("/", 1)[-1]:
-        repo = repo.rsplit(":", 1)[0]
-    rc, out = capture("python3 -c 'import json,sys; p=json.load(open(\"/etc/containers/policy.json\"));"
-                      " r=p[\"transports\"][\"docker\"].get(sys.argv[1]) or [{}];"
-                      " print(\"SCOPE=\" + r[0].get(\"type\", \"none\"))' " + repo, 60)
+    rc, out = capture(signature_policy_command(repo), 60)
     say(f"policy scope for {repo}: " + (out or "").strip())
-    if not out or "SCOPE=sigstoreSigned" not in out:
+    if rc != 0 or not out or "SCOPE=sigstoreSigned" not in out:
         fail(f"the new deployment's policy has no sigstoreSigned scope for {repo}: its updates would not be verified")
     rc, out = capture("source /etc/os-release; echo ID_LIKE=$ID_LIKE; echo PRETTY=$PRETTY_NAME", 60)
     say((out or "").strip())

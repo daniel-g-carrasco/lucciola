@@ -21,10 +21,13 @@ run today to the stock desktops, one VM at a time:
                                          Kinoite cell is the one that meets
                                          a foreign display manager (N7)
 
-All weekly cells rebase to :candidate over ostree-unverified-registry:
+The migration cells rebase to :candidate over ostree-unverified-registry:
 none of those systems' policies has a scope for this repository, so the
 signed transport would verify nothing (the driver checks that the NEW
-deployment's policy requires the signature). tests/upgrade-matrix.test.sh.
+deployment's policy requires the signature). With promotion enabled, the
+Lucciola stable cell uses the signed transport. The workflow picks an older
+dated stable when stable and candidate already point at the same digest.
+See tests/upgrade-matrix.test.sh.
 """
 import argparse
 import json
@@ -32,6 +35,7 @@ import re
 import sys
 
 TARGET = "ghcr.io/daniel-g-carrasco/lucciola:candidate"
+STABLE = "ghcr.io/daniel-g-carrasco/lucciola:stable"
 MARGINE = "ghcr.io/daniel-g-carrasco/margine:lucciola"
 # (name, slug, from_ref, layer, only when :stable is promoted)
 WEEKLY = (
@@ -50,9 +54,13 @@ def cell(name, slug, from_ref, to_ref, transport, layer, expect_id_like):
 
 
 def weekly(promote_stable):
-    return [cell(name, slug, from_ref, TARGET, "ostree-unverified-registry", layer, "fedora")
-            for name, slug, from_ref, layer, stable_only in WEEKLY
-            if promote_stable or not stable_only]
+    cells = [cell(name, slug, from_ref, TARGET, "ostree-unverified-registry", layer, "fedora")
+             for name, slug, from_ref, layer, stable_only in WEEKLY
+             if promote_stable or not stable_only]
+    if promote_stable:
+        cells.insert(0, cell("from Lucciola stable (signed upgrade)", "lucciola-signed",
+                             STABLE, TARGET, "ostree-image-signed", "", "fedora"))
+    return cells
 
 
 def dispatch(a):

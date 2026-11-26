@@ -58,13 +58,35 @@ helpers and configuration this repository ships.
   Blue, the CachyOS kernel, Umbriel, Noctalia, greetd, Flatpak apps): please
   report them upstream. Lucciola picks up their fixes on the next build.
 
-## Verify the image signature
+## Verify the image signature and inventory
+
+Resolve the channel to a digest once, then use that digest for every check.
 
 ```sh
-cosign verify \
-  --key https://raw.githubusercontent.com/daniel-g-carrasco/lucciola/main/secrets/cosign.pub \
-  ghcr.io/daniel-g-carrasco/lucciola:stable
+image=ghcr.io/daniel-g-carrasco/lucciola
+digest=$(oras resolve "$image:stable") || exit
+ref="$image@$digest"
+cosign verify --key secrets/cosign.pub --new-bundle-format=false "$ref"
+oras discover --artifact-type application/vnd.spdx+json --depth 1 "$ref"
 ```
 
-A valid signature prints the verified payload and exits 0. The public key is [`secrets/cosign.pub`](secrets/cosign.pub);
-the private half exists only in CI.
+Use the public key from a trusted checkout. The classic signature is the
+format devices check. The SPDX inventory is an OCI referrer whose manifest
+names the image digest as its subject. Verify the inventory referrer's own
+signature with `cosign verify --key secrets/cosign.pub IMAGE@SBOM_DIGEST`.
+Use the referrer's digest for `oras pull`.
+
+Main image builds also record GitHub build provenance by digest.
+Verify it with `gh attestation verify "oci://$ref" --repo daniel-g-carrasco/lucciola --signer-workflow daniel-g-carrasco/lucciola/.github/workflows/build.yml`.
+Existing digests predate this attestation. The Fedora-kernel reserve records
+its source revision, base and parent stable digest in signed image metadata.
+
+## Advisories for published images
+
+The daily **Advisories for published Lucciola images** workflow refreshes
+Grype's database and scans the signed SBOMs for stable, the Fedora-kernel
+reserve and the two newest dated tags in each channel. It scans aliases
+sharing a digest once and supports a manual scan of any retained Lucciola
+digest. High and Critical matches or incomplete coverage surface in the run
+summary and make the run fail. Scheduled failures also use ntfy when
+configured. The report covers packages present in the image inventory.

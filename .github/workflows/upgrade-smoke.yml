@@ -10,40 +10,20 @@
 # after the update), the gaming-native dry run, the shipped validator. Written in Margine for the
 # base switch of 2026-10-11 (Bluefin DX to Universal Blue's silverblue-main).
 #
-# In Lucciola its main job is the move real users will make: from
-# ghcr.io/daniel-g-carrasco/margine:lucciola, where Lucciola was published
-# until it got its own repository, to this repository's image. The default
-# transport is ostree-unverified-registry because that is the only honest
-# one for that move: the policy on a margine:lucciola install has a scope
-# for the Margine repository only, so ostree-image-signed:docker:// of the
-# lucciola repository would fall through to the docker catch-all
-# (insecureAcceptAnything) and verify nothing while looking verified. The
-# check moves to the new deployment, which must carry a signature-required
-# scope for ghcr.io/daniel-g-carrasco/lucciola. Once the Margine side ships
-# that scope (the migration step), switch the default to
-# ostree-image-signed; for a lucciola-to-lucciola upgrade pick it by hand.
-#
-# On demand (workflow_dispatch: one move, the inputs below) and weekly
-# (Sunday 08:00 UTC, after the weekly build and its smoke-boot): every
-# starting point the guide names, one VM at a time, from the matrix
-# .github/scripts/upgrade-matrix.py prints (margine:lucciola with a layered
-# package, stock Silverblue, Kinoite and Bluefin; steam layered only once
-# :stable is promoted, see the script). A failed cell notifies ntfy with
-# its name and does not cancel the others. Nothing is promoted or published.
+# The default dispatch and the weekly Lucciola cell exercise a signed
+# :stable to :candidate upgrade. Migration cells use the unverified
+# transport for old installations whose policy does not cover Lucciola.
+# Each scheduled cell runs in its own disposable VM. Nothing is promoted.
 name: Upgrade smoke (old install to new image)
 
 on:
   workflow_dispatch:
     inputs:
       from_ref:
-        # A tag, not a bare digest: an untagged manifest is garbage
-        # collected (the last Bluefin-based :stable vanished the day :stable
-        # moved on and its dated tag was overwritten by the new build of the
-        # same day). :lucciola is what Lucciola users run today; pass a dated
-        # :lucciola.YYYYMMDD to pin the starting point.
+        # A dated tag is retained even when a channel pointer moves.
         description: "OLD image: what the installed system runs (tag or tag@digest; a dated tag survives GC, a bare digest may not)"
         required: false
-        default: "ghcr.io/daniel-g-carrasco/margine:lucciola"
+        default: "ghcr.io/daniel-g-carrasco/lucciola:stable"
       to_ref:
         description: "NEW image to rebase to (tag or tag@digest)"
         required: false
@@ -52,11 +32,11 @@ on:
         description: "How the rebase names the new image: unverified for a repository the old policy does not know (margine:lucciola to lucciola), signed when it does"
         type: choice
         options: [ostree-unverified-registry, ostree-image-signed]
-        default: ostree-unverified-registry
+        default: ostree-image-signed
       layer:
         description: "Package to layer before the rebase (exercises the re-solve; pick one the image lacks); empty = none"
         required: false
-        default: "cowsay"
+        default: ""
       expect_id_like:
         description: "ID_LIKE expected on the new deployment"
         required: false
@@ -165,6 +145,7 @@ jobs:
         env:
           FROM_REF: ${{ matrix.from_ref }}
           TO_REF: ${{ matrix.to_ref }}
+          CELL: ${{ matrix.slug }}
         run: |
           set -euo pipefail
           resolve() {
@@ -176,6 +157,20 @@ jobs:
             echo "${base}@${digest}"
           }
           FROM="$(resolve "$FROM_REF")"; TO="$(resolve "$TO_REF")"
+          if [[ "$CELL" == lucciola-signed && "$FROM" == "$TO" ]]; then
+            # The last build may already be stable. Pick the newest distinct
+            # retained stable as the installed system, so the rebase changes it.
+            repo="${FROM%@*}"
+            tags="$(skopeo list-tags "docker://$repo" | jq -r '.Tags[] | select(test("^stable\\.[0-9]{8}$"))' | sort -r)"
+            while IFS= read -r tag; do
+              [[ -n "$tag" ]] || continue
+              FROM="$(resolve "$repo:$tag")"
+              [[ "$FROM" == "$TO" ]] || break
+            done <<<"$tags"
+            if [[ "$FROM" == "$TO" ]]; then
+              echo "::error::no distinct retained stable image for the signed upgrade"; exit 1
+            fi
+          fi
           echo "from=$FROM" >> "$GITHUB_OUTPUT"; echo "to=$TO" >> "$GITHUB_OUTPUT"
           echo "Installed system: $FROM"; echo "Target image:     $TO"
           for r in "$FROM" "$TO"; do
@@ -249,13 +244,16 @@ jobs:
 
       - name: Summary
         if: always()
+        env:
+          CELL: ${{ matrix.name }}
+          FROM: ${{ steps.ref.outputs.from }}
+          TO: ${{ steps.ref.outputs.to }}
+          TRANSPORT: ${{ matrix.transport }}
+          LAYER: ${{ matrix.layer || 'none' }}
         run: |
           {
-            echo "### Upgrade smoke: ${{ matrix.name }}"
-            echo
-            echo "- installed: \`${{ steps.ref.outputs.from }}\`"
-            echo "- target: \`${{ steps.ref.outputs.to }}\` (${{ matrix.transport }}, layer: ${{ matrix.layer || 'none' }})"
-            echo
+            printf '### Upgrade smoke: %s\n\n' "$CELL"
+            printf -- '- installed: %s\n- target: %s (%s, layer: %s)\n' "$FROM" "$TO" "$TRANSPORT" "$LAYER"
             echo '```'
             grep -E 'MARGINE-UPGRADE|FAIL:|old deployment|booted deployment|validator' -A3 driver.log 2>/dev/null | head -80 || true
             echo '```'
@@ -293,4 +291,4 @@ jobs:
             -H "Tags: x,arrows_counterclockwise" \
             -H "Click: ${RUN_URL}" \
             -d "${FROM_REF} -> ${TO_REF}: ${REASON:-no verdict reached (the VM never got there, or an earlier step failed); see the run log}" \
-            "$NTFY_URL" || echo "ntfy notify failed (non-fatal)"
+            "$NTFY_URL" >/dev/null || echo "ntfy notify failed (non-fatal)"

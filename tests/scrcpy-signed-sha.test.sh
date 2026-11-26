@@ -8,7 +8,7 @@
 #     file with a second key in it, a tarball listed twice or not at all;
 #   - the pinned key file in the repository is the one key the script pins;
 #   - scrcpy-pin-sha.yml takes the hash from the script (main's copy), never
-#     from hashing the download; build.yml's pins job checks every Renovate
+#     from hashing the download; lint.yml's PR gate checks every Renovate
 #     scrcpy bump against it, and a failed check holds the image build back.
 # PyYAML is needed for the last part (lint.yml installs it).
 set -euo pipefail
@@ -78,7 +78,7 @@ check "repository key file = the pinned fingerprint ($pinned)" \
   bash -c "[ -n '$pinned' ] && [ \"\$(cat '$T/out')\" = '$pinned' ]"
 
 # The workflows use it.
-python3 - "$ROOT/.github/workflows/scrcpy-pin-sha.yml" "$ROOT/.github/workflows/build.yml" > "$T/out" 2>&1 <<'PY' && RC=0 || RC=$?
+python3 - "$ROOT/.github/workflows/scrcpy-pin-sha.yml" "$ROOT/.github/workflows/lint.yml" > "$T/out" 2>&1 <<'PY' && RC=0 || RC=$?
 import re, sys, yaml
 pin, build = (yaml.safe_load(open(p)) for p in sys.argv[1:])
 bad = []
@@ -89,12 +89,11 @@ if not re.search(r"git show [^\n]*origin/main:\.github/scripts/scrcpy-signed-sha
     bad.append("scrcpy-pin-sha.yml does not run main's copy of the script")
 if re.search(r"curl[^\n]*\|\s*sha256sum", run):
     bad.append("scrcpy-pin-sha.yml still hashes the download to make the pin")
-pins = "\n".join(s.get("run", "") for s in build["jobs"]["pins"]["steps"])
+pins = "\n".join(s.get("run", "") for s in build["jobs"]["build-inputs-need-vm-test"]["steps"])
 if "scrcpy-signed-sha.sh" not in pins or '"$BASE:.github/scripts/scrcpy-signed-sha.sh"' not in pins:
-    bad.append("build.yml's pins job does not check the pin with the base's scrcpy-signed-sha.sh")
-cond = str(build["jobs"]["build_push"]["if"])
-if "needs.pins.result != 'failure'" not in cond:
-    bad.append("build_push still runs when the pin check failed")
+    bad.append("lint.yml's PR gate does not check the pin with the base's scrcpy-signed-sha.sh")
+if build["jobs"]["build-inputs-need-vm-test"]["permissions"] != {"contents": "read", "pull-requests": "read"}:
+    bad.append("the PR pin check must have read-only permissions")
 print("\n".join(bad) or "workflows OK")
 sys.exit(1 if bad else 0)
 PY

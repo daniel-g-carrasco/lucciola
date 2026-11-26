@@ -78,7 +78,7 @@ jobs:
             -H "Tags: warning,shield" \
             -H "Click: ${{ github.server_url }}/${{ github.repository }}/settings/branches" \
             -d "$MSG" \
-            "$NTFY_URL" || echo "ntfy notify failed (non-fatal)"
+            "$NTFY_URL" >/dev/null || echo "ntfy notify failed (non-fatal)"
 
       - name: Fail while main is unprotected or drifted
         if: steps.protected.outputs.protected != 'true' || steps.guard.outputs.state == 'drift' || steps.guard.outputs.state == 'error'
