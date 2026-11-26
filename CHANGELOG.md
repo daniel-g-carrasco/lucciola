@@ -7,6 +7,16 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Changed (2026-11-26, Umbriel moved forward)
+- **Umbriel** moves to its commit of 2026-11-26 (edd40d5, from 2026-11-20):
+  24 fixes, among them the lock screen's blank output on mode changes,
+  scratchpads above fullscreen windows, the focused column kept when a
+  column closes, windows that resize themselves, blur stalls and the
+  pointer while hidden. Its portal moves too (04aa987): it now only
+  answers the portal frontend, and screen sharing waits for PipeWire.
+  Lucciola's two colour patches carried over (their documentation moved
+  to display-features.md upstream).
+
 ### Changed (2026-11-22, the Lucciola session runs on Umbriel)
 - **The compositor is Umbriel** (in place of niri), with the Noctalia shell
   on top as before and GNOME still the stock fallback on the login screen.

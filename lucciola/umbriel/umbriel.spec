@@ -75,6 +75,9 @@ with ICC profiles, and fluid animations. It pairs with the Noctalia shell.
 
 %install
 %meson_install
+# dinit user services (Umbriel ships them since 2026-11): Fedora starts the
+# session with systemd (umbriel.service), so they are left out.
+rm -rf %{buildroot}%{_prefix}/lib/dinit.d
 
 %files
 %license LICENSE
