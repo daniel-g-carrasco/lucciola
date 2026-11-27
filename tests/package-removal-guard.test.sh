@@ -6,7 +6,7 @@
 # still there, or already gone from both images, is a note within the
 # window; additions are reported; a malformed or future-dated line is an
 # error whatever the mode. Then the wiring in build.yml: the step runs on
-# the built image before chunking, skips pull requests, enforces on
+# the built image before chunking, runs on every trusted build, enforces on
 # candidate builds, and the expected-removals file is where it says.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -120,8 +120,8 @@ else:
     if not (build < i < chunk):
         bad.append("the guard must run after the build and before the chunking (the built image is removed then)")
     env = s.get("env") or {}
-    if "pull_request" not in run or env.get("EVENT") != "${{ github.event_name }}":
-        bad.append("the guard step must skip pull_request builds through EVENT")
+    if s.get("if") is not None or "pull_request" in run:
+        bad.append("the guard must run for every successful trusted build")
     pub = str(env.get("PUBLISHED", ""))
     if ("CANDIDATE_TAG" not in pub and ":candidate" not in pub) or "${{ env.IMAGE_NAME }}" not in pub:
         bad.append("the guard compares with the published :candidate of this image")

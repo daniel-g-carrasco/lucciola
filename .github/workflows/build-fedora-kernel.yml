@@ -808,4 +808,4 @@ jobs:
           fi
           curl --silent --show-error --fail \
             -H "Title: ${TITLE}" -H "Priority: ${PRIO}" -H "Tags: ${TAGS}" -H "Click: ${RUN_URL}" \
-            -d "$MSG" "$NTFY_URL" || echo "ntfy notify failed (non-fatal)"
+            -d "$MSG" "$NTFY_URL" >/dev/null || echo "ntfy notify failed (non-fatal)"

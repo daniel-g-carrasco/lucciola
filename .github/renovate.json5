@@ -34,20 +34,9 @@
       enabled: false,
     },
     {
-      // Auto-merge everything non-major once checks are green (2026-08-09).
-      // Mechanics: platformAutomerge (Renovate default)
-      // arms GitHub's native auto-merge on the PR; branch protection
-      // requires the `lint` check, so a red PR can never slip through,
-      // and the pin-sync workflow (scrcpy fix-sha) pushing to the branch
-      // simply re-arms the wait on the new SHA. Major updates stay
-      // manual by design: they are the ones that break rebases and APIs.
+      // Non-major changes outside the image can automerge on green checks.
+      // Changes baked into the image are reviewed separately below.
       automerge: true,
-      // Renovate-side automerge (NOT GitHub's platform auto-merge):
-      // platform auto-merge waits only for REQUIRED checks (lint), while
-      // Renovate itself merges only when EVERY check on the PR is green,
-      // including the non-required full image build that the vm-test
-      // label triggers on baked-dependency bumps. That full build (with
-      // the in-container validators) is the actual compatibility gate.
       platformAutomerge: false,
       matchUpdateTypes: [
         'minor',
@@ -80,12 +69,8 @@
       minimumReleaseAge: '1 day',
     },
     {
-      // Anything baked into the image must prove it BUILDS before it
-      // merges: the vm-test label makes build.yml run the full 30-min
-      // image build (validators included) on the PR. The list is the
-      // gate's (.github/scripts/build-inputs-need-vm-test.py, a required
-      // check since 2026-10-20): a Renovate PR touching one of these
-      // without the label could not merge.
+      // A reviewer records a lab build and boot test before merging.
+      automerge: false,
       matchFileNames: [
         'build_files/**',
         'Containerfile',
@@ -106,7 +91,7 @@
       // release can change that plan (v0.7.0 reweighted package stability):
       // the first update after a bump then re-downloads more than usual for
       // every installed system. Proposed like everything else, merged only
-      // by hand, after measuring the delta on the PR's :pr-N image.
+      // by hand, after measuring the delta on a lab image.
       matchDepNames: [
         'quay.io/coreos/chunkah',
       ],
@@ -117,13 +102,7 @@
     },
     {
       // PRs that wait for a human (major updates, chunkah) rebase only on a
-      // conflict, not every time main moves. With 'behind-base-branch' each
-      // merge to main rebased them, and the vm-test label made each rebase a
-      // full 30-45 minute image build: on 2026-10-16 three merges meant six
-      // builds for #501 (Fedora 45 base) and #503 (chunkah), red or cancelled,
-      // each one a notification. Automerged PRs keep rebasing on their own;
-      // a manual PR is brought up to date with the "rebase" checkbox in its
-      // description when someone is ready to look at it.
+      // conflict. A manual PR can be brought up to date with the rebase checkbox.
       matchUpdateTypes: [
         'major',
       ],

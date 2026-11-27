@@ -65,6 +65,13 @@ for path in sys.argv[1:]:
     io = wf["jobs"]["build_push"].get("outputs", {})
     if "steps.push.outputs.image_ref" not in str(io.get("image_ref", "")):
         bad.append(f"{name}: image_ref no longer comes from the push step")
+    if name == "build.yml":
+        provenance = wf["jobs"]["provenance"]
+        attest = [step for step in provenance["steps"] if str(step.get("uses", "")).startswith("actions/attest-build-provenance@")]
+        if len(attest) != 1 or attest[0].get("with", {}).get("subject-digest") != "$" + "{{ needs.build_push.outputs.digest }}":
+            bad.append(f"{name}: provenance must cover the digest emitted by the push")
+        if set(provenance["needs"]) != {"build_push", "sign"}:
+            bad.append(f"{name}: provenance must depend on the push and signature")
 print("\n".join(bad) or "scan and SBOM read what ships")
 sys.exit(1 if bad else 0)
 PY

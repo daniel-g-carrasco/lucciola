@@ -46,7 +46,7 @@ jobs:
           python3 .github/scripts/mutation-check.py --exclude-tag fedora
 
       - name: Notify ntfy (a guard did not fail when broken)
-        if: failure()
+        if: failure() && github.event_name != 'pull_request'
         env:
           NTFY_URL: ${{ secrets.NTFY_TOPIC_URL }}
         run: |
@@ -60,7 +60,7 @@ jobs:
             -H "Tags: x,microscope" \
             -H "Click: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             -d "A guard survived its mutation or a mutant no longer applies. The run log names it." \
-            "$NTFY_URL" || echo "ntfy notify failed (non-fatal)"
+            "$NTFY_URL" >/dev/null || echo "ntfy notify failed (non-fatal)"
 
   mutants-fedora:
     name: Guards fail when broken (Fedora, real flatpak preinstall)
@@ -84,7 +84,7 @@ jobs:
         run: python3 .github/scripts/mutation-check.py --tag fedora
 
       - name: Notify ntfy (a guard did not fail when broken)
-        if: failure()
+        if: failure() && github.event_name != 'pull_request'
         env:
           NTFY_URL: ${{ secrets.NTFY_TOPIC_URL }}
         run: |
@@ -98,4 +98,4 @@ jobs:
             -H "Tags: x,microscope" \
             -H "Click: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             -d "A guard survived its mutation or a mutant no longer applies. The run log names it." \
-            "$NTFY_URL" || echo "ntfy notify failed (non-fatal)"
+            "$NTFY_URL" >/dev/null || echo "ntfy notify failed (non-fatal)"

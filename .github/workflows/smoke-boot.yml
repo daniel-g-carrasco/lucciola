@@ -537,4 +537,4 @@ jobs:
             -H "Tags: ${TAGS}" \
             -H "Click: ${RUN_URL}" \
             -d "$MSG" \
-            "$NTFY_URL" || echo "ntfy notify failed (non-fatal)"
+            "$NTFY_URL" >/dev/null || echo "ntfy notify failed (non-fatal)"

@@ -148,4 +148,4 @@ jobs:
             -H "Tags: bookmark_tabs,construction" \
             -H "Click: ${RUN_URL}" \
             -d "Open the new issue on lucciola for the full report." \
-            "$NTFY_URL" || echo "ntfy notify failed (non-fatal)"
+            "$NTFY_URL" >/dev/null || echo "ntfy notify failed (non-fatal)"

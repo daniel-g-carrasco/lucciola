@@ -63,5 +63,5 @@ jobs:
           fi
           if [ "$overdue" -gt 0 ] && [ -n "${NTFY_URL:-}" ]; then
             curl -fsS -H "Title: Security review: $overdue overdue item(s)" -H "Priority: high" -H "Tags: warning,lock" \
-              -d "Decide, do, or re-date with a reason: see the Security review issue." "$NTFY_URL" || true
+              -d "Decide, do, or re-date with a reason: see the Security review issue." "$NTFY_URL" >/dev/null || true
           fi

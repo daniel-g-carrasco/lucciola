@@ -4,8 +4,8 @@
 # what the image is built from fails the check until it carries the vm-test
 # label, in plain words; anything else passes. Offline, with file lists.
 # Then the wiring: the job runs on every pull request and on label events,
-# with no path filter (it is meant to be required); build.yml builds on the
-# label; nothing the gate guards is ignored by build.yml; Renovate adds the
+# with no path filter (it is meant to be required); PR workflows are read-only;
+# nothing the gate guards is ignored by build.yml; Renovate adds the
 # label to what the gate guards.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -78,11 +78,25 @@ else:
         bad.append("lint.yml: the gate job does not run the gate script with --pr")
 build = yaml.safe_load(open(f"{root}/.github/workflows/build.yml"))
 bon = build.get("on") or build.get(True)
-if set(bon["pull_request"].get("types") or []) != {"labeled", "synchronize"}:
-    bad.append("build.yml: pull_request types must be [labeled, synchronize] (the label starts the build)")
-if "vm-test" not in str(build["jobs"]["build_push"].get("if", "")):
-    bad.append("build.yml: build_push does not key on the vm-test label")
-ignored = set(bon["push"].get("paths-ignore") or []) | set(bon["pull_request"].get("paths-ignore") or [])
+from pathlib import Path
+for path in sorted((Path(root) / ".github/workflows").glob("*.yml")):
+    wf = yaml.safe_load(path.read_text())
+    events = wf.get("on") or wf.get(True)
+    if "pull_request_target" in events:
+        bad.append(f"{path.name}: pull_request_target can run with privileged credentials")
+    if "pull_request" in events:
+        for where, config in [("workflow", wf), *wf.get("jobs", {}).items()]:
+            permissions = config.get("permissions", {})
+            if where == "workflow" and "permissions" not in config:
+                bad.append(f"{path.name}: no explicit PR workflow permissions")
+            if (permissions not in ("read-all", {}) and
+                (not isinstance(permissions, dict) or "write" in permissions.values())):
+                bad.append(f"{path.name}: {where} grants write access to a PR workflow")
+if "pull_request" in (build.get("on") or build.get(True)):
+    bad.append("build.yml: publishing must never be triggered by a pull request")
+if "github.ref == 'refs/heads/main'" not in str(build["jobs"]["build_push"].get("if", "")):
+    bad.append("build.yml: publishing must be restricted to main")
+ignored = set(bon["push"].get("paths-ignore") or [])
 sys.path.insert(0, f"{root}/.github/scripts")
 import importlib.util
 spec = importlib.util.spec_from_file_location("gate", f"{root}/.github/scripts/build-inputs-need-vm-test.py")
