@@ -1,4 +1,4 @@
-From a931e92b0f4ca2e6ad99f2930e15f69f1f07c404 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Daniel Grasso <code@danielgrasso.com>
 Date: Sat, 21 Nov 2026 13:47:22 +0100
 Subject: [PATCH 2/2] fix(color): sRGB-tagged SDR decodes like untagged SDR
@@ -15,7 +15,7 @@ Harness: color_profile_srgb expects the gamma 2.2 decode, the new
 color_profile_srgb_transfer pins sdr_transfer = "srgb", and
 color_profile_srgb_tagged pins tagged equal to untagged.
 ---
- docs/user/outputs.md                          |  2 +-
+ docs/user/display-features.md                 |  2 +-
  .../checks/protocol/color_profile_srgb.sh     | 17 +++++-----
  .../protocol/color_profile_srgb_tagged.sh     | 34 +++++++++++++++++++
  .../protocol/color_profile_srgb_transfer.sh   | 28 +++++++++++++++
@@ -25,11 +25,11 @@ color_profile_srgb_tagged pins tagged equal to untagged.
  create mode 100755 tests/harness/checks/protocol/color_profile_srgb_tagged.sh
  create mode 100755 tests/harness/checks/protocol/color_profile_srgb_transfer.sh
 
-diff --git a/docs/user/outputs.md b/docs/user/outputs.md
-index f5638871..ac454201 100644
---- a/docs/user/outputs.md
-+++ b/docs/user/outputs.md
-@@ -272,7 +272,7 @@ hdr = "on"
+diff --git a/docs/user/display-features.md b/docs/user/display-features.md
+index fba668eb..94fbab03 100644
+--- a/docs/user/display-features.md
++++ b/docs/user/display-features.md
+@@ -128,7 +128,7 @@ hdr = "on"
  sdr_transfer = "srgb"
  ```
  
@@ -153,10 +153,10 @@ index 00000000..33d5344c
 +done
 +color_stop_client
 diff --git a/umbrielfx/include/umbrielfx/render/pass.h b/umbrielfx/include/umbrielfx/render/pass.h
-index c7d0d17a..979017b4 100644
+index 89676497..4d8e4816 100644
 --- a/umbrielfx/include/umbrielfx/render/pass.h
 +++ b/umbrielfx/include/umbrielfx/render/pass.h
-@@ -36,6 +36,9 @@ struct fx_gles_render_pass {
+@@ -38,6 +38,9 @@ struct fx_gles_render_pass {
    // SDR content is authored for; any other target keeps sRGB. Without a color
    // transform it is also the target encoding.
    enum wlr_color_transfer_function sdr_tf;
@@ -167,10 +167,10 @@ index c7d0d17a..979017b4 100644
    float output_lut_dim;
    pixman_region32_t updated_region;
 diff --git a/umbrielfx/render/fx_renderer/fx_pass.c b/umbrielfx/render/fx_renderer/fx_pass.c
-index 96c1d922..732341c1 100644
+index 0bd617f2..29575a39 100644
 --- a/umbrielfx/render/fx_renderer/fx_pass.c
 +++ b/umbrielfx/render/fx_renderer/fx_pass.c
-@@ -2089,8 +2089,14 @@ void fx_render_pass_add_texture(struct fx_gles_render_pass* pass, const struct f
+@@ -2140,8 +2140,14 @@ void fx_render_pass_add_texture(struct fx_gles_render_pass* pass, const struct f
        options->primaries == NULL || color_primaries_equal(options->primaries, &primaries_srgb);
    // Only untagged content inherits the pass's SDR curve. Explicit sRGB is
    // the piecewise curve requested by compound_power_2_4 in color-management-v1.
@@ -186,7 +186,7 @@ index 96c1d922..732341c1 100644
      source_tf = pass->sdr_tf;
    }
    const enum wlr_color_transfer_function target_tf =
-@@ -3338,6 +3344,7 @@ struct fx_gles_render_pass* fx_begin_buffer_pass(
+@@ -3389,6 +3395,7 @@ struct fx_gles_render_pass* fx_begin_buffer_pass(
  
    struct fx_framebuffer* target = buffer;
    enum wlr_color_transfer_function sdr_tf = WLR_COLOR_TRANSFER_FUNCTION_SRGB;
@@ -194,7 +194,7 @@ index 96c1d922..732341c1 100644
    if (has_color_transform) {
      struct output_transform_state state = {
          .tf = WLR_COLOR_TRANSFER_FUNCTION_EXT_LINEAR,
-@@ -3358,6 +3365,7 @@ struct fx_gles_render_pass* fx_begin_buffer_pass(
+@@ -3409,6 +3416,7 @@ struct fx_gles_render_pass* fx_begin_buffer_pass(
      if (state.tf == WLR_COLOR_TRANSFER_FUNCTION_ST2084_PQ || state.has_matrix) {
        sdr_tf = pq_sdr_transfer;
      }
@@ -202,7 +202,7 @@ index 96c1d922..732341c1 100644
      struct wlr_allocator* allocator = output_buffers != NULL ? output_buffers->allocator : renderer->allocator;
      if (allocator == NULL) {
        wlr_log(WLR_ERROR, "No allocator available for FP16 blend buffer");
-@@ -3424,6 +3432,7 @@ struct fx_gles_render_pass* fx_begin_buffer_pass(
+@@ -3514,6 +3522,7 @@ struct fx_gles_render_pass* fx_begin_buffer_pass(
    pass->prev_ctx = *prev_ctx;
    pass->has_color_transform = has_color_transform;
    pass->sdr_tf = sdr_tf;

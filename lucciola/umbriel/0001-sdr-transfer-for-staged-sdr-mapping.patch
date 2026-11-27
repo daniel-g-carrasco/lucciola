@@ -1,4 +1,4 @@
-From 7033f15ba7aee5bd037868c85b675ab7829f9f6e Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Daniel Grasso <code@danielgrasso.com>
 Date: Sat, 21 Nov 2026 12:31:41 +0100
 Subject: [PATCH 1/2] fix(color): decode untagged SDR with sdr_transfer while
@@ -11,15 +11,15 @@ gamma 2.2 panel lifted its shadows (64 came out as 66, #121212 as
 HDR outputs; it now applies while an SDR gamut mapping is staged too.
 A gamma ramp alone keeps the encoded sRGB path.
 ---
- docs/user/outputs.md                   |  2 +-
+ docs/user/display-features.md          |  2 +-
  umbrielfx/render/fx_renderer/fx_pass.c | 10 +++++++---
  2 files changed, 8 insertions(+), 4 deletions(-)
 
-diff --git a/docs/user/outputs.md b/docs/user/outputs.md
-index 93b11f5a..f5638871 100644
---- a/docs/user/outputs.md
-+++ b/docs/user/outputs.md
-@@ -272,7 +272,7 @@ hdr = "on"
+diff --git a/docs/user/display-features.md b/docs/user/display-features.md
+index 085eddc6..fba668eb 100644
+--- a/docs/user/display-features.md
++++ b/docs/user/display-features.md
+@@ -128,7 +128,7 @@ hdr = "on"
  sdr_transfer = "srgb"
  ```
  
@@ -29,10 +29,10 @@ index 93b11f5a..f5638871 100644
  `sdr_white` can also be selected for one running output without editing the configuration:
  
 diff --git a/umbrielfx/render/fx_renderer/fx_pass.c b/umbrielfx/render/fx_renderer/fx_pass.c
-index 0781c1ed..96c1d922 100644
+index 5fac188e..0bd617f2 100644
 --- a/umbrielfx/render/fx_renderer/fx_pass.c
 +++ b/umbrielfx/render/fx_renderer/fx_pass.c
-@@ -3349,9 +3349,13 @@ struct fx_gles_render_pass* fx_begin_buffer_pass(
+@@ -3400,9 +3400,13 @@ struct fx_gles_render_pass* fx_begin_buffer_pass(
        return NULL;
      }
      // The supplied transform's EOTF stage says how the frame is written, not
