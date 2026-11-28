@@ -7,6 +7,13 @@ stable release is cut.
 
 ## [Unreleased]
 
+### Fixed (2026-11-28, the kernel reserve builds again)
+- **The Fedora-kernel reserve (`:fedora-kernel`) builds again.** The
+  zstd fix of 2026-11-27 ran only after the CachyOS kernel install; the
+  reserve's kernel-devel pulls the same newer libzstd, so its initramfs
+  still could not be written. Both flavours now bring zstd to libzstd's
+  version after installing their kernel.
+
 ### Changed (2026-11-26, Umbriel moved forward)
 - **Umbriel** moves to its commit of 2026-11-26 (edd40d5, from 2026-11-20):
   24 fixes, among them the lock screen's blank output on mode changes,
