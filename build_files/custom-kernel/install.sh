@@ -221,6 +221,29 @@ restore_akmodsbuild() {
     && mv -f /usr/sbin/akmodsbuild.backup /usr/sbin/akmodsbuild
 }
 
+# align_zstd
+# The kernel's development package (kernel-cachyos-devel-matched for the
+# CachyOS flavour, kernel-devel for the reserve) pulls libzstd-devel, which
+# upgrades libzstd past the base's zstd program when Fedora has a newer zstd
+# (1.6.0 on 2026-11-25): the zstd package does not require its exact libzstd,
+# and zstd 1.5.7 refuses libzstd 1.6.0 ("incorrect library version"), so
+# dracut cannot write the initramfs. Brings the program to the library's
+# version, and stops the build if zstd still cannot compress. Called after
+# each flavour's kernel install (the reserve failed on 2026-11-27 because only
+# the CachyOS path did this).
+align_zstd() {
+  local libzstd zstd_v
+  libzstd="$(rpm -q libzstd --queryformat '%{VERSION}-%{RELEASE}\n' | head -n1)"
+  zstd_v="$(rpm -q zstd --queryformat '%{VERSION}-%{RELEASE}\n' | head -n1)"
+  if [[ "$zstd_v" != "$libzstd" ]]; then
+    log "Aligning zstd $zstd_v with libzstd $libzstd"
+    retry 5 30 bash -c 'dnf -y clean metadata >/dev/null 2>&1 || true; exec dnf -y install --refresh "$@"' _ "zstd-${libzstd}" \
+      || { err "cannot install zstd-${libzstd} to match libzstd"; exit 1; }
+  fi
+  printf 'zstd round trip\n' | zstd -q -c | zstd -q -d -c | grep -qx 'zstd round trip' \
+    || { err "zstd does not work with the installed libzstd: dracut would fail"; exit 1; }
+}
+
 # install_fedora_kernel_devel <kver>
 # akmods, with kernel-devel of exactly the base's kernel to build
 # v4l2loopback against. Two traps, both met on the first try (2026-10-18):
@@ -344,20 +367,7 @@ if [[ "$KERNEL_FLAVOR" == cachyos ]]; then
   retry 5 30 bash -c 'dnf -y clean metadata >/dev/null 2>&1 || true; exec dnf -y install --refresh "$@"' _ "${KERNEL_PACKAGES[@]}" akmods \
     || { err "CachyOS kernel install FAILED after 5 attempts (COPR likely down)"; exit 1; }
 
-  # kernel-cachyos-devel pulls libzstd-devel, which upgrades libzstd past the
-  # base's zstd program when Fedora has a newer zstd (1.6.0 on 2026-11-25):
-  # the zstd package does not require its exact libzstd, and zstd 1.5.7
-  # refuses libzstd 1.6.0 ("incorrect library version"), so dracut cannot
-  # write the initramfs. Bring the program to the library's version.
-  _libzstd="$(rpm -q libzstd --queryformat '%{VERSION}-%{RELEASE}\n' | head -n1)"
-  _zstd="$(rpm -q zstd --queryformat '%{VERSION}-%{RELEASE}\n' | head -n1)"
-  if [[ "$_zstd" != "$_libzstd" ]]; then
-    log "Aligning zstd $_zstd with libzstd $_libzstd"
-    retry 5 30 bash -c 'dnf -y clean metadata >/dev/null 2>&1 || true; exec dnf -y install --refresh "$@"' _ "zstd-${_libzstd}" \
-      || { err "cannot install zstd-${_libzstd} to match libzstd"; exit 1; }
-  fi
-  printf 'zstd round trip\n' | zstd -q -c | zstd -q -d -c | grep -qx 'zstd round trip' \
-    || { err "zstd does not work with the installed libzstd: dracut would fail"; exit 1; }
+  align_zstd
 
   KERNEL_VERSION="$(rpm -q "$KERNEL_PKG" --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')"
   log "Installed kernel: $KERNEL_VERSION"
@@ -411,6 +421,7 @@ else
     KDEVEL_OK=0
     TRANSIENT=()
   fi
+  align_zstd
 
   # Same as the CachyOS flavour: the base's COPR repo files leave the
   # image, so both flavours ship the same /etc/yum.repos.d.
